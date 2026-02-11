@@ -1,0 +1,119 @@
+{
+    "version": "1.0",
+    "file_records": [
+        {
+            "source_url": "/home/arika/nvida_isacc/jetracer_track.usda",
+            "source_hash": "d966db4dec1d194a10fc28f983b144a1f40b00a0",
+            "target_url": "./SubUSDs/jetracer_track.usd",
+            "target_hash": "f7086f1f5888498ea9de8995c54548e836c7b341"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/NVIDIA/Assets/Skies/Cloudy/abandoned_parking_4k.hdr",
+            "source_hash": "071b8b1583922107b89facba231f4f335c25fdbf",
+            "target_url": "./SubUSDs/textures/abandoned_parking_4k.hdr",
+            "target_hash": "8eb95709a94bced8a2242103a11c217d99f54620"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/Isaac/Environments/Simple_Room/Materials/Textures/DefaultMaterial_Base_Color.png",
+            "source_hash": "8c0566e04ded3a91003f21057bf828d589712345",
+            "target_url": "./SubUSDs/textures/DefaultMaterial_Base_Color.png",
+            "target_hash": "0736a5d9492cb8b482b0547e43eb1bdfbfd51c7f"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/Isaac/Environments/Simple_Room/Materials/Textures/DefaultMaterial_Mixed_AO.png",
+            "source_hash": "4a5b78cfb09331dd8bf02a22dcae8f1da2b603e8",
+            "target_url": "./SubUSDs/textures/DefaultMaterial_Mixed_AO.png",
+            "target_hash": "7de29764780e25c32cbe4c2b04d21ee6d0aca12a"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/Isaac/Environments/Simple_Room/Materials/Textures/DefaultMaterial_Normal_DirectX.png",
+            "source_hash": "308798a65e9b4153054fff9225a16d705a6db5cb",
+            "target_url": "./SubUSDs/textures/DefaultMaterial_Normal_DirectX.png",
+            "target_hash": "5607813509cfbbd9a249b07d76bfe0d736b05fdd"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/Isaac/Environments/Simple_Room/Materials/Textures/DefaultMaterial_Roughness.png",
+            "source_hash": "cc0ba56e99a394cd52e83d6c9421d699d5fde324",
+            "target_url": "./SubUSDs/textures/DefaultMaterial_Roughness.png",
+            "target_hash": "c703c5b19cf4664bc23016f8022f89d1d65f06da"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/Isaac/Environments/Simple_Room/Materials/Textures/Parquet_AO.png",
+            "source_hash": "fa8586cde748aee311be3741615aca51e070e4ac",
+            "target_url": "./SubUSDs/textures/Parquet_AO.png",
+            "target_hash": "07d43a4e4611ff54df710500ae0e06c46e0efa74"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/Isaac/Environments/Simple_Room/Materials/Textures/Parquet_Color.png",
+            "source_hash": "e5db30eba06cb80685a30fd9c5df6ffc169ed088",
+            "target_url": "./SubUSDs/textures/Parquet_Color.png",
+            "target_hash": "3057530f4f4640394d56f8d07b4f9050ffde1e29"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/Isaac/Environments/Simple_Room/Materials/Textures/Parquet_Normal.png",
+            "source_hash": "9ba9680abe32d765d2ce197499426c2da9db2495",
+            "target_url": "./SubUSDs/textures/Parquet_Normal.png",
+            "target_hash": "409b0a69db293fa1fd98d7e2c63914ed98b44ca8"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/Isaac/Environments/Simple_Room/Materials/Textures/Parquet_Rough.png",
+            "source_hash": "a3199cc10969786c24127fb97bdf713a979d52af",
+            "target_url": "./SubUSDs/textures/Parquet_Rough.png",
+            "target_hash": "8a8b3e76d0524ff09ffff37e2cdc2da6ef12e594"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/Isaac/Environments/Simple_Room/Materials/Textures/WallWood_Color.png",
+            "source_hash": "08728d3c2062a784e182a27210a864c3b80c9ee9",
+            "target_url": "./SubUSDs/textures/WallWood_Color.png",
+            "target_hash": "f9002eaf514761036a36bd3006673c86fd53ff03"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/Isaac/Environments/Simple_Room/Materials/Textures/WallWood_Normal.png",
+            "source_hash": "f4b5e26406d3bd1e70398dfce201102a4df6abfa",
+            "target_url": "./SubUSDs/textures/WallWood_Normal.png",
+            "target_hash": "b876caca2a26b3f5a7c7f288ba98d9556cb205c0"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/Isaac/Environments/Simple_Room/Materials/Textures/WallWood_Rough.png",
+            "source_hash": "0ca3cd48a5f973b30a462d8307b93d2e854f627f",
+            "target_url": "./SubUSDs/textures/WallWood_Rough.png",
+            "target_hash": "26f02cbfc84b41227e7ae7beae6e047246217fdd"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/Isaac/Environments/Simple_Room/Materials/Textures/WhitePlastic_Color.png",
+            "source_hash": "ac66e708e4a830b508d0123a9246b04ff3a76317",
+            "target_url": "./SubUSDs/textures/WhitePlastic_Color.png",
+            "target_hash": "52f1c302170dca5af23ccfa88bbc5ca6f6342e7f"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/Isaac/Environments/Simple_Room/Materials/Textures/WhitePlastic_Normal.png",
+            "source_hash": "60262e364c5420bd63f4c820a36913e1bd354c6a",
+            "target_url": "./SubUSDs/textures/WhitePlastic_Normal.png",
+            "target_hash": "e678331a7f76dd36e53c51c3992209f28c8ba549"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/Isaac/Environments/Simple_Room/Materials/Textures/WhitePlastic_Rough.png",
+            "source_hash": "8f3080b4849c6113405143149d17fd7a08ac830d",
+            "target_url": "./SubUSDs/textures/WhitePlastic_Rough.png",
+            "target_hash": "42f3ab96b69bf1b83de5f8187f88fcbb491da29e"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/Isaac/Environments/Grid/Materials/Textures/WireframeBlur_basecolor.png",
+            "source_hash": "c877ff67c860683af5ff2565a661d27099358eba",
+            "target_url": "./SubUSDs/textures/WireframeBlur_basecolor.png",
+            "target_hash": "e8314581b2e25335f5025c75fa8a929b4039db16"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/Isaac/Environments/Grid/Materials/Textures/WireframeBlur_blue.png",
+            "source_hash": "deafacf11d85f8e20b91333786ab9badf07f0b2f",
+            "target_url": "./SubUSDs/textures/WireframeBlur_blue.png",
+            "target_hash": "171cee0edad82e1a2210a15aceffc6f3c36d75d8"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.0/Isaac/Environments/Grid/Materials/Textures/Wireframe_blue.png",
+            "source_hash": "806fbf442477e8184182df495bec18427d255b41",
+            "target_url": "./SubUSDs/textures/Wireframe_blue.png",
+            "target_hash": "06fc6663ccb0627d5019693ef9ef1a4094d1cbc1"
+        }
+    ]
+}
