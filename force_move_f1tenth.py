@@ -37,9 +37,9 @@ def run_fix_and_move():
                 # Verify attribute is valid and has a type before setting
                 if vel_attr.IsValid():
                     try:
-                        vel_attr.Set(30.0)
+                        vel_attr.Set(100.0) # Much faster
                         if effort_attr.IsValid():
-                            effort_attr.Set(1e9)
+                            effort_attr.Set(1e12) # Even more torque
                         print("  [ACTUATED] " + prim.GetName())
                         actuated_count += 1
                     except Exception as e:
