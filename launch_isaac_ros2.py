@@ -28,7 +28,7 @@ else:
 simulation_app.update()
 
 # 4. Setup Action Graph for ROS2 -> Robot control
-def setup_robot_bridge(robot_path="/mushr_tx2/mushr_fixed/base_footprint"):
+def setup_robot_bridge(robot_path="/World/F1Tenth"):
     graph_path = f"{robot_path}/ActionGraph"
     keys = og.Controller.Keys
     (graph, nodes, _, _) = og.Controller.edit(
@@ -51,17 +51,22 @@ def setup_robot_bridge(robot_path="/mushr_tx2/mushr_fixed/base_footprint"):
                 ("Ros2SubscribeAckermann.inputs:topicName", "/ackermann_cmd"),
                 ("SteeringController.inputs:robotPath", robot_path),
                 ("ThrottleController.inputs:robotPath", robot_path),
-                # Map joints for Mushr
-                ("SteeringController.inputs:jointNames", ["front_left_wheel_steer", "front_right_wheel_steer"]),
-                ("ThrottleController.inputs:jointNames", [
-                    "front_left_wheel_throttle", "front_right_wheel_throttle",
-                    "back_left_wheel_throttle", "back_right_wheel_throttle"
+                # Map joints for F1Tenth (Found via quick_inspect.py)
+                ("SteeringController.inputs:jointNames", [
+                    "Knuckle__Upright__Front_Left", 
+                    "Knuckle__Upright__Front_Right"
                 ]),
-                # Ackermann Constants (Mushr based on research)
-                ("AckermannController.inputs:wheelBase", 0.19), # Standard Mushr wheelbase is 0.19m
-                ("AckermannController.inputs:trackWidth", 0.18), # Standard Mushr track width is 0.18m
-                ("AckermannController.inputs:frontWheelRadius", 0.03),
-                ("AckermannController.inputs:backWheelRadius", 0.03),
+                ("ThrottleController.inputs:jointNames", [
+                    "Wheel__Knuckle__Front_Left", 
+                    "Wheel__Knuckle__Front_Right",
+                    "Wheel__Upright__Rear_Left", 
+                    "Wheel__Upright__Rear_Right"
+                ]),
+                # Ackermann Constants (F1Tenth standard)
+                ("AckermannController.inputs:wheelBase", 0.33), 
+                ("AckermannController.inputs:trackWidth", 0.28),
+                ("AckermannController.inputs:frontWheelRadius", 0.05),
+                ("AckermannController.inputs:backWheelRadius", 0.05),
                 # Camera
                 ("cameraHelperRgb.inputs:topicName", "/camera/image_raw"),
                 ("cameraHelperRgb.inputs:type", "rgb"),

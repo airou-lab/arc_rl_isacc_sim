@@ -1,10 +1,11 @@
+
 import os
 import sys
 import numpy as np
 import torch
 from sb3_contrib import RecurrentPPO
 
-# Add policy directory to path
+# Add policy directory to path for SB3 custom policy loading
 POLICY_DIR = "/home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_policy"
 if POLICY_DIR not in sys.path:
     sys.path.append(POLICY_DIR)
@@ -14,9 +15,9 @@ from isaac_direct_env import IsaacDirectEnv
 # Path to your trained model
 MODEL_PATH = "/home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_policy/models/isaac_hppo_20260223_210131/final_model.zip"
 
-def run_forced_inference(force_throttle=True):
-    print(f"[Inference] Loading model from: {MODEL_PATH}")
-    print(f"[Inference] FORCED THROTTLE: {force_throttle}")
+def run_inference_forced():
+    print(f"[Inference Forced] Loading model from: {MODEL_PATH}")
+    print("[Inference Forced] TESTING MODE: Adding +0.5 to AI Throttle to verify physics response.")
     
     # 1. Initialize the Environment
     env = IsaacDirectEnv(headless=False)
@@ -24,17 +25,27 @@ def run_forced_inference(force_throttle=True):
     try:
         # 2. Load the SB3 RecurrentPPO Model
         model = RecurrentPPO.load(MODEL_PATH)
-        print("[Inference] Model loaded successfully.")
+        print("[Inference Forced] Model loaded successfully.")
 
         # 3. Inference Loop
         obs, info = env.reset()
+        
+        # Initialize LSTM hidden states
         lstm_states = None
         episode_start_masks = np.ones((1,), dtype=bool) 
 
-        print("[Inference] Starting AI Drive with Manual Speed Override. Press Ctrl+C to stop.")
+        print("[Inference Forced] Starting AI Drive (FORCED). Press Ctrl+C to stop.")
         
         step_count = 0
-        while step_count < 1000:
+        max_total_steps = 50 # Quick test
+        total_steps = 0
+        
+        while total_steps < max_total_steps:
+            total_steps += 1
+            
+            # --- Preprocessing: Normalize Image [0, 255] -> [0, 1] ---
+            obs['image'] = obs['image'].astype(np.float32) / 255.0
+
             # 4. Predict Action
             action, lstm_states = model.predict(
                 obs, 
@@ -43,29 +54,28 @@ def run_forced_inference(force_throttle=True):
                 deterministic=True
             )
 
-            # 5. Prepare Action
+            # 5. Execute Action with FORCE
             action_to_send = np.array(action).flatten()
             
-            if force_throttle:
-                action_to_send[1] = 0.3 # Constant forward push
-                action_to_send[2] = 0.0 # No brakes
+            # FORCE: Override throttle to at least 0.5
+            original_thr = action_to_send[1]
+            action_to_send[1] = max(0.5, original_thr) 
             
-            # 6. Execute Action
             obs, reward, terminated, truncated, info = env.step(action_to_send)
             
-            # Telemetry
+            # 6. Telemetry
             if step_count % 10 == 0:
-                print(f"[Inference] Step {step_count} | AI Steer: {action_to_send[0]:.2f} | Speed: {info.get('speed', 0):.2f} m/s | Status: {info.get('status')}")
+                print(f"[Forced] Step {step_count} | AI Steer: {action_to_send[0]:.2f} | AI Thr: {original_thr:.2f} -> FORCED: {action_to_send[1]:.2f} | Speed: {info.get('speed', 0):.2f} m/s")
 
-            # Update masks for LSTM
             episode_start_masks = np.array([terminated or truncated])
             
             step_count += 1
             if terminated or truncated:
-                print(f"[Inference] Resetting... Status: {info.get('status')}")
+                print(f"[Inference] Episode finished. Status: {info.get('status')}")
                 obs, info = env.reset()
                 lstm_states = None
                 episode_start_masks = np.ones((1,), dtype=bool)
+                step_count = 0
 
     except KeyboardInterrupt:
         print("\n[Inference] Stopped by user.")
@@ -76,4 +86,4 @@ def run_forced_inference(force_throttle=True):
         env.close()
 
 if __name__ == "__main__":
-    run_forced_inference(force_throttle=True)
+    run_inference_forced()

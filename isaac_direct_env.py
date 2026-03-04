@@ -30,12 +30,14 @@ class IsaacDirectEnv(gym.Env):
         from omni.isaac.core.articulations import Articulation
         from omni.isaac.sensor import Camera
         from omni.isaac.core.utils.rotations import quat_to_euler_angles
+        from omni.isaac.core.utils.types import ArticulationAction
         
         self.omni = omni
         self.World = World
         self.Articulation = Articulation
         self.Camera = Camera
         self.quat_to_euler_angles = quat_to_euler_angles
+        self.ArticulationAction = ArticulationAction
 
         # 3. Environment Config
         self.usd_path = usd_path or "/home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim/isacc_sim_usd/World0.usd"
@@ -161,21 +163,30 @@ class IsaacDirectEnv(gym.Env):
 
         # 1. Direct Joint Commands
         target_steer = steer_cmd * self.max_steer
-        # Boosted velocity mapping (up to 100 rad/s)
+        # Target velocity in Rad/s (100 rad/s is roughly 5 m/s for 0.05m radius wheels)
         target_vel = (throttle_cmd - brake_cmd) * 100.0
         
         # Add a minimum "kick" to overcome friction
-        if throttle_cmd > 0.05 and target_vel < 10.0:
-            target_vel = 10.0
+        if throttle_cmd > 0.05 and np.abs(target_vel) < 15.0:
+            target_vel = 15.0 if target_vel >= 0 else -15.0
 
-        self.robot.set_joint_positions(
-            np.array([target_steer, target_steer]), 
-            joint_indices=self.steering_indices
+        # Create Persistent Action
+        # We need to provide values for ALL indices mentioned in joint_indices
+        indices = np.concatenate([self.steering_indices, self.throttle_indices])
+        
+        # Positions: Set targets for steering, None (keep current) for wheels
+        pos_targets = np.array([target_steer, target_steer, 0.0, 0.0, 0.0, 0.0])
+        # Velocities: Set targets for wheels, None (ignore) for steering
+        vel_targets = np.array([0.0, 0.0, target_vel, target_vel, target_vel, target_vel])
+
+        art_action = self.ArticulationAction(
+            joint_positions=pos_targets,
+            joint_velocities=vel_targets,
+            joint_indices=indices
         )
-        self.robot.set_joint_velocities(
-            np.array([target_vel, target_vel, target_vel, target_vel]), 
-            joint_indices=self.throttle_indices
-        )
+        
+        # Apply through the articulation controller for persistence across sub-steps
+        self.robot.apply_action(art_action)
 
         # 2. Physics Step
         for _ in range(self.sub_steps):
