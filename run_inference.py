@@ -35,8 +35,8 @@ def run_inference():
 
         print("[Inference] Starting AI Drive. Press Ctrl+C to stop.")
         
-        step_count = 0
-        max_total_steps = 1000 # Stop after 1000 total steps
+        step_count = 0 #TODO CHANGE THIS VALUE LATER ON, SINCE WE WILL ACTUALLY NEED TO TRAIN VIA THIS..
+        max_total_steps = 50 # Stop after 50 total steps for testing
         total_steps = 0
         
         while total_steps < max_total_steps:
