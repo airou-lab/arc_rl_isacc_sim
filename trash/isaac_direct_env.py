@@ -18,17 +18,20 @@ class IsaacDirectEnv(gym.Env):
     """
     metadata = {"render_modes": ["human"]}
 
-    def __init__(self, usd_path=None, headless=False, control_hz=20, sub_steps=10):
+    def __init__(self, usd_path=None, headless=False, control_hz=20, sub_steps=10, simulation_app=None):
         super(IsaacDirectEnv, self).__init__()
 
-        # 1. Start Simulation App
-        self._simulation_app = SimulationApp({"headless": headless})
+        # 1. Start / Attach Simulation App
+        if simulation_app is not None:
+            self._simulation_app = simulation_app
+        else:
+            self._simulation_app = SimulationApp({"headless": headless})
         
         # 2. Imports after app start
         import omni
         from omni.isaac.core import World
         from omni.isaac.core.articulations import Articulation
-        from omni.isaac.sensor import Camera
+        from isaacsim.sensors.camera import Camera
         from omni.isaac.core.utils.rotations import quat_to_euler_angles
         from omni.isaac.core.utils.types import ArticulationAction
         
@@ -145,9 +148,9 @@ class IsaacDirectEnv(gym.Env):
         
         self.robot.set_world_pose(position=pos, orientation=ori)
         
-        # Force a settle period
+        # Force a settle period WITH RENDERING to warm up camera
         self.robot.set_joint_velocities(np.zeros(self.robot.num_dof))
-        for _ in range(100): self.world.step(render=False)
+        for _ in range(50): self.world.step(render=True)
         
         self.last_action = np.zeros(3, dtype=np.float32)
         self.total_distance = 0.0
@@ -171,22 +174,24 @@ class IsaacDirectEnv(gym.Env):
             target_vel = 15.0 if target_vel >= 0 else -15.0
 
         # Create Persistent Action
-        # We need to provide values for ALL indices mentioned in joint_indices
-        indices = np.concatenate([self.steering_indices, self.throttle_indices])
+        # Steering (indices 22, 19) -> Position Control
+        # Throttle (indices 25, 24, 16, 13) -> Velocity Control
         
-        # Positions: Set targets for steering, None (keep current) for wheels
-        pos_targets = np.array([target_steer, target_steer, 0.0, 0.0, 0.0, 0.0])
-        # Velocities: Set targets for wheels, None (ignore) for steering
-        vel_targets = np.array([0.0, 0.0, target_vel, target_vel, target_vel, target_vel])
-
+        # We must provide arrays matching the size of the robot's TOTAL DOFs if we want to be safe, 
+        # or use specific indices.
+        
+        # Method: Set only the relevant targets for the relevant indices
         art_action = self.ArticulationAction(
-            joint_positions=pos_targets,
-            joint_velocities=vel_targets,
-            joint_indices=indices
+            joint_positions=np.array([target_steer, target_steer]),
+            joint_indices=self.steering_indices
         )
-        
-        # Apply through the articulation controller for persistence across sub-steps
         self.robot.apply_action(art_action)
+        
+        art_action_vel = self.ArticulationAction(
+            joint_velocities=np.array([target_vel, target_vel, target_vel, target_vel]),
+            joint_indices=self.throttle_indices
+        )
+        self.robot.apply_action(art_action_vel)
 
         # 2. Physics Step
         for _ in range(self.sub_steps):
