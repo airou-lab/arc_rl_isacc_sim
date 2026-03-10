@@ -1,4 +1,3 @@
-
 import os
 import sys
 import numpy as np
@@ -42,8 +41,14 @@ def run_inference():
         print("[Inference] Starting AI Drive. Press Ctrl+C to stop.")
         
         total_steps = 0
+        max_total_steps = 1000
         
-        while simulation_app.is_running():
+        while total_steps < max_total_steps:
+            # --- DEBUG: Robust NaN Check ---
+            if np.any(np.isnan(obs['vec'])):
+                print(f"[Inference] CRITICAL ERROR: NaN detected in telemetry! Vec: {obs['vec']}")
+                break
+            
             # Predict Action
             action, lstm_states = model.predict(
                 obs, 
