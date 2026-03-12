@@ -1,6 +1,6 @@
-# ARCPro RL: Simulation & Environment Stability
+# ARCPro RL: Simulation & Environment Stability (Legacy Direct API)
 
-This directory contains the reinforcement learning simulation environments, digital twin assets, and training entry points for the ARCPro system.
+> **NOTICE:** This environment is migrating to **Isaac Lab** (Phase 3). The stability logic described below is being ported to the new configuration-driven manager system.
 
 ## Environment: IsaacDirectEnv
 
