@@ -65,28 +65,37 @@ class TrackManager:
         if stage is None:
             raise RuntimeError("USD stage not found. USD sampling requires a running simulation.")
 
+        print(f"[TrackManager] Scanning stage: {stage.GetRootLayer().identifier}")
         raw_points = []
-        # Traverse the stage to find meshes with "pavement" or "road" in their path
-        for prim in stage.Traverse():
+        # Traverse the stage using PrimRange for better reference handling
+        for prim in Usd.PrimRange(stage.GetPseudoRoot()):
             if prim.IsA(UsdGeom.Mesh):
                 prim_path = str(prim.GetPath())
                 # Filter for track meshes. 
-                # In arcpro_RL_open_street_sim.usd, road meshes are usually under /World/Track
-                if "pavement" in prim_path.lower() or "road" in prim_path.lower() or "/track/" in prim_path.lower():
+                # In arcpro_RL_open_street_sim.usd, road meshes are under /World/drivable_surfaces
+                is_track = any(keyword in prim_path.lower() for keyword in ["pavement", "road", "track", "drivable_surfaces"])
+                
+                if is_track:
                     mesh = UsdGeom.Mesh(prim)
                     points = mesh.GetPointsAttr().Get()
                     if points:
                         # Get world transform
                         xform = UsdGeom.Xformable(prim)
                         world_transform = xform.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+                        print(f" - Found track mesh: {prim_path} ({len(points)} points)")
                         for p in points:
                             p_world = world_transform.Transform(p)
                             raw_points.append([p_world[0], p_world[1]])
 
         if not raw_points:
+            # Fallback: List all meshes to see what we missed
+            all_meshes = [str(p.GetPath()) for p in Usd.PrimRange(stage.GetPseudoRoot()) if p.IsA(UsdGeom.Mesh)]
+            print(f"[TrackManager] ERR: No road meshes found. Total meshes in stage: {len(all_meshes)}")
+            if all_meshes:
+                print(f" - Example mesh paths: {all_meshes[:5]}")
             raise RuntimeError("No road meshes found in USD stage.")
 
-        # 1. Deduplicate and convert to numpy
+        print(f"[TrackManager] Collected {len(raw_points)} raw points from USD.")
         pts = np.array(raw_points)
         # Round to 2 decimal places for deduplication
         pts = np.unique(np.round(pts, 2), axis=0)
@@ -130,9 +139,15 @@ class TrackManager:
         # 4. Compute Tangents/Yaw
         dx = np.gradient(resampled_x)
         dy = np.gradient(resampled_y)
-        yaws = np.atan2(dy, dx)
+        yaws = np.arctan2(dy, dx)
         
         wps = np.stack([resampled_x, resampled_y, yaws], axis=1)
+        
+        # 5. Shift to Origin (match Isaac Lab env spawn at 0,0)
+        offset = wps[0, :2].copy()
+        wps[:, :2] -= offset
+        print(f"[TrackManager] Shifted waypoints by {offset} to center at (0,0)")
+        
         self.waypoints = torch.tensor(wps, device=self.device, dtype=torch.float32)
         print(f"[TrackManager] Successfully sampled {len(self.waypoints)} waypoints from USD.")
 

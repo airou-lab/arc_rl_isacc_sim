@@ -48,4 +48,11 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     if "distance" in env.extras:
         obs[:, 11] = env.extras["distance"]
         
+    # Final verification for NaNs
+    nan_mask = torch.isnan(obs)
+    if nan_mask.any():
+        nan_indices = torch.where(nan_mask.any(dim=0))[0]
+        # Just zero out NaNs to keep training alive
+        obs[nan_mask] = 0.0
+        
     return obs

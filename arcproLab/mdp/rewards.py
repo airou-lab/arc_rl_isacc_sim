@@ -12,14 +12,24 @@ def speed_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntity
     extract = env.scene[asset_cfg.name]
     speed = extract.data.root_lin_vel_b[:, 0]
     base_reward = speed * 2.0
-    return torch.where(env.episode_length_buf >= 20, base_reward, torch.zeros_like(base_reward))
+    reward = torch.where(env.episode_length_buf >= 20, base_reward, torch.zeros_like(base_reward))
+    # Handle NaNs
+    nan_mask = torch.isnan(reward)
+    if nan_mask.any():
+        reward[nan_mask] = 0.0
+    return reward
 
 def line_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     """Applies a flat -100 penalty if a white line was hit this step."""
     # This logic checks the termination manager's status for the line contact term
     hit = env.termination_manager.get_term("white_line_contact")
     base_penalty = torch.where(hit, torch.tensor(-100.0, device=env.device), torch.tensor(0.0, device=env.device))
-    return torch.where(env.episode_length_buf >= 20, base_penalty, torch.zeros_like(base_penalty))
+    reward = torch.where(env.episode_length_buf >= 20, base_penalty, torch.zeros_like(base_penalty))
+    # Handle NaNs
+    nan_mask = torch.isnan(reward)
+    if nan_mask.any():
+        reward[nan_mask] = 0.0
+    return reward
 
 def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
@@ -39,11 +49,21 @@ def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
         torch.ones_like(lat_err),
         -torch.abs(lat_err) * 2.0
     )
-    return torch.where(env.episode_length_buf >= 20, base_reward, torch.zeros_like(base_reward))
+    reward = torch.where(env.episode_length_buf >= 20, base_reward, torch.zeros_like(base_reward))
+    # Handle NaNs
+    nan_mask = torch.isnan(reward)
+    if nan_mask.any():
+        reward[nan_mask] = 0.0
+    return reward
 
 def steering_jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     """Penalizes high-frequency steering changes."""
     # Action index 0 is steering
     delta_steer = env.action_manager.action[:, 0] - env.action_manager.prev_action[:, 0]
     base_penalty = -1.0 * torch.square(delta_steer)
-    return torch.where(env.episode_length_buf >= 20, base_penalty, torch.zeros_like(base_penalty))
+    reward = torch.where(env.episode_length_buf >= 20, base_penalty, torch.zeros_like(base_penalty))
+    # Handle NaNs
+    nan_mask = torch.isnan(reward)
+    if nan_mask.any():
+        reward[nan_mask] = 0.0
+    return reward
