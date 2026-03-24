@@ -12,7 +12,7 @@ from isaaclab.utils import configclass
 from isaaclab.envs import ManagerBasedRLEnvCfg, ViewerCfg
 from isaaclab.managers import ObservationGroupCfg, ObservationTermCfg as ObsTerm, ActionTermCfg as ActionTerm, RewardTermCfg as RewTerm, TerminationTermCfg as DoneTerm, SceneEntityCfg
 from isaaclab.assets import AssetBaseCfg
-from isaaclab.sensors import TiledCameraCfg
+from isaaclab.sensors import CameraCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
 import isaaclab.sim as sim_utils
@@ -23,42 +23,47 @@ import mdp.observations as mdp_obs, mdp.rewards as mdp_rew, mdp.terminations as 
 
 @configclass
 class ARCProSceneCfg(InteractiveSceneCfg):
-    """GSD Phase 7 (Re-Rollback): Based on no_graph_sim.usd."""
+    """GSD Phase 7: Single-Surface Mode (20.0x Scale)."""
     
-    # Lighting
     light = AssetBaseCfg(
         prim_path="/World/light", 
         spawn=sim_utils.DistantLightCfg(intensity=3000.0, color=(1.0, 1.0, 1.0))
     )
 
-    # Standard Ground Plane for stability
-    ground = AssetBaseCfg(
-        prim_path="/World/ground",
-        spawn=sim_utils.GroundPlaneCfg(),
-    )
-
-    # Track from no_graph_sim_cleaned.usd
+    # NO GROUND PLANE - preventing collision conflicts
+    
     track = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Track",
         spawn=sim_utils.UsdFileCfg(
             usd_path=os.path.join(os.path.dirname(__file__), "..", "openStreetUSD", "no_graph_sim_cleaned.usd"),
-            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=False), 
+            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True),
         ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.01)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
     )
     
-    # Robot (Standard Scale)
+    # ROBOT SCALE: 20.0x
     robot = ARCPRO_ROBOT_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.1)),
+        spawn=ARCPRO_ROBOT_CFG.spawn.replace(
+            scale=(20.0, 20.0, 20.0),
+            # Increase offsets for massive parts
+            collision_props=sim_utils.CollisionPropertiesCfg(
+                collision_enabled=True,
+                contact_offset=0.05,
+                rest_offset=0.0,
+            ),
+        ),
+        init_state=ARCPRO_ROBOT_CFG.init_state.replace(
+            pos=(0.0, 0.0, 20.0) # Drop from 20m
+        )
     )
     
     # Camera
-    tiled_camera = TiledCameraCfg(
+    tiled_camera = CameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraSensor",
         update_period=0.0,
         spawn=sim_utils.PinholeCameraCfg(),
-        offset=TiledCameraCfg.OffsetCfg(pos=(0.14, 0.0, 0.08), rot=(1.0, 0.0, 0.0, 0.0), convention="world"),
+        offset=CameraCfg.OffsetCfg(pos=(2.8, 0.0, 1.6), rot=(1.0, 0.0, 0.0, 0.0), convention="world"),
         data_types=["rgb"], width=160, height=90,
     )
 
@@ -76,7 +81,7 @@ class ObservationCfg:
 
 @configclass
 class ActionCfg:
-    steering = mdp.JointPositionActionCfg(asset_name="robot", joint_names=["Joint_Steer_L", "Joint_Steer_R"], scale=1.0, preserve_order=True)
+    steering = mdp.JointPositionActionCfg(asset_name="robot", joint_names=["Joint_Steer_.*"], scale=1.0, preserve_order=True)
     throttle = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["Joint_Drive_.*"], scale=1.0, preserve_order=True)
 
 @configclass
@@ -89,11 +94,10 @@ class TerminationCfg:
 
 @configclass
 class ARCProEnvCfg(ManagerBasedRLEnvCfg):
-    # Free-look camera configuration
-    viewer: ViewerCfg = ViewerCfg(eye=(5.0, 5.0, 5.0), lookat=(0.0, 0.0, 0.0))
+    viewer: ViewerCfg = ViewerCfg(eye=(50.0, 50.0, 50.0), lookat=(0.0, 0.0, 0.0))
     
     enable_cameras: bool = True
-    scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=1, env_spacing=100.0)
+    scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=1, env_spacing=1000.0)
     observations: ObservationCfg = ObservationCfg()
     actions: ActionCfg = ActionCfg()
     rewards: RewardCfg = RewardCfg()
@@ -102,15 +106,18 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     sim: SimulationCfg = SimulationCfg(
         dt=0.005, render_interval=8, device="cuda:0",
         physx=sim_utils.PhysxCfg(
-            solver_type=1, max_position_iteration_count=16, max_velocity_iteration_count=8,
-            bounce_threshold_velocity=0.5, enable_ccd=False, enable_stabilization=True,
+            solver_type=1,
+            max_position_iteration_count=8, 
+            max_velocity_iteration_count=4,
+            bounce_threshold_velocity=1.0, 
+            enable_ccd=False, 
+            enable_stabilization=True,
         ),
     )
 
     def __post_init__(self):
         self.decimation = 8
         self.episode_length_s = 120.0 
-        self.sim.render_interval = self.decimation
         self.viewer.camera_follow_prim_path = None
         
         if not self.enable_cameras:
