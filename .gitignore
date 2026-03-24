@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+
+# Isaac Sim / Omniverse
+*.log
+exts/omni.*
+data/
+logs/
+
+# Binary Data (Should ideally use LFS)
+# *.usd
+# *.npy
+
+# OS
+.DS_Store
+.thumbs.db

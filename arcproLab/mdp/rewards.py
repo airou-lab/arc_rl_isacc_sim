@@ -8,23 +8,13 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
 def speed_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Rewards forward speed (current_speed * 2.0)."""
-    extract = env.scene[asset_cfg.name]
-    speed = extract.data.root_lin_vel_b[:, 0]
-    base_reward = speed * 2.0
-    reward = torch.where(env.episode_length_buf >= 20, base_reward, torch.zeros_like(base_reward))
-    # Handle NaNs
-    nan_mask = torch.isnan(reward)
-    if nan_mask.any():
-        reward[nan_mask] = 0.0
-    return reward
-
-def line_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
-    """Applies a flat -100 penalty if a white line was hit this step."""
-    # This logic checks the termination manager's status for the line contact term
-    hit = env.termination_manager.get_term("white_line_contact")
-    base_penalty = torch.where(hit, torch.tensor(-100.0, device=env.device), torch.tensor(0.0, device=env.device))
-    reward = torch.where(env.episode_length_buf >= 20, base_penalty, torch.zeros_like(base_penalty))
+    """Rewards forward speed (current_speed * 0.3)."""
+    asset = env.scene[asset_cfg.name]
+    speed = asset.data.root_lin_vel_b[:, 0]
+    
+    # Simple speed reward (matching the logic from original policy environment)
+    reward = speed * 0.3
+    
     # Handle NaNs
     nan_mask = torch.isnan(reward)
     if nan_mask.any():
@@ -33,37 +23,36 @@ def line_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
 
 def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
-    Original Evolution Reward:
-    - If abs(lateral_error) < 0.5: +1.0
-    - Else: -abs(lateral_error) * 2.0
-    
-    Lateral error is at Index 8 of the telemetry vector.
+    Reward based on lateral offset from track centerline.
+    Original Logic: 
+    - if abs(lat_err) < 0.5: +1.0
+    - else: -abs(lat_err) * 2.0
     """
-    # Pull the telemetry vector from the observation manager buffer
-    # The observation manager 'compute()' returns the current observations for all groups
     obs = env.observation_manager.compute()["policy"]
     lat_err = obs[:, 8]
     
-    base_reward = torch.where(
+    reward = torch.where(
         torch.abs(lat_err) < 0.5,
         torch.ones_like(lat_err),
         -torch.abs(lat_err) * 2.0
     )
-    reward = torch.where(env.episode_length_buf >= 20, base_reward, torch.zeros_like(base_reward))
+    
     # Handle NaNs
     nan_mask = torch.isnan(reward)
     if nan_mask.any():
         reward[nan_mask] = 0.0
     return reward
 
+def line_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """Flat penalty if a white line was hit (handled by termination logic usually)."""
+    # Check if white_line_contact termination was triggered
+    hit = env.termination_manager.get_term("white_line_contact")
+    reward = torch.where(hit, torch.tensor(-10.0, device=env.device), torch.tensor(0.0, device=env.device))
+    return reward
+
 def steering_jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
-    """Penalizes high-frequency steering changes."""
+    """Penalizes high steering actions for smoothness."""
     # Action index 0 is steering
-    delta_steer = env.action_manager.action[:, 0] - env.action_manager.prev_action[:, 0]
-    base_penalty = -1.0 * torch.square(delta_steer)
-    reward = torch.where(env.episode_length_buf >= 20, base_penalty, torch.zeros_like(base_penalty))
-    # Handle NaNs
-    nan_mask = torch.isnan(reward)
-    if nan_mask.any():
-        reward[nan_mask] = 0.0
+    steering = env.action_manager.action[:, 0]
+    reward = -0.1 * torch.abs(steering)
     return reward

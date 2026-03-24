@@ -33,7 +33,7 @@ def setup_robot_stability(env: ManagerBasedRLEnv, env_ids: torch.Tensor, asset_c
     for name in drive_joint_names:
         idx, _ = asset.find_joints(name)
         stiffness[:, idx] = 0.0
-        damping[:, idx] = 100.0 # High damping for speed stability
+        damping[:, idx] = 1.0 # Low damping for speed responsiveness
     
     # Apply to simulation
     asset.write_joint_stiffness_to_sim(stiffness, env_ids=env_ids)

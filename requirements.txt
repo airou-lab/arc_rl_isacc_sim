@@ -1,0 +1,5 @@
+pytest
+torch
+numpy<2
+flake8
+matplotlib
