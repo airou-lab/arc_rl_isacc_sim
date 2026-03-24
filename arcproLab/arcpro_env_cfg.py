@@ -23,7 +23,7 @@ import mdp.observations as mdp_obs, mdp.rewards as mdp_rew, mdp.terminations as 
 
 @configclass
 class ARCProSceneCfg(InteractiveSceneCfg):
-    """GSD Phase 7 (Re-Rollback): Based on no_graph_sim.usd."""
+    """GSD Phase 7: Ultra-Stable Mode (20.0x Scale, 1000Hz)."""
     
     # Lighting
     light = AssetBaseCfg(
@@ -31,26 +31,29 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.DistantLightCfg(intensity=3000.0, color=(1.0, 1.0, 1.0))
     )
 
-    # Standard Ground Plane for stability
+    # Standard Ground Plane (Diagnostic Safety Net at Z=0)
     ground = AssetBaseCfg(
         prim_path="/World/ground",
         spawn=sim_utils.GroundPlaneCfg(),
     )
 
-    # Track from no_graph_sim_cleaned.usd
+    # Track from no_graph_sim_cleaned.usd (Elevated to Z=10.0)
     track = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Track",
         spawn=sim_utils.UsdFileCfg(
             usd_path=os.path.join(os.path.dirname(__file__), "..", "openStreetUSD", "no_graph_sim_cleaned.usd"),
-            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=False), 
+            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True), 
         ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.01)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 10.0)),
     )
     
-    # Robot (Standard Scale)
+    # Robot (Native 20x Scale, 100m drop for clear visual)
     robot = ARCPRO_ROBOT_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.1)),
+        spawn=ARCPRO_ROBOT_CFG.spawn.replace(
+            scale=(1.0, 1.0, 1.0),
+        ),
+        init_state=ARCPRO_ROBOT_CFG.init_state.replace(pos=(0.0, 0.0, 100.0)), 
     )
     
     # Camera
@@ -58,7 +61,7 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraSensor",
         update_period=0.0,
         spawn=sim_utils.PinholeCameraCfg(),
-        offset=TiledCameraCfg.OffsetCfg(pos=(0.14, 0.0, 0.08), rot=(1.0, 0.0, 0.0, 0.0), convention="world"),
+        offset=TiledCameraCfg.OffsetCfg(pos=(2.8, 0.0, 1.6), rot=(1.0, 0.0, 0.0, 0.0), convention="world"),
         data_types=["rgb"], width=160, height=90,
     )
 
@@ -85,32 +88,38 @@ class RewardCfg:
 
 @configclass
 class TerminationCfg:
-    height = DoneTerm(func=mdp_done.height_termination)
+    # height = DoneTerm(func=mdp_done.height_termination)
+    pass
 
 @configclass
 class ARCProEnvCfg(ManagerBasedRLEnvCfg):
-    # Free-look camera configuration
-    viewer: ViewerCfg = ViewerCfg(eye=(5.0, 5.0, 5.0), lookat=(0.0, 0.0, 0.0))
+    # Adjust viewer to see the high drop
+    viewer: ViewerCfg = ViewerCfg(eye=(150.0, 150.0, 150.0), lookat=(0.0, 0.0, 10.0))
     
     enable_cameras: bool = True
-    scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=1, env_spacing=100.0)
+    scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=1, env_spacing=1000.0)
     observations: ObservationCfg = ObservationCfg()
     actions: ActionCfg = ActionCfg()
     rewards: RewardCfg = RewardCfg()
     terminations: TerminationCfg = TerminationCfg()
 
     sim: SimulationCfg = SimulationCfg(
-        dt=0.005, render_interval=8, device="cuda:0",
+        dt=0.001, # 1000Hz for ultimate stability
+        render_interval=40, # Maintain 25Hz visual
+        device="cuda:0",
         physx=sim_utils.PhysxCfg(
-            solver_type=1, max_position_iteration_count=16, max_velocity_iteration_count=8,
-            bounce_threshold_velocity=0.5, enable_ccd=False, enable_stabilization=True,
+            solver_type=1, # TGS
+            max_position_iteration_count=32, # double precision
+            max_velocity_iteration_count=16, # double precision
+            bounce_threshold_velocity=0.5, 
+            enable_ccd=True, 
+            enable_stabilization=True,
         ),
     )
 
     def __post_init__(self):
-        self.decimation = 8
+        self.decimation = 40 # Sync with render_interval
         self.episode_length_s = 120.0 
-        self.sim.render_interval = self.decimation
         self.viewer.camera_follow_prim_path = None
         
         if not self.enable_cameras:
