@@ -1,5 +1,15 @@
 # Verification History
 
+## Phase 8: v1.0 Release (March 25, 2026)
+- **Status:** VERIFIED & RELEASED
+- **Baseline Asset:** `openStreetUSD/no_graph_sim_cleaned.usd`
+- **Scale:** 20.0x (Internal Articulation) / 1.0x (Global Reference)
+- **Stability:** Solid performance at 1000Hz (dt=0.001) in Isaac Lab.
+- **Autonomous Driving:** Verified SB3 policy inference. Robot successfully completes laps in the Isaac Lab environment with RGB camera and telemetry feedback.
+- **Metric Accuracy:** Confirmed 403mm length and 25cm wheelbase mapping.
+
+---
+
 ## Phase 7: Surgical Calibration (March 2026)
 - **Status:** STABILIZED
 - **Baseline Asset:** `openStreetUSD/no_graph_sim_cleaned.usd`

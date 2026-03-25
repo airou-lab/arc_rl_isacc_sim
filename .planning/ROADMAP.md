@@ -1,35 +1,27 @@
-# Roadmap: Lane Follower
+# Roadmap: ARCPro RL Isaac Sim Migration
 
 ## Overview
-This roadmap outlines the steps to build a self-driving lane-following robot in Isaac Sim.
+This roadmap outlines the journey of migrating the ARCPro RL system to NVIDIA Isaac Lab for high-performance training.
 
 ## Phases
 
-- [ ] **Phase 1: Lane Environment Setup** - Create a scene with two parallel lanes.
-- [ ] **Phase 2: Robot & Sensor Config** - Add robot with camera to the scene.
-- [ ] **Phase 3: Vision Pipeline** - Implement lane boundary detection.
-- [ ] **Phase 4: Autonomous Control** - Implement lane-centering drive logic.
-
-## Phase Details
-
-### Phase 1: Lane Environment Setup
-**Goal**: Create a simulation world with a 2-lane track.
-**Requirements**: REQ-ENV-LANE
-**Success Criteria**: Visual markers for two lanes are present in the scene.
-
-### Phase 2: Robot & Sensor Config
-**Goal**: Integrate the robot and camera into the environment.
-**Requirements**: REQ-ROBOT-CAM
-**Success Criteria**: Robot spawns correctly and camera data is accessible in Python.
+- [x] **Phase 1: Environment & Robot Foundation** - Established stable USD assets and connectivity.
+- [x] **Phase 2: Isaac Lab Migration** - Refactored to vectorized `ManagerBasedRLEnv`.
+- [x] **Phase 3: Infrastructure & CI/CD** - Implemented automated testing and documentation.
+- [x] **Phase 4: Robot Refinement** - Applied 20x scaling and 1000Hz frequency for stability.
+- [x] **Phase 5: Policy Integration** - Integrated SB3 policy and verified autonomous driving.
+- [ ] **Phase 6: Graph-Based Navigation** - Implement edge/node topology for road segments (Future).
 
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Environment Setup | 0/1 | Not started | - |
-| 2. Robot Config | 0/1 | Not started | - |
-| 3. Vision Pipeline | 0/1 | Not started | - |
-| 4. Driving Logic | 0/1 | Not started | - |
+| 1. Environment Foundation | 1/1 | COMPLETE | 2026-03-20 |
+| 2. Isaac Lab Migration | 1/1 | COMPLETE | 2026-03-21 |
+| 3. Infrastructure | 1/1 | COMPLETE | 2026-03-22 |
+| 4. Robot Refinement | 1/1 | COMPLETE | 2026-03-23 |
+| 5. Policy Integration | 1/1 | COMPLETE | 2026-03-25 |
+| 6. Graph Navigation | 0/1 | Planned | - |
 
 ---
-*Roadmap defined: 2026-03-16*
+*Roadmap updated: 2026-03-25*

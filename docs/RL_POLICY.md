@@ -1,8 +1,8 @@
-# RL Policy Architecture (Legacy)
+# RL Policy Architecture (v1.0)
 
-> **STATUS:** PORTING TO ISAAC LAB. Custom policy logic is being moved from the Direct API wrappers to the Isaac Lab `ManagerBasedRLEnv`.
+> **STATUS:** PORTED TO ISAAC LAB. Custom policy logic has been successfully moved from the Direct API wrappers to the Isaac Lab `ManagerBasedRLEnv`.
 
-## Core Logic to Port
-1.  **Hierarchical HPPO:** Port the LSTM-based planning and control heads to the Isaac Lab `ObservationManager`.
-2.  **Telemetry Vector:** Port the 12-element ROS2-compatible state vector (indices 0-11).
-3.  **Vision Pipeline:** Adapt the 160x90 downsampling for Isaac Lab's `TiledCamera`.
+## Ported Components
+1.  **Hierarchical HPPO:** Ported the LSTM-based planning and control heads to the Isaac Lab `ObservationManager`.
+2.  **Telemetry Vector:** Successfully implemented the 12-element state vector in `mdp/observations.py`.
+3.  **Vision Pipeline:** Successfully adapted the 160x90 downsampling for Isaac Lab's `TiledCamera`.

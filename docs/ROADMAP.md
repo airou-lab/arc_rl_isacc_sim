@@ -21,10 +21,10 @@
 - [x] **4.3: Free Camera Support** - Implemented viewer tracking for debugging.
 - [x] **4.4: Clipping & Hardening** - Verified physics stability and drop-test stabilization.
 
-## Phase 5: Training & Policy Development (IMMEDIATE PRIORITY)
-- [ ] **5.1: Original Policy Integration** - Link SB3 policy with Isaac Lab environment.
-- [ ] **5.2: Inference Verification** - Confirm autonomous lap completion.
-- [ ] **5.3: Visual Analytics** - Isaac Lab compliant GUI/HUD for debugging.
+## Phase 5: Training & Policy Development (COMPLETE)
+- [x] **5.1: Original Policy Integration** - Link SB3 policy with Isaac Lab environment.
+- [x] **5.2: Inference Verification** - Confirm autonomous lap completion.
+- [x] **5.3: Visual Analytics** - Isaac Lab compliant GUI/HUD for debugging.
 
 ## Phase 6: Intersection & Graph-Based Navigation (FUTURE)
 - [ ] **6.1: Graph Track Manager** - Implement edge/node topology for road segments.

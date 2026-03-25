@@ -1,16 +1,19 @@
 # ARCPro RL: Isaac Sim Migration
 
 ## Current Status
-- **Phase**: 04 - Robot Refinement & Verification (In Progress)
+- **Status**: v1.0 Released
+- **Phase**: Complete
 - **Baseline**: `no_graph_sim_cleaned.usd` at 1:1 proportions.
-- **Active Challenge**: Physics stability at "Giant Scale" (20.0x robot).
 
-## Recent Discoveries
-- **Map Scaling**: The reference `no_graph_sim.usd` map uses a 42-meter-wide robot as its baseline, requiring a ~170x scale-up for a standard F1Tenth model to fit lanes.
-- **Physics Solver Limits**: Scaling articulations to 170x causes immediate PhysX engine crashes. Stabilized at 20.0x scale using high-inertia tuning.
-- **Sensor Stability**: Switched from `TiledCamera` to standard `CameraCfg` to prevent initialization hangs during high-scale environment creation.
-
-## Active Constraints
-- **Robot Scale**: 20.0x (Experimental for lane alignment).
-- **Spawn Height**: 20.0m (Safety drop to clear USD mesh overlaps).
-- **Physics**: 200Hz (dt=0.005), CCD disabled for debug.
+## Milestone: v1.0
+- **Summary**: Simulation environment is now stable, and the robot performs as expected. Physics and scaling issues encountered during earlier development phases are fully resolved.
+- **Key Achievements**:
+    - **Isaac Lab Migration**: Successfully migrated from single-robot Direct API to a vectorized `ManagerBasedRLEnv` in Isaac Lab, supporting multi-robot parallel training.
+    - **Physics Stability**: Stabilized the 34-joint ARCPro robot at a 20.0x scale with 1000Hz simulation frequency (dt=0.001) for optimal stability.
+    - **Sensor Integration**: Configured a high-performance visual pipeline using `TiledCamera` for 160x90 RGB observation captures.
+    - **Policy Integration**: Successfully linked the Stable Baselines 3 (SB3) policy with the Isaac Lab environment, confirming autonomous lap completion.
+- **Current Tech Stack**:
+    - NVIDIA Isaac Sim / Isaac Lab
+    - Python 3.12
+    - Stable Baselines 3 (SB3)
+    - Gymnasium-compatible `ManagerBasedRLEnv`
