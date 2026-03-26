@@ -13,6 +13,7 @@ from isaaclab.app import AppLauncher
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Verify the SB3 policy in the Isaac Lab environment.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
+parser.add_argument("--no_ui", action="store_true", default=False, help="Disable the telemetry window UI.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -82,7 +83,7 @@ def main():
 
     # Setup Telemetry Window
     telemetry = None
-    if TelemetryWindow is not None:
+    if TelemetryWindow is not None and not args_cli.no_ui:
         print("Creating Telemetry Window...")
         telemetry = TelemetryWindow()
     
@@ -95,9 +96,8 @@ def main():
     max_steps = 20000 
     print(f"Starting simulation loop for {max_steps} steps...")
     while simulation_app.is_running() and count < max_steps:
-        # Mandatory GUI update for real-time visibility
-        if not args_cli.headless:
-            simulation_app.update()
+        # Note: simulation_app.update() is already called internally by env.step()
+        # and env.render(). Removing the manual call here to prevent redundant rendering.
 
         with torch.no_grad():
             # Get camera observations
