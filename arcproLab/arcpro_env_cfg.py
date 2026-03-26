@@ -47,13 +47,13 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 10.0)),
     )
     
-    # Robot (Native 20x Scale, 5m drop for clear visual)
+    # Robot (Native 20x Scale, 11m drop to clear track at 10m)
     robot = ARCPRO_ROBOT_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=ARCPRO_ROBOT_CFG.spawn.replace(
             scale=(0.5, 0.5, 0.5),
         ),
-        init_state=ARCPRO_ROBOT_CFG.init_state.replace(pos=(0.0, 0.0, 5.0)), 
+        init_state=ARCPRO_ROBOT_CFG.init_state.replace(pos=(0.0, 0.0, 11.0)), 
     )
     
     # Camera
