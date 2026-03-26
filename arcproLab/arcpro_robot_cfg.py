@@ -14,7 +14,7 @@ class ArcProRobotCfg(ArticulationCfg):
     """Configuration for the F1Tenth robot using the GENERATED primitive-based asset."""
     
     spawn: sim_utils.UsdFileCfg = sim_utils.UsdFileCfg(
-        usd_path=os.path.join(os.path.dirname(__file__), "..", "f1tenth_trainer", "assets", "F1Tenth_Generated.usd"),
+        usd_path=os.path.join(os.path.dirname(__file__), "assets", "robot", "F1Tenth_Generated.usd"),
         scale=(1.0, 1.0, 1.0), 
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=False,

@@ -154,7 +154,7 @@ if __name__ == "__main__":
     # Add the current directory to sys.path to allow imports from the venv
     sys.path.append("./.venv/lib/python3.12/site-packages")
 
-    relative_model_path = "f1tenth_trainer/ros2_f1_tenth_trainer/road_following_model.pth"
+    relative_model_path = "arcproLab/models/road_following_model.pth"
     
     try:
         policy = PolicyWrapper(relative_model_path)

@@ -63,7 +63,7 @@ def main():
     
     # setup policy
     print("Loading SB3 policy...")
-    model_path = os.path.join(os.path.dirname(__file__), "..", "..", "f1tenth_trainer", "ros2_f1_tenth_trainer", "road_following_model.pth")
+    model_path = os.path.join(os.path.dirname(__file__), "..", "models", "road_following_model.pth")
     policy = PolicyWrapper(model_path)
     print("Policy loaded.")
     

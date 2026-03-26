@@ -1,3 +1,0 @@
-[submodule "f1tenth_trainer"]
-	path = f1tenth_trainer
-	url = https://github.com/NVIDIA-Omniverse/sample-ackermann-amr.git
