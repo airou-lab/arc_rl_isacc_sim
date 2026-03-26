@@ -1,17 +1,17 @@
-# Project State: ARCPro RL v1.0
+# Project State: ARCPro RL v1.1-dev
 
 ## Current Phase
-**Complete (v1.0 Release)**
+**Phase 6: Intersection & Graph-Based Navigation**
 
 ## Summary
-The project has successfully achieved the migration of the ARCPro RL environment to NVIDIA Isaac Lab. The simulation is stable, the robot is controllable via an SB3 policy, and high-performance vectorization is enabled.
+The project has successfully achieved the migration of the ARCPro RL environment to NVIDIA Isaac Lab in v1.0. We are now expanding the environment to support complex road topologies and smart intersections.
 
 ## Recent Activity
 - **v1.0 Release**: Finalized the simulation and policy integration.
-- **Isaac Lab Migration**: Successfully migrated from Direct API to `ManagerBasedRLEnv`.
-- **Physics Stabilization**: Achieved stability for the 34-joint robot at 1000Hz (dt=0.001) with 20x scaling.
-- **Policy Integration**: Verified SB3 policy inference in the Isaac Lab environment.
+- **Phase 6 Planning**: Defined requirements and created a 3-plan roadmap for Graph-Based Navigation and Intersection control.
+- **Research**: Confirmed USD Variant switching as the standard for traffic light control in Isaac Sim.
 
 ## Next Actions
-- [ ] Phase 6: Graph-Based Navigation (Intersection navigation).
-- [ ] Advanced reward shaping for performance optimization.
+- [ ] Execute Phase 6 - Plan 01: Road Graph Implementation.
+- [ ] Execute Phase 6 - Plan 02: Smart Intersection Control.
+- [ ] Execute Phase 6 - Plan 03: Intersection Navigation & RL Update.

@@ -17,7 +17,7 @@
 
 ## Phase 4: Robot Refinement & Verification (COMPLETE)
 - [x] **4.1: Robot Scaling & Metrics** - Applied physical measurements (403mm L, 287mm W, 25cm wheelbase).
-- [x] **4.2: Sensor Optimization** - Configured RGB-only camera pipeline (Realsense at 145/0/195).
+- [x] **4.2: Sensor Optimization** - Configured RGB-only camera pipeline.
 - [x] **4.3: Free Camera Support** - Implemented viewer tracking for debugging.
 - [x] **4.4: Clipping & Hardening** - Verified physics stability and drop-test stabilization.
 
@@ -26,7 +26,10 @@
 - [x] **5.2: Inference Verification** - Confirm autonomous lap completion.
 - [x] **5.3: Visual Analytics** - Isaac Lab compliant GUI/HUD for debugging.
 
-## Phase 6: Intersection & Graph-Based Navigation (FUTURE)
-- [ ] **6.1: Graph Track Manager** - Implement edge/node topology for road segments.
-- [ ] **6.2: Navigation Commands** - Add "Straight/Left/Right" inputs to the policy.
-- [ ] **6.3: Dynamic Path Rewards** - Reward adherence to high-level navigation goals.
+## Phase 6: Intersection & Graph-Based Navigation (v1.1-dev)
+- [ ] **6.1: Road Graph Implementation** — Implement `RoadGraph` and refactor `TrackManager`.
+- [ ] **6.2: Smart Intersection Control** — Integrate traffic light assets and ROS 2 controller.
+- [ ] **6.3: Intersection Navigation & RL Update** — Update observations and rewards for awareness.
+
+---
+*Roadmap updated: 2026-03-25*

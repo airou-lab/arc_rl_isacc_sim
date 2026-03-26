@@ -1,23 +1,23 @@
-# Project State: ARCPro RL v1.0
+# Project State: ARCPro RL v1.1-dev
 
 ## Current Phase
-**Complete (v1.0 Release)**
+**Phase 6: Intersection & Graph-Based Navigation (In Progress)**
 
 ## Summary
-The project has successfully achieved the migration of the ARCPro RL environment to NVIDIA Isaac Lab. The simulation is stable, the robot is controllable via an SB3 policy, and high-performance vectorization is enabled.
+The project successfully achieved the migration of the ARCPro RL environment to NVIDIA Isaac Lab in v1.0. We are now expanding the environment to support complex road topologies and smart intersections (v1.1 development).
 
 ## Recent Activity
-- **v1.0 Release**: Finalized the simulation and policy integration.
-- **Isaac Lab Migration**: Successfully migrated from Direct API to `ManagerBasedRLEnv`.
-- **Physics Stabilization**: Achieved stability for the 34-joint robot at 1000Hz (dt=0.001) with 20x scaling.
-- **Policy Integration**: Verified SB3 policy inference in the Isaac Lab environment.
+- **v1.0 Release**: Finalized the simulation and policy integration (March 25, 2026).
+- **Phase 6 Planning**: Defined requirements and created a 3-plan roadmap for Graph-Based Navigation and Intersection control.
+- **Research**: Confirmed USD Variant switching as the standard for traffic light control in Isaac Sim.
 
-## Key Achievements
-- **Isaac Lab Migration**: Successfully migrated from single-robot Direct API to a vectorized `ManagerBasedRLEnv` in Isaac Lab, supporting multi-robot parallel training.
-- **Physics Stability**: Stabilized the 34-joint ARCPro robot at a 20.0x scale with 1000Hz simulation frequency (dt=0.001) for optimal stability.
-- **Sensor Integration**: Configured a high-performance visual pipeline using `TiledCamera` for 160x90 RGB observation captures.
-- **Policy Integration**: Successfully linked the Stable Baselines 3 (SB3) policy with the Isaac Lab environment, confirming autonomous lap completion.
+## Key Achievements (v1.0)
+- **Isaac Lab Migration**: Successfully migrated to vectorized `ManagerBasedRLEnv`.
+- **Physics Stability**: Stabilized the 34-joint ARCPro robot at a 20.0x scale with 1000Hz simulation frequency.
+- **Sensor Integration**: Configured visual pipeline using `TiledCamera` for RGB capture.
+- **Policy Integration**: Verified SB3 policy inference for autonomous lap completion.
 
 ## Next Actions
-- [ ] Phase 6: Graph-Based Navigation (Intersection navigation).
-- [ ] Advanced reward shaping for performance optimization.
+- [ ] Phase 6 - Plan 01: Road Graph Implementation.
+- [ ] Phase 6 - Plan 02: Smart Intersection Control.
+- [ ] Phase 6 - Plan 03: Intersection Navigation & RL Update.
