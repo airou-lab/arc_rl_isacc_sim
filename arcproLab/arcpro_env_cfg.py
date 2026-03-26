@@ -104,13 +104,13 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     terminations: TerminationCfg = TerminationCfg()
 
     sim: SimulationCfg = SimulationCfg(
-        dt=0.001, # 1000Hz for ultimate stability
-        render_interval=40, # Maintain 25Hz visual
+        dt=0.005, # 200Hz for balanced performance
+        render_interval=8, # Maintain 25Hz visual (200 / 8)
         device="cuda:0",
         physx=sim_utils.PhysxCfg(
             solver_type=1, # TGS
-            max_position_iteration_count=32, # double precision
-            max_velocity_iteration_count=16, # double precision
+            max_position_iteration_count=8, # Standard precision
+            max_velocity_iteration_count=4, # Standard precision
             bounce_threshold_velocity=0.5, 
             enable_ccd=True, 
             enable_stabilization=True,
@@ -118,7 +118,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     )
 
     def __post_init__(self):
-        self.decimation = 40 # Sync with render_interval
+        self.decimation = 8 # Sync with render_interval
         self.episode_length_s = 120.0 
         self.viewer.camera_follow_prim_path = None
         
