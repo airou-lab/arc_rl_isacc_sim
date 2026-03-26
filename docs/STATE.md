@@ -1,23 +1,22 @@
-# Project State: ARCPro RL v1.1-dev
+# Project State: ARCPro RL v1.0 (In Development)
 
 ## Current Phase
-**Phase 6: Intersection & Graph-Based Navigation (In Progress)**
+**Phase 5: Training & Policy Development (Active)**
 
 ## Summary
-The project successfully achieved the migration of the ARCPro RL environment to NVIDIA Isaac Lab in v1.0. We are now expanding the environment to support complex road topologies and smart intersections (v1.1 development).
+The simulation environment in NVIDIA Isaac Lab is stable (v1.0.1). We are currently in the process of training the ARCPro robot's RL policy within this environment.
 
 ## Recent Activity
-- **v1.0 Release**: Finalized the simulation and policy integration (March 25, 2026).
-- **Phase 6 Planning**: Defined requirements and created a 3-plan roadmap for Graph-Based Navigation and Intersection control.
-- **Research**: Confirmed USD Variant switching as the standard for traffic light control in Isaac Sim.
+- **Simulation Stabilization**: Achieved stable 200Hz physics and 25Hz visuals at 20.0x scale (downscaled 50% from initial giant-scale).
+- **Spawn Correction**: Removed redundant ground plane and set 15m drop to ensure road alignment.
+- **Training Setup**: Configured environment for Stable Baselines 3 (SB3) training.
 
-## Key Achievements (v1.0)
+## Key Achievements (Infrastructure)
 - **Isaac Lab Migration**: Successfully migrated to vectorized `ManagerBasedRLEnv`.
-- **Physics Stability**: Stabilized the 34-joint ARCPro robot at a 20.0x scale with 1000Hz simulation frequency.
-- **Sensor Integration**: Configured visual pipeline using `TiledCamera` for RGB capture.
-- **Policy Integration**: Verified SB3 policy inference for autonomous lap completion.
+- **Physics Tuning**: Stabilized 34-joint articulation for high-throughput training.
+- **Sensor Integration**: Functional RGB camera (`TiledCamera`) and telemetry streams.
 
 ## Next Actions
-- [ ] Phase 6 - Plan 01: Road Graph Implementation.
-- [ ] Phase 6 - Plan 02: Smart Intersection Control.
-- [ ] Phase 6 - Plan 03: Intersection Navigation & RL Update.
+- [ ] Phase 5: Execute SB3 training loop for road following.
+- [ ] Phase 5: Verify policy inference and lap completion.
+- [ ] Phase 6: Intersection & Graph-Based Navigation (Planned).

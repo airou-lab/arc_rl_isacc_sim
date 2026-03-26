@@ -21,12 +21,12 @@
 - [x] **4.3: Free Camera Support** - Implemented viewer tracking for debugging.
 - [x] **4.4: Clipping & Hardening** - Verified physics stability and drop-test stabilization.
 
-## Phase 5: Training & Policy Development (COMPLETE)
-- [x] **5.1: Original Policy Integration** - Link SB3 policy with Isaac Lab environment.
-- [x] **5.2: Inference Verification** - Confirm autonomous lap completion.
-- [x] **5.3: Visual Analytics** - Isaac Lab compliant GUI/HUD for debugging.
+## Phase 5: Training & Policy Development (IN PROGRESS)
+- [ ] **5.1: Reward Shaping** - Tune rewards for lane centering and speed maintenance.
+- [ ] **5.2: Policy Training** - Train SB3 model for road following in Isaac Lab.
+- [ ] **5.3: Inference Verification** - Confirm autonomous lap completion in Isaac Lab.
 
-## Phase 6: Intersection & Graph-Based Navigation (v1.1-dev)
+## Phase 6: Intersection & Graph-Based Navigation (PLANNED)
 - [ ] **6.1: Road Graph Implementation** — Implement `RoadGraph` and refactor `TrackManager`.
 - [ ] **6.2: Smart Intersection Control** — Integrate traffic light assets and ROS 2 controller.
 - [ ] **6.3: Intersection Navigation & RL Update** — Update observations and rewards for awareness.

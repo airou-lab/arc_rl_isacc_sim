@@ -31,12 +31,6 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.DistantLightCfg(intensity=3000.0, color=(1.0, 1.0, 1.0))
     )
 
-    # Standard Ground Plane (Diagnostic Safety Net at Z=0)
-    ground = AssetBaseCfg(
-        prim_path="/World/ground",
-        spawn=sim_utils.GroundPlaneCfg(),
-    )
-
     # Track from no_graph_sim_cleaned.usd (Elevated to Z=10.0)
     track = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Track",
@@ -47,13 +41,13 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 10.0)),
     )
     
-    # Robot (Native 20x Scale, 11m drop to clear track at 10m)
+    # Robot (Native 20x Scale, 15m drop to ensure it clears the elevated track)
     robot = ARCPRO_ROBOT_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=ARCPRO_ROBOT_CFG.spawn.replace(
             scale=(0.5, 0.5, 0.5),
         ),
-        init_state=ARCPRO_ROBOT_CFG.init_state.replace(pos=(0.0, 0.0, 11.0)), 
+        init_state=ARCPRO_ROBOT_CFG.init_state.replace(pos=(0.0, 0.0, 15.0)), 
     )
     
     # Camera
