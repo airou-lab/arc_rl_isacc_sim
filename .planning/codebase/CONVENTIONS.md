@@ -1,81 +1,89 @@
 # Coding Conventions
 
-**Analysis Date:** 2024-05-24
+**Analysis Date:** 2024-07-29
 
 ## Naming Patterns
 
 **Files:**
-- `snake_case.py`: Used for all Python source files. Example: `arcpro_env_cfg.py`, `track_manager.py`.
+- Python source files: `snake_case.py` (e.g., `rewards.py`, `track_manager.py`).
+- Test files: `test_snake_case.py` (e.g., `test_track_manager.py`).
 
 **Functions:**
-- `snake_case()`: Standard for all functions and methods. Example: `get_telemetry_vector()`, `load_waypoints()`.
+- `snake_case` (e.g., `speed_reward`, `get_telemetry_vector`, `sample_waypoints_from_usd`).
 
 **Variables:**
-- `snake_case`: Standard for all variables and class members. Example: `lat_err`, `head_err`, `self.device`.
+- `snake_case` (e.g., `lat_err`, `head_err`, `_TRACK_MANAGER`).
 
-**Types/Classes:**
-- `PascalCase`: Standard for class definitions. Example: `TrackManager`, `ARCProEnvCfg`.
-- Type hints: Extensively used for function arguments and return values. Example: `(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor`.
+**Types:**
+- Classes: `CapitalCase` (e.g., `TrackManager`).
 
 ## Code Style
 
 **Formatting:**
-- PEP8: Generally followed for indentation (4 spaces), spacing, and naming.
-- `flake8`: Referenced in `requirements.txt` for linting.
-- Line length: Some lines exceed the standard 79/88 characters, particularly in configuration and docstrings.
+- Not explicitly configured by dedicated formatter, but `flake8` is listed in `requirements.txt` suggesting adherence to PEP 8.
+- Indentation: 4 spaces.
 
 **Linting:**
-- `flake8`: Recommended tool for linting as per `requirements.txt`.
+- Tool used: `flake8` (indicated by `requirements.txt`).
+- Key rules: Adherence to PEP 8 guidelines is expected.
 
 ## Import Organization
 
 **Order:**
-1. Standard library: `import os`, `import sys`.
-2. Third-party libraries: `import torch`, `import numpy as np`.
-3. Isaac Lab libraries: `from isaaclab.managers import ...`, `import isaaclab.sim as sim_utils`.
-4. Project-specific modules: `from arcpro_robot_cfg import ARCPRO_ROBOT_CFG`, `import mdp.observations as mdp_obs`.
+1. Standard library imports (e.g., `os`, `sys`).
+2. Third-party imports (e.g., `torch`, `numpy`, `isaaclab`, `omni`, `pxr`).
+3. Local project imports (e.g., `from mdp.track_manager import TrackManager`).
 
 **Path Aliases:**
-- None detected, but `sys.path.insert(0, ...)` is used in tests to resolve `arcproLab` paths.
+- `sys.path.insert` is used in test files to make `arcproLab` discoverable for imports (e.g., `sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "arcproLab"))`).
 
 ## Error Handling
 
 **Patterns:**
-- `try-except` blocks: Used for defensive programming, particularly when interacting with the Isaac Sim/USD environment which might not be fully initialized or missing attributes.
-- NaN checks: Common for reward and observation tensors to prevent training crashes. `torch.isnan()` is used to create masks and zero out NaNs.
+- Explicit `try...except` blocks are used for handling potential runtime issues, especially when dealing with external dependencies or optional features (e.g., `arcproLab/mdp/observations.py`, `arcproLab/mdp/track_manager.py`).
+- NaNs are explicitly checked and handled, usually by replacing them with zeros (e.g., `arcproLab/mdp/rewards.py`, `arcproLab/mdp/observations.py`).
 
 ## Logging
 
-**Framework:** `print()` or Isaac Sim's internal logging.
+**Framework:**
+- Standard `print()` statements are used for informational messages and debugging, especially in `TrackManager` for feedback during waypoint loading/sampling.
 
 **Patterns:**
-- Informative status messages: Prefixed with module name, e.g., `[TrackManager] Loaded ... waypoints`.
-- Warning/Error messages: Used when fallback logic is triggered, e.g., `[TrackManager] Warning: USD sampling failed`.
+- Informative messages typically prefixed with `[ComponentName]` (e.g., `[TrackManager] Loaded ...`).
 
 ## Comments
 
 **When to Comment:**
-- Header: License/Copyright header (Isaac Lab Project Developers) at the top of each file.
-- Docstrings: For every class and public function/method, describing purpose, arguments, and return values.
-- Inline: For complex logic, particularly mathematical calculations (e.g., quaternion to yaw conversion).
+- Docstrings are used for modules, classes, and functions to describe their purpose, arguments, and return values.
+- Inline comments explain complex logic or specific indices/components of data structures (e.g., `Index 3: Forward Speed (m/s) - Local X velocity` in `arcproLab/mdp/observations.py`).
+- Copyright and license information at the top of each file.
 
 **JSDoc/TSDoc:**
-- Python standard docstrings (`"""Docstring content"""`) are used.
+- Not applicable (Python project).
 
 ## Function Design
 
-**Size:** Generally focused and modular, particularly in the `mdp` (Markov Decision Process) folder for rewards and observations.
+**Size:**
+- Functions generally focus on a single responsibility.
+- No strict size limits observed, but functions are kept concise.
 
-**Parameters:** Use type hints and default values where appropriate. Often take `env: ManagerBasedRLEnv` as the first argument.
+**Parameters:**
+- Type hints are consistently used for function parameters.
+- Default values are provided where appropriate.
 
-**Return Values:** Typically `torch.Tensor` for RL-related functions, matching the vectorized nature of the simulation.
+**Return Values:**
+- Type hints are consistently used for function return values.
+- `torch.Tensor` is a common return type for functions dealing with numerical computations.
 
 ## Module Design
 
-**Exports:** Direct exports of functions and classes. 
+**Exports:**
+- Modules export functions and classes directly.
+- No explicit `__all__` declaration observed.
 
-**Barrel Files:** `__init__.py` files are present in subdirectories (e.g., `arcproLab/mdp/__init__.py`), though their usage varies.
+**Barrel Files:**
+- `__init__.py` files are used in directories like `mdp/` to mark them as Python packages.
 
 ---
 
-*Convention analysis: 2024-05-24*
+*Convention analysis: 2024-07-29*

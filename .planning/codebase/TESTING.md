@@ -1,21 +1,20 @@
 # Testing Patterns
 
-**Analysis Date:** 2024-05-24
+**Analysis Date:** 2024-07-29
 
 ## Test Framework
 
 **Runner:**
-- `pytest` (specified in `requirements.txt`)
-- Config: No separate `pytest.ini` found, uses default configuration.
+- `pytest`
+- Config: Not explicitly defined (e.g., `pytest.ini`, `pyproject.toml`) but invoked directly.
 
 **Assertion Library:**
-- Native `assert` statements used with `pytest`.
-- `torch.allclose()` for tensor comparisons.
+- Standard `assert` statements.
+- `torch.allclose` for numerical comparisons of tensors.
 
 **Run Commands:**
 ```bash
-pytest                  # Run all tests
-pytest tests/           # Run tests in specific folder
+pytest                 # Run all tests
 ```
 
 ## Test File Organization
@@ -24,13 +23,16 @@ pytest tests/           # Run tests in specific folder
 - Separate `tests/` directory at the project root.
 
 **Naming:**
-- `test_*.py` for test files. Example: `tests/test_track_manager.py`.
+- Files are named `test_*.py` (e.g., `test_track_manager.py`).
 
 **Structure:**
 ```
 [project-root]/
-└── tests/
-    └── test_track_manager.py
+├── tests/
+│   └── test_module_name.py
+└── arcproLab/
+    └── module_name/
+        └── ...
 ```
 
 ## Test Structure
@@ -38,79 +40,75 @@ pytest tests/           # Run tests in specific folder
 **Suite Organization:**
 ```python
 import pytest
-from unittest.mock import MagicMock
+# ... imports ...
 
-# Local fixture with dependency mocking
 @pytest.fixture
-def mock_track_manager():
-    # Mock complex external dependencies
-    sys.modules["omni"] = MagicMock()
-    # Setup
-    tm = TrackManager(device="cpu")
-    # Custom test data
-    tm.waypoints = torch.tensor(...)
-    return tm
+def my_fixture():
+    # Setup code
+    yield value
+    # Teardown code
 
-# Individual test functions
-def test_function_name(mock_track_manager):
-    # Act
-    result = mock_track_manager.some_method(...)
-    # Assert
-    assert result == expected
+def test_something(my_fixture):
+    # Test logic
+    assert ...
 ```
 
 **Patterns:**
-- Mocking of Isaac Sim/Omniverse modules (`omni`, `pxr`) to allow tests to run without a live simulation context.
-- `sys.path.insert(0, ...)` used to ensure modules can be imported from parent directories during tests.
+- **Setup pattern:** `pytest.fixture` functions are used to prepare test environments and data. Fixtures can include mocking external dependencies.
+- **Teardown pattern:** `yield` in `pytest.fixture` allows for teardown logic after the test or test suite finishes.
+- **Assertion pattern:** Standard Python `assert` keyword is used for boolean checks. `torch.allclose` is used for floating-point tensor comparisons.
 
 ## Mocking
 
-**Framework:** `unittest.mock` (standard library).
+**Framework:** `unittest.mock.MagicMock` (from Python's standard library).
 
 **Patterns:**
 ```python
-# Mocking Isaac Sim/Omniverse modules
-sys.modules["omni"] = MagicMock()
-sys.modules["omni.usd"] = MagicMock()
-sys.modules["pxr"] = MagicMock()
+import sys
+from unittest.mock import MagicMock
+
+@pytest.fixture
+def mock_external_dependencies():
+    sys.modules["omni"] = MagicMock()
+    sys.modules["omni.usd"] = MagicMock()
+    sys.modules["pxr"] = MagicMock()
+    # ... then initialize objects that depend on these mocks ...
 ```
 
 **What to Mock:**
-- External simulation libraries that require a running GPU instance (`omni`, `pxr`).
-- Hardware-specific interfaces or heavy file system access if not needed for the unit test.
+- External simulation-specific libraries (`omni`, `pxr`) that are not available or desirable in a pure Python testing environment.
 
 **What NOT to Mock:**
-- Core mathematical and logic modules (`numpy`, `torch`).
-- The specific unit under test (e.g., `TrackManager`'s internal logic).
+- Core business logic or internal dependencies that should be tested directly.
 
 ## Fixtures and Factories
 
 **Test Data:**
 ```python
-# Synthetic waypoints for testing
+# Inside a pytest fixture
 wps = np.zeros((10, 3))
 wps[:, 0] = np.linspace(0, 9, 10)
-tm.waypoints = torch.tensor(wps, device="cpu", dtype=torch.float32)
+wps[:, 2] = 0.0 # Facing +X
+self.waypoints = torch.tensor(wps, device="cpu", dtype=torch.float32)
 ```
 
 **Location:**
-- Fixtures are currently defined within the test file itself.
+- Defined as `pytest.fixture` functions within the test files (`test_*.py`).
 
 ## Coverage
 
-**Requirements:** None enforced.
+**Requirements:** None explicitly enforced.
 
 **View Coverage:**
-Not configured (no `pytest-cov` detected in `requirements.txt`).
+- Not observed, but `pytest-cov` is a common plugin for `pytest` to generate coverage reports.
 
 ## Test Types
 
 **Unit Tests:**
-- Focus on logical calculations in isolated modules (e.g., `TrackManager`'s error calculations).
-- Run on CPU to avoid simulation overhead and GPU requirements.
+- **Scope and approach:** Focus on individual functions and methods (e.g., `TrackManager` methods). Mocks are used to isolate the unit under test from external dependencies.
 
 **Integration Tests:**
-- Not explicitly detected, though Isaac Sim typically uses its own test runner for integrated simulation tests.
+- Not explicitly identified as a separate category, but tests involving multiple components of `TrackManager` and its interactions (even with mocked external systems) could be considered integration-like.
 
 **E2E Tests:**
 - Not used.
@@ -118,11 +116,11 @@ Not configured (no `pytest-cov` detected in `requirements.txt`).
 ## Common Patterns
 
 **Async Testing:**
-- Not yet present in unit tests, but common in live simulation testing.
+- Not applicable (no asynchronous code observed in tested units).
 
 **Error Testing:**
-- Use `pytest.raises()` (not seen in existing tests, but standard for the framework).
+- Not explicitly observed in the provided sample, but typically involves using `pytest.raises` for expected exceptions.
 
 ---
 
-*Testing analysis: 2024-05-24*
+*Testing analysis: 2024-07-29*
