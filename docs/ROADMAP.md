@@ -1,35 +1,29 @@
-# Master Roadmap: ARCPro RL System
+# Roadmap: ARCPro RL Isaac Sim Migration
 
-## Phase 1: Environment & Robot Foundation (COMPLETE)
-- [x] **1.1: Connectivity** - Verified ROS2 installation and bridge connectivity.
-- [x] **1.2: Robot Integration** - Sourced and stabilized F1Tenth USD assets.
-- [x] **1.3: Track Alignment** - Restored OpenStreetUSD geometry.
+## Overview
+This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab and the integration of the Hierarchical Path Planning Policy.
 
-## Phase 2: Isaac Lab Migration (COMPLETE)
-- [x] **2.1: Task Definition** - Refactor USD into Isaac Lab schema.
-- [x] **2.2: Manager Configuration** - Implement Observation, Action, and Reward Managers.
-- [x] **2.3: Vectorization** - Transition to multi-robot parallel training (128+ agents).
+## Phases
 
-## Phase 3: Infrastructure & CI/CD (COMPLETE)
-- [x] **3.1: Documentation Recovery** - Audit and restore missing context.
-- [x] **3.2: Verification Loop** - Physical verification loop for environment fidelity.
-- [x] **3.3: CI/CD Integration** - GitHub Actions workflow with unit tests.
+- [x] **Phase 1: Environment Foundation** - Established stable USD assets and connectivity.
+- [x] **Phase 2: Isaac Lab Migration** - Refactored to vectorized `ManagerBasedRLEnv`.
+- [x] **Phase 3: Infrastructure & CI/CD** - Implemented automated testing and documentation.
+- [x] **Phase 4: Robot Refinement** - Applied 20x scaling and corrected spawn stability.
+- [x] **Phase 7: Revert to True Physics Mode** - Reverted to 1.0x metric scaling for robot and track, grounding the simulation at Z=0 and removing workarounds.
+- [ ] **Phase 5: Policy Integration** - Reorganize repository and hook up Hierarchical Policy architecture.
+- [ ] **Phase 6: Intersection Navigation** - Implement graph-based route planning.
 
-## Phase 4: Robot Refinement & Verification (COMPLETE)
-- [x] **4.1: Robot Scaling & Metrics** - Applied physical measurements (403mm L, 287mm W, 25cm wheelbase).
-- [x] **4.2: Sensor Optimization** - Configured RGB-only camera pipeline.
-- [x] **4.3: Free Camera Support** - Implemented viewer tracking for debugging.
-- [x] **4.4: Clipping & Hardening** - Verified physics stability and drop-test stabilization.
+## Progress
 
-## Phase 5: Training & Policy Development (IN PROGRESS)
-- [ ] **5.1: Reward Shaping** - Tune rewards for lane centering and speed maintenance.
-- [ ] **5.2: Policy Training** - Train SB3 model for road following in Isaac Lab.
-- [ ] **5.3: Inference Verification** - Confirm autonomous lap completion in Isaac Lab.
-
-## Phase 6: Intersection & Graph-Based Navigation (PLANNED)
-- [ ] **6.1: Road Graph Implementation** — Implement `RoadGraph` and refactor `TrackManager`.
-- [ ] **6.2: Smart Intersection Control** — Integrate traffic light assets and ROS 2 controller.
-- [ ] **6.3: Intersection Navigation & RL Update** — Update observations and rewards for awareness.
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. Environment Foundation | 1/1 | COMPLETE | 2026-03-20 |
+| 2. Isaac Lab Migration | 1/1 | COMPLETE | 2026-03-21 |
+| 3. Infrastructure | 1/1 | COMPLETE | 2026-03-22 |
+| 4. Robot Refinement | 1/1 | COMPLETE | 2026-03-23 |
+| 5. Policy Integration | 1/2 | In Progress | - |
+| 6. Intersection Nav | 0/3 | Planned | - |
+| 7. Revert to True Physics Mode | 1/1 | COMPLETE | 2026-03-30 |
 
 ---
-*Roadmap updated: 2026-03-25*
+*Roadmap updated: 2026-03-31*
