@@ -107,6 +107,15 @@
 - `argparse` for CLI arguments, including `AppLauncher.add_app_launcher_args(parser)`.
 - Conditional imports based on headless mode.
 
+## Stability and Physics
+
+**Standard PhysX Settings:**
+- Use TGS (Temporal Gauss-Seidel) solver: `solver_type=1` in `PhysxCfg`.
+- High precision for robots: `solver_position_iteration_count=32`, `solver_velocity_iteration_count=16` in `ArticulationRootPropertiesCfg`.
+- Enable standard features: `enable_ccd=True`, `enable_stabilization=True`.
+- **No stability workarounds:** Artificial friction, mass overrides, or root fixing (unless static) are avoided in favor of high-fidelity physical parameters.
+- **1.0x Scaling:** All assets must use real-world 1.0x metric scale (`scale=(1.0, 1.0, 1.0)`) to ensure gravity and inertia are calculated correctly by PhysX.
+
 ---
 
 *Convention analysis: 2025-03-26*

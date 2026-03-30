@@ -1,72 +1,73 @@
 # Technology Stack
 
-**Analysis Date:** 2024-10-24
+**Analysis Date:** 2025-03-21
 
 ## Languages
 
 **Primary:**
-- Python 3.10+ - Core logic, simulation scripting, and reinforcement learning.
+- Python 3.12 - Core logic, training scripts, environment configuration, and inference.
 
 **Secondary:**
-- Bash - Automation scripts for training and verification (`train.sh`, `verify_sim.sh`).
-- C++ - Underlying engine for NVIDIA Isaac Sim and USD (not directly edited).
+- USD (Universal Scene Description) - Asset definition for robots (`arcproLab/assets/robot/F1Tenth_Metric.usd`) and environments (`openStreetUSD/no_graph_sim_cleaned.usd`).
+- Bash - Execution scripts for training and verification (`train.sh`, `run_gui_verify.sh`).
 
 ## Runtime
 
 **Environment:**
-- NVIDIA Isaac Sim / Isaac Lab - High-fidelity robotics simulation environment.
-- CUDA - GPU acceleration for simulation and deep learning.
+- NVIDIA Omniverse Isaac Sim - Underlying simulation engine.
+- Isaac Lab v1.0.1 - High-level framework for RL in Isaac Sim.
+- Ubuntu 22.04 - Recommended host OS for NVIDIA Omniverse.
 
 **Package Manager:**
-- pip - Managed via `requirements.txt`.
-- Lockfile: missing (no `requirements.lock` or `poetry.lock`).
+- `pip` - Used for managing Python dependencies.
+- Lockfile: Missing (relying on `requirements.txt` and environment setup).
 
 ## Frameworks
 
 **Core:**
-- Isaac Lab - Robot learning framework built on NVIDIA Isaac Sim.
-- PyTorch 2.x - Deep learning framework for policy training and inference.
-- Stable Baselines3 (SB3) - Implementation of PPO and other RL algorithms.
-- Gymnasium - Standard API for reinforcement learning environments.
+- Isaac Lab v1.0.1 - Used for environment management (`ManagerBasedRLEnv`) and scene configuration.
+- Stable Baselines3 (SB3) - Used for training high-level PPO policies (`arcproLab/scripts/train_policy.py`).
+- PyTorch (torch) - Backend for both SB3 and the vision-based ResNet18 model (`arcproLab/mdp/policy_wrapper.py`).
 
 **Testing:**
-- pytest - Unit testing framework for logic like track management.
+- pytest - Unit testing framework for core logic (`tests/test_track_manager.py`).
 
 **Build/Dev:**
-- NVIDIA Omniverse - Underlying platform for Isaac Sim.
-- Pixar USD (Universal Scene Description) - Scene and robot description format.
+- flake8 - Python linting tool (used in CI).
+- GitHub Actions - CI pipeline for linting and unit tests (`.github/workflows/ci.yml`).
 
 ## Key Dependencies
 
 **Critical:**
-- `isaaclab` - Provides the `ManagerBasedRLEnv` and simulation utilities.
-- `torch` - Tensor computations and neural network modules.
-- `stable-baselines3` - RL training loop and algorithm implementations.
-- `numpy` (<2.0) - Numerical computations, specifically for track data.
+- `isaaclab` - Essential for all simulation-based logic.
+- `stable-baselines3` - Provides the PPO implementation for high-level control.
+- `torch` - Deep learning framework for inference and training.
+- `torchvision` - Used for ResNet18 model architecture and image transforms.
 
 **Infrastructure:**
-- `pxr-usd` (Pixar USD) - Low-level USD API for scene manipulation.
-- `omni.isaac.*` - Isaac Sim core extensions.
+- `numpy < 2` - Numerical operations (constrained to < 2.0 for compatibility with Omniverse/Isaac Lab).
+- `matplotlib` - Data visualization for analytics and debugging.
 
 ## Configuration
 
 **Environment:**
-- Configured via Python classes using `isaaclab.utils.configclass`.
-- Environment variables like `ISAACLAB_PATH` are used to locate the simulator.
+- Managed via Python-based configuration classes using `@configclass` from `isaaclab.utils`.
+- Main config: `arcproLab/arcpro_env_cfg.py` for the simulation environment.
+- Robot config: `arcproLab/arcpro_robot_cfg.py` for the F1Tenth vehicle.
 
 **Build:**
-- No traditional build step; Python scripts are executed via the `isaaclab.sh` wrapper.
+- No standard build system (e.g., setuptools/poetry) detected. Uses absolute and relative path manipulation in scripts.
 
 ## Platform Requirements
 
 **Development:**
-- Ubuntu 20.04/22.04 (standard for Isaac Sim).
-- NVIDIA GPU (RTX 30-series or higher recommended).
-- NVIDIA Driver 525+.
+- NVIDIA GPU with RTX support (required for Isaac Sim).
+- NVIDIA Drivers compatible with CUDA 12.x.
+- Python 3.12.
 
 **Production:**
-- Headless Linux servers with high-performance NVIDIA GPUs.
+- Deployment target: Local workstation or server with NVIDIA GPU for real-time simulation.
 
 ---
 
-*Stack analysis: 2024-10-24*
+*Stack analysis: 2025-03-21*

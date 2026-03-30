@@ -1,94 +1,90 @@
 # Codebase Concerns
 
-**Analysis Date:** 2024-11-20
+**Analysis Date:** 2025-03-31
 
 ## Tech Debt
 
-**Hardcoded Environment Paths:**
-- Issue: Several shell scripts hardcode absolute paths to the Isaac Lab executable and the project directory, specifically referencing `/home/arika/...`.
-- Files:
-  - `train.sh`
-  - `verify_sim.sh`
-  - `verify_sim_metric.sh`
-  - `run_gui_verify.sh`
-- Impact: Makes the codebase non-portable and causes failures for any other developer or CI/CD runner.
-- Fix approach: Use environment variables or relative path discovery (e.g., `$(pwd)` or finding `isaaclab.sh` in the parent directories).
+**Incomplete Telemetry Protocol:**
+- Issue: The `get_telemetry_vector` function only populates 7 of the 12 indices required by the legacy ARCPro policy protocol. Indices for acceleration, target distance, and specific status flags are missing.
+- Files: `arcproLab/mdp/observations.py`
+- Impact: Policies expecting the full 12-float vector will receive zeros for critical inputs, likely leading to poor performance or divergence.
+- Fix approach: Implement calculation logic for missing indices (acceleration, target distance, etc.) or update the policy to accept a 7-float vector.
 
-**Unpinned Dependencies:**
-- Issue: `requirements.txt` lacks version pinning for most packages (except `numpy < 2`).
-- Files: `requirements.txt`
-- Impact: Risk of breaking changes from future package updates, lack of reproducibility across environments, and potential security risks.
-- Fix approach: Pin exact versions using `pip freeze > requirements.txt` after a known-good installation.
+**Broken Reward & Termination Dependencies:**
+- Issue: `line_penalty` reward depends on a `white_line_contact` termination term that is not defined in `TerminationCfg`. Furthermore, `white_line_contact` depends on a `contact_forces` sensor that is not defined in `ARCProSceneCfg`.
+- Files: `arcproLab/mdp/rewards.py`, `arcproLab/mdp/terminations.py`, `arcproLab/arcpro_env_cfg.py`
+- Impact: Runtime errors (KeyError) when calculating rewards or terminations during training.
+- Fix approach: Add `ContactSensorCfg` to `ARCProSceneCfg` and register `white_line_contact` in `TerminationCfg`.
 
-**Unorganized `trash/` Directory:**
-- Issue: The `trash/tools/` directory contains 94 scripts with no documentation or clear organization.
-- Files: `trash/tools/*`
-- Impact: Bloats the repository and makes it difficult to find truly useful utility scripts.
-- Fix approach: Audit the directory, move useful scripts to a properly organized `arcproLab/utils/` directory, and delete the rest.
+**Hardcoded Policy Assumptions:**
+- Issue: `PolicyWrapper` contains hardcoded values for target speed (2.0 m/s) and wheel radius (0.05 m) which should ideally be synchronized with the environment configuration.
+- Files: `arcproLab/mdp/policy_wrapper.py`
+- Impact: Inconsistency between the policy's internal model of the robot and the actual simulation physics, leading to sub-optimal control.
+- Fix approach: Pass these parameters from the configuration class to the wrapper.
 
-**Magic Numbers and Hardcoded Offsets:**
-- Issue: Widespread use of hardcoded values for reward weights, termination limits, and steering geometry calculations.
-- Files:
-  - `arcproLab/mdp/rewards.py` (e.g., `0.3`, `0.5`, `2.0`, `-10.0`)
-  - `arcproLab/mdp/terminations.py` (e.g., `0.02`, `0.3`)
-  - `arcproLab/mdp/policy_wrapper.py` (e.g., `15.0`, `40.0`, `1.0`, `0.05`)
-  - `arcproLab/mdp/track_manager.py` (fallback coordinates `-125.0`, `62.0`)
-- Impact: Makes the logic fragile and difficult to tune or adapt to new robots/maps.
-- Fix approach: Move these values to configuration files (`arcpro_env_cfg.py` or separate YAML/JSON configs).
+## Known Bugs
+
+**Height Termination Trigger at Spawn:**
+- Issue: `height_termination` is set to trigger if `height > 0.3m`, but the robot is spawned (dropped) at `0.5m` in `arcpro_env_cfg.py`.
+- Files: `arcproLab/mdp/terminations.py`, `arcproLab/arcpro_env_cfg.py`
+- Trigger: Enabling `height_termination` in `TerminationCfg` will cause immediate episode termination upon reset.
+- Workaround: Keep `height_termination` commented out (current state) or increase the threshold to `> 1.0m`.
+
+**Waypoint Alignment Mismatch:**
+- Issue: `TrackManager` shifts all sampled waypoints so the first point is at `(0,0)`. However, the simulation spawns the track and robot at world `(0,0)` without verifying that the track's internal road surface actually starts at `(0,0)`.
+- Files: `arcproLab/mdp/track_manager.py`, `arcproLab/arcpro_env_cfg.py`
+- Symptoms: Robot spawns at `(0,0)` but the telemetry (lateral error) indicates it is far from the track, or vice versa.
+- Fix approach: Implement a "spawn alignment" check in `TrackManager` or `events.py` to ensure the robot is teleported to the actual first waypoint in world coordinates.
 
 ## Security Considerations
 
-**Hardcoded Absolute Paths:**
-- Risk: Exposes the local machine's directory structure and user names in the repository.
-- Files: `train.sh`, `verify_sim.sh`, `verify_sim_metric.sh`, `run_gui_verify.sh`
-- Current mitigation: None.
-- Recommendations: Replace with environment variables or relative paths.
-
-**Unpinned Dependencies:**
-- Risk: Potential for "dependency confusion" attacks or inclusion of malicious versions of libraries.
-- Files: `requirements.txt`
-- Current mitigation: None.
-- Recommendations: Pin dependencies and use a lockfile (e.g., `poetry.lock` or `Pipfile.lock`).
+**None Detected:**
+- Risk: Standard local simulation environment. No network-facing services or sensitive data detected.
 
 ## Performance Bottlenecks
 
-**Track Manager Sampling Logic:**
-- Problem: `TrackManager.sample_waypoints_from_usd` traverses the entire USD stage, which can be slow for very large scenes.
+**High-Density Waypoint Queries:**
+- Problem: `TrackManager.get_closest_waypoint_data` performs a full brute-force search across all waypoints for every environment at every step.
 - Files: `arcproLab/mdp/track_manager.py`
-- Cause: Iterative searching of all meshes in the stage.
-- Improvement path: Optimize the search by specifying the parent prim for road meshes or cache the results (currently saves to `.npy`, which is good, but sampling is still a potential bottleneck on first run).
+- Cause: `torch.argmin(dist_sq, dim=-1)` over potentially thousands of waypoints.
+- Improvement path: Implement a spatial partitioning scheme (e.g., KD-Tree) or localized search around the previous closest waypoint index.
 
 ## Fragile Areas
 
-**USD Sampling Heuristics:**
-- Files: `arcproLab/mdp/track_manager.py`
-- Why fragile: Relies on string-based keyword matching (e.g., `pavement`, `road`, `track`, `drivable_surfaces`) for identifying road meshes. If a map uses different naming conventions, it will fail to generate waypoints correctly.
-- Safe modification: Use USD attributes or tags instead of name-based filtering.
-- Test coverage: Gaps in verifying sampling correctness across different maps.
+**Metric Scaling (1.0x Mode):**
+- Files: `arcproLab/arcpro_env_cfg.py`
+- Why fragile: The track uses a "magic number" scale of `0.0825` to achieve "1.0x metric scale". If the source USD is modified or replaced, this scale factor will likely break. 
+- Safe modification: Document the source of the `0.0825` factor (e.g., if it was converted from inches or feet).
+- Test coverage: No automated test currently verifies the physical dimensions of the spawned track vs. expected metric units.
 
-**Policy Wrapper Normalization:**
-- Files: `arcproLab/mdp/policy_wrapper.py`
-- Why fragile: Uses ImageNet normalization constants (`[0.485, 0.456, 0.406]`, `[0.229, 0.224, 0.225]`), which may not match the distribution of the simulation's visual data.
-- Safe modification: Compute normalization statistics from the actual training dataset.
+## Scaling Limits
+
+**Vectorized Waypoint Search:**
+- Current capacity: Efficient up to ~1000 envs / 5000 waypoints.
+- Limit: GPU memory and compute time for the $O(N \cdot M)$ distance matrix will bottleneck at very high environment counts or extremely long tracks.
+- Scaling path: Move to a $O(N)$ local search or spatial index.
+
+## Dependencies at Risk
+
+**Isaac Lab Compatibility:**
+- Risk: The project relies on specific Isaac Lab manager patterns which are evolving rapidly.
+- Impact: Future updates to Isaac Lab may break the custom observation/reward managers.
 
 ## Missing Critical Features
 
-**Lack of Centralized Utilities:**
-- Problem: No `utils/` or `tools/` directory for shared helper functions, leading to logic duplication or scripts being hidden in `trash/`.
-- Blocks: Better code organization and reuse.
+**Lane-Aligned Spawning:**
+- Problem: The robot is always reset to `(0,0,0.5)`, which may not be on the track or in the correct orientation for training.
+- Blocks: Effective training on complex tracks where the start line is not at the origin.
+- Files: `arcproLab/mdp/events.py` (Currently a placeholder).
 
 ## Test Coverage Gaps
 
-**Untested Core Logic:**
-- What's not tested: Reward functions, termination criteria, observation managers, and policy inference logic.
-- Files:
-  - `arcproLab/mdp/rewards.py`
-  - `arcproLab/mdp/terminations.py`
-  - `arcproLab/mdp/observations.py`
-  - `arcproLab/mdp/policy_wrapper.py`
-- Risk: Regressions or logic errors could go unnoticed during development, especially when tuning physics or reward parameters.
+**Simulation-Telemetry Alignment:**
+- What's not tested: No test verifies that a robot at a specific world coordinate receives the correct lateral/heading error for the actual USD track being used.
+- Files: `tests/test_track_manager.py` (Only uses synthetic waypoints).
+- Risk: Silent errors where the robot learns to follow "ghost" waypoints that don't match the visual track.
 - Priority: High
 
 ---
 
-*Concerns audit: 2024-11-20*
+*Concerns audit: 2025-03-31*

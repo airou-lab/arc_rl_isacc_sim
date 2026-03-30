@@ -6,7 +6,7 @@
 
 **Runner:**
 - `pytest`
-- Configuration: No explicit `pytest.ini` or `pyproject.toml` found; typically invoked from the project root.
+- Configuration: Standard `pytest` invocation.
 
 **Assertion Library:**
 - Standard Python `assert` statements.
@@ -15,39 +15,41 @@
 
 **Run Commands:**
 ```bash
-pytest                 # Run all tests
-pytest tests/          # Explicitly run tests in the tests directory
+pytest                 # Run all logic tests (mocked)
+./run_gui_verify.sh    # Run simulation-based verification with GUI
+./verify_sim.sh        # Run headless simulation verification
 ```
 
 ## Test File Organization
 
 **Location:**
 - Dedicated `tests/` directory at the project root for unit tests.
-- Tool-specific verification scripts (standalone tests) in `trash/tools/` or `arcproLab/scripts/`.
+- Standalone verification scripts in `arcproLab/scripts/`.
 
 **Naming:**
 - Unit test files: `test_*.py` (e.g., `tests/test_track_manager.py`).
-- Verification scripts: `verify_*.py`, `test_*.py` (e.g., `trash/tools/test_imports.py`).
+- Verification scripts: `verify_*.py` (e.g., `arcproLab/scripts/verify_metric.py`).
 
 **Structure:**
 ```
 [project-root]/
 ├── tests/
-│   └── test_*.py
+│   └── test_*.py      # Logic-only tests (fast, no Isaac Sim required)
 └── arcproLab/
-    └── [source-files].py
+    └── scripts/
+        └── verify_*.py # Simulation-based verification (requires Isaac Sim)
 ```
 
 ## Test Structure
 
-**Suite Organization:**
+**Suite Organization (Mocked):**
 ```python
 import pytest
 import torch
 import sys
 from unittest.mock import MagicMock
 
-# Environment setup
+# Environment setup: Mock Isaac Sim before importing core components
 sys.modules["omni"] = MagicMock()
 sys.modules["omni.usd"] = MagicMock()
 sys.modules["pxr"] = MagicMock()
@@ -57,45 +59,47 @@ def mock_component():
     # Setup: Initialize component with mocks
     component = MyComponent(device="cpu")
     yield component
-    # Teardown (if any)
+```
 
-def test_feature_a(mock_component):
-    # Test logic
-    result = mock_component.run()
-    assert result == expected_value
+**Suite Organization (Simulation):**
+```python
+# Entry point for Isaac Sim verification scripts
+from isaaclab.app import AppLauncher
+app_launcher = AppLauncher(headless=True)
+simulation_app = app_launcher.app
+
+import torch
+from arcproLab.arcpro_env_cfg import ARCProEnvCfg
+
+def main():
+    # Setup environment
+    env_cfg = ARCProEnvCfg()
+    # Run loop
+    while simulation_app.is_running():
+        # Step and assert
+        ...
 ```
 
 **Patterns:**
 - **Fixture-based Setup:** Using `@pytest.fixture` to initialize objects and provide synthetic test data.
-- **Dependency Mocking:** Injecting mocks into `sys.modules` to decouple tests from the heavy Isaac Sim / Omniverse environment.
-- **Data-driven Assertions:** Comparing tensor outputs against hand-calculated or expected baseline tensors.
+- **Dependency Mocking:** Injecting mocks into `sys.modules` to decouple tests from the heavy Isaac Sim environment.
+- **Verification Scripts:** Comprehensive scripts that run the full simulation loop to verify physics stability and reward metrics.
 
 ## Mocking
 
 **Framework:** `unittest.mock.MagicMock` (standard library).
 
 **Patterns:**
-```python
-@pytest.fixture
-def mock_track_manager():
-    # Mock omni and pxr before creating TrackManager
-    sys.modules["omni"] = MagicMock()
-    sys.modules["omni.usd"] = MagicMock()
-    sys.modules["pxr"] = MagicMock()
-    
-    tm = TrackManager(device="cpu")
-    # Synthetic waypoints injection
-    tm.waypoints = torch.tensor(...)
-    return tm
-```
+- Mocking `omni`, `omni.usd`, and `pxr` allows running unit tests without a GPU or an Isaac Sim installation.
+- Injecting synthetic data (e.g., waypoints) into components like `TrackManager` for isolated testing.
 
 **What to Mock:**
-- Isaac Sim / Omniverse libraries (`omni`, `pxr`).
-- Hardware-dependent or simulation-dependent calls that shouldn't run in a CI/CD environment.
+- External simulation libraries.
+- GPU-dependent operations in unit tests.
 
 **What NOT to Mock:**
-- Pure logic classes (e.g., `TrackManager`'s mathematical computations).
-- Data processing pipelines (`PolicyWrapper`'s tensor transformations).
+- Core mathematical logic.
+- Observation and reward calculations that rely on tensor operations.
 
 ## Fixtures and Factories
 
@@ -104,14 +108,14 @@ def mock_track_manager():
 - Synthetic waypoints for track testing.
 
 **Location:**
-- Defined within the relevant `test_*.py` files.
+- Defined within the relevant `test_*.py` files or in a common `conftest.py` if shared.
 
 ## Coverage
 
-**Requirements:** None explicitly defined.
+**Requirements:** None explicitly enforced, but critical logic paths (e.g., `TrackManager`) are prioritized for unit testing.
 
 **View Coverage:**
-- Not explicitly configured, but `pytest-cov` is recommended.
+- Standard `pytest-cov` can be used.
 
 ## Test Types
 
@@ -121,7 +125,7 @@ def mock_track_manager():
 
 **Integration Tests:**
 - **Scope:** Interaction between multiple components, though often with mocked environment.
-- **Files:** Verification scripts that run within Isaac Sim (e.g., `arcproLab/scripts/verify_policy.py`).
+- **Files:** Verification scripts like `arcproLab/scripts/verify_policy.py`.
 
 **E2E / Simulation Verification:**
 - **Scope:** Full-loop simulation runs to verify policy behavior in the USD environment.
@@ -134,6 +138,9 @@ def mock_track_manager():
 
 **Error Testing:**
 - Typically handled via `try...except` in the source code rather than explicit test suites.
+
+**Physics Verification:**
+- Using `verify_metric.py` to ensure the robot falls naturally and tracks its own pose correctly under standard PhysX settings.
 
 ---
 

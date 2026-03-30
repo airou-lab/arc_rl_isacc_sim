@@ -1,13 +1,15 @@
 # External Integrations
 
-**Analysis Date:** 2024-10-24
+**Analysis Date:** 2025-03-21
 
 ## APIs & External Services
 
-**Simulation Platform:**
-- NVIDIA Isaac Sim / Isaac Lab - The primary simulation engine.
-  - SDK/Client: `isaaclab` python package.
-  - Auth: No direct authentication required (local installation).
+**Simulation:**
+- NVIDIA Omniverse Isaac Sim - Simulation engine providing physics (PhysX) and rendering (RTX).
+- Isaac Lab v1.0.1 - Integration layer for RL tasks, environments, and managers.
+
+**RL Algorithms:**
+- Stable Baselines3 (SB3) - Third-party RL library integrated via `Sb3VecEnvWrapper` for training PPO policies (`arcproLab/scripts/train_policy.py`).
 
 ## Data Storage
 
@@ -15,14 +17,8 @@
 - Not detected.
 
 **File Storage:**
-- **USD Scene Files:** Integration of Universal Scene Description (USD) for simulation environments.
-  - Location: `openStreetUSD/` contains track environments like `no_graph_sim_cleaned.usd`.
-- **Robot Assets:**
-  - Location: `arcproLab/assets/robot/F1Tenth_Metric.usd`.
-- **Model Checkpoints:**
-  - Location: `logs/ppo/` for training outputs.
-- **Static Map Data:**
-  - Location: `arcproLab/mdp/track_centerline.npy` for track logic and reward calculation.
+- Local filesystem for checkpointing models (`logs/ppo/`) and loading pre-trained weights (`arcproLab/models/road_following_model.pth`).
+- USD files for static assets and environment scenes (`openStreetUSD/`, `arcproLab/assets/`).
 
 **Caching:**
 - None detected.
@@ -30,33 +26,32 @@
 ## Authentication & Identity
 
 **Auth Provider:**
-- None (Local system).
+- None required for current local development.
 
 ## Monitoring & Observability
 
 **Error Tracking:**
-- None.
+- Custom `TrackManager` for computing lateral and heading errors relative to a track centerline (`arcproLab/mdp/track_manager.py`).
 
 **Logs:**
-- **TensorBoard:** SB3 training logs are stored as event files in `logs/ppo/`.
-- **Standard Output:** Training progress and simulation diagnostics are logged to console.
+- TensorBoard integration via Stable Baselines3 for training progress monitoring (`train_policy.py`).
+- Console output and custom UI windows for real-time telemetry audit (`arcproLab/mdp/visual_analytics.py`).
 
 ## CI/CD & Deployment
 
 **Hosting:**
-- Local workstation or HPC servers.
+- Local NVIDIA RTX workstations.
 
 **CI Pipeline:**
-- GitHub Actions - Defined in `.github/workflows/ci.yml`. Runs flake8 and pytest.
+- GitHub Actions for linting and unit testing (`.github/workflows/ci.yml`).
 
 ## Environment Configuration
 
 **Required env vars:**
-- `ISAACLAB_PATH` - Path to the Isaac Lab shell script (e.g., `/home/arika/IsaacLab/isaaclab.sh`).
-- `LD_LIBRARY_PATH` - Often required by Isaac Sim for finding NVIDIA drivers and libraries.
+- None detected. Configuration is primary class-based within the codebase (`arcproLab/arcpro_env_cfg.py`).
 
 **Secrets location:**
-- Not applicable (no cloud secrets).
+- Not applicable. No external API keys or secrets used in the current version.
 
 ## Webhooks & Callbacks
 
@@ -68,4 +63,4 @@
 
 ---
 
-*Integration audit: 2024-10-24*
+*Integration audit: 2025-03-21*
