@@ -10,7 +10,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from isaaclab.utils import configclass
 from isaaclab.envs import ManagerBasedRLEnvCfg, ViewerCfg
-from isaaclab.managers import ObservationGroupCfg, ObservationTermCfg as ObsTerm, ActionTermCfg as ActionTerm, RewardTermCfg as RewTerm, TerminationTermCfg as DoneTerm, SceneEntityCfg
+from isaaclab.managers import ObservationGroupCfg, ObservationTermCfg as ObsTerm, ActionTermCfg as ActionTerm, RewardTermCfg as RewTerm, TerminationTermCfg as DoneTerm, SceneEntityCfg, EventTermCfg
 from isaaclab.assets import AssetBaseCfg
 from isaaclab.sensors import TiledCameraCfg
 from isaaclab.scene import InteractiveSceneCfg
@@ -18,12 +18,24 @@ from isaaclab.sim import SimulationCfg
 import isaaclab.sim as sim_utils
 import isaaclab.envs.mdp as mdp
 
-from arcpro_robot_cfg import ARCPRO_ROBOT_CFG
-import mdp.observations as mdp_obs, mdp.rewards as mdp_rew, mdp.terminations as mdp_done
+from arcpro_metric_robot_cfg import ARCPRO_ROBOT_CFG
+import mdp.observations as mdp_obs, mdp.rewards as mdp_rew, mdp.terminations as mdp_done, mdp.events as mdp_events
+
+@configclass
+class EventCfg:
+    """Configuration for events."""
+
+    reset_robot_to_lane = EventTermCfg(
+        func=mdp_events.reset_robot_to_lane,
+        mode="reset",
+        params={"asset_cfg": SceneEntityCfg("robot")},
+    )
+
+    # REMOVED setup_stability override for 'True Physics' mode
 
 @configclass
 class ARCProSceneCfg(InteractiveSceneCfg):
-    """GSD Phase 7: True Physics Mode (1.0x Scale)."""
+    """GSD Phase 7: Metric Mode (1.0x Scale, 200Hz)."""
     
     # Lighting
     light = AssetBaseCfg(
@@ -31,24 +43,25 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.DistantLightCfg(intensity=3000.0, color=(1.0, 1.0, 1.0))
     )
 
-    # Track from no_graph_sim_cleaned.usd (Offset by -1.25m to bring road surface to Z=0)
+    # Track from no_graph_sim_cleaned.usd (Scaled down to metric)
+    # A lane in OSM is ~42.4 units, target is 3.5m -> scale = 0.0825
     track = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Track",
         spawn=sim_utils.UsdFileCfg(
             usd_path=os.path.join(os.path.dirname(__file__), "..", "openStreetUSD", "no_graph_sim_cleaned.usd"),
-            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True),
-            scale=(0.0825, 0.0825, 0.0825), 
+            scale=(0.0825, 0.0825, 0.0825),
+            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True), 
         ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -1.25)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
     )
     
-    # Robot (1.0x Metric Scale, 0.5m drop above the track at ground-level)
+    # Robot (Native 1.0x Scale, dropped 1m above the track)
     robot = ARCPRO_ROBOT_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=ARCPRO_ROBOT_CFG.spawn.replace(
             scale=(1.0, 1.0, 1.0),
         ),
-        init_state=ARCPRO_ROBOT_CFG.init_state.replace(pos=(0.0, 0.0, 0.5)), 
+        init_state=ARCPRO_ROBOT_CFG.init_state.replace(pos=(0.0, 0.0, 1.0)), 
     )
     
     # Camera
@@ -56,7 +69,7 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraSensor",
         update_period=0.0,
         spawn=sim_utils.PinholeCameraCfg(),
-        offset=TiledCameraCfg.OffsetCfg(pos=(0.28, 0.0, 0.16), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
+        offset=TiledCameraCfg.OffsetCfg(pos=(0.28, 0.0, 0.16), rot=(1.0, 0.0, 0.0, 0.0), convention="world"),
         data_types=["rgb"], width=160, height=90,
     )
 
@@ -88,8 +101,8 @@ class TerminationCfg:
 
 @configclass
 class ARCProEnvCfg(ManagerBasedRLEnvCfg):
-    # Adjust viewer to see the scene at ground-level
-    viewer: ViewerCfg = ViewerCfg(eye=(15.0, 15.0, 15.0), lookat=(0.0, 0.0, 0.0))
+    # Adjust viewer to see the high drop
+    viewer: ViewerCfg = ViewerCfg(eye=(150.0, 150.0, 150.0), lookat=(0.0, 0.0, 10.0))
     
     enable_cameras: bool = True
     scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=1, env_spacing=1000.0)
@@ -97,6 +110,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     actions: ActionCfg = ActionCfg()
     rewards: RewardCfg = RewardCfg()
     terminations: TerminationCfg = TerminationCfg()
+    events: EventCfg = EventCfg()
 
     sim: SimulationCfg = SimulationCfg(
         dt=0.005, # 200Hz for balanced performance
@@ -104,8 +118,8 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
         device="cuda:0",
         physx=sim_utils.PhysxCfg(
             solver_type=1, # TGS
-            max_position_iteration_count=8, # From main branch
-            max_velocity_iteration_count=4, # From main branch
+            max_position_iteration_count=8, # Standard precision
+            max_velocity_iteration_count=4, # Standard precision
             bounce_threshold_velocity=0.5, 
             enable_ccd=True, 
             enable_stabilization=True,

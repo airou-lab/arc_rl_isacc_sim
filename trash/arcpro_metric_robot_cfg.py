@@ -11,16 +11,16 @@ from isaaclab.utils import configclass
 
 @configclass
 class ArcProRobotCfg(ArticulationCfg):
-    """Configuration for the F1Tenth robot using the GENERATED primitive-based asset."""
+    """Configuration for the F1Tenth robot using the METRIC primitive-based asset."""
     
     spawn: sim_utils.UsdFileCfg = sim_utils.UsdFileCfg(
         usd_path=os.path.join(os.path.dirname(__file__), "assets", "robot", "F1Tenth_Metric.usd"),
         scale=(1.0, 1.0, 1.0), 
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=False,
-            solver_position_iteration_count=32, # Precision solver
-            solver_velocity_iteration_count=16, # Precision solver
-            fix_root_link=False, # EXPLICITLY UNLOCK ROOT FOR GRAVITY
+            solver_position_iteration_count=4, # Standard precision
+            solver_velocity_iteration_count=1, # Standard precision
+            fix_root_link=False, 
         ),
     )
 

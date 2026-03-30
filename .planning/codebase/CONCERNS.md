@@ -1,56 +1,94 @@
 # Codebase Concerns
 
-**Analysis Date:** 2024-07-30
+**Analysis Date:** 2024-11-20
 
 ## Tech Debt
 
-**External Dependencies:**
-- Issue: Numerous `TODO` and `FIXME` comments exist within installed `gymnasium` and `torchgen` packages. These indicate known issues or areas for improvement within those libraries.
+**Hardcoded Environment Paths:**
+- Issue: Several shell scripts hardcode absolute paths to the Isaac Lab executable and the project directory, specifically referencing `/home/arika/...`.
 - Files:
-  - `/home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim/venv/lib/python3.12/site-packages/gymnasium/...`
-  - `/home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim/venv/lib/python3.12/site-packages/torchgen/...`
-- Impact: While not directly actionable within this project's codebase, these could indicate potential future breaking changes, performance limitations, or areas where the external libraries might not be fully optimized or stable.
-- Fix approach: Monitor updates to these libraries, review their changelogs, and adapt project code as necessary. No direct fix within this project is applicable.
+  - `train.sh`
+  - `verify_sim.sh`
+  - `verify_sim_metric.sh`
+  - `run_gui_verify.sh`
+- Impact: Makes the codebase non-portable and causes failures for any other developer or CI/CD runner.
+- Fix approach: Use environment variables or relative path discovery (e.g., `$(pwd)` or finding `isaaclab.sh` in the parent directories).
 
-## Performance Bottlenecks
+**Unpinned Dependencies:**
+- Issue: `requirements.txt` lacks version pinning for most packages (except `numpy < 2`).
+- Files: `requirements.txt`
+- Impact: Risk of breaking changes from future package updates, lack of reproducibility across environments, and potential security risks.
+- Fix approach: Pin exact versions using `pip freeze > requirements.txt` after a known-good installation.
 
-**Potential for Large Files to Grow in Complexity:**
-- Problem: The file `arcproLab/mdp/track_manager.py` is the largest Python file in the project's codebase at 208 lines. Other significant files include `arcproLab/scripts/verify_policy.py` and `arcproLab/scripts/verify_metric.py` (both 175 lines). While not excessively large currently, these files are central to track management and verification logic, respectively. As the project evolves, these files could grow, potentially introducing increased complexity, reduced readability, and more difficult maintenance if not actively managed.
+**Unorganized `trash/` Directory:**
+- Issue: The `trash/tools/` directory contains 94 scripts with no documentation or clear organization.
+- Files: `trash/tools/*`
+- Impact: Bloats the repository and makes it difficult to find truly useful utility scripts.
+- Fix approach: Audit the directory, move useful scripts to a properly organized `arcproLab/utils/` directory, and delete the rest.
+
+**Magic Numbers and Hardcoded Offsets:**
+- Issue: Widespread use of hardcoded values for reward weights, termination limits, and steering geometry calculations.
 - Files:
-  - `arcproLab/mdp/track_manager.py`
-  - `arcproLab/scripts/verify_policy.py`
-  - `arcproLab/scripts/verify_metric.py`
-- Cause: Centralized logic for specific domains.
-- Improvement path: Regularly review these files for opportunities to refactor into smaller, more focused modules or functions if their responsibilities expand significantly. Introduce clear internal abstractions to manage complexity.
-
-## Known Bugs
-
-- Not detected.
+  - `arcproLab/mdp/rewards.py` (e.g., `0.3`, `0.5`, `2.0`, `-10.0`)
+  - `arcproLab/mdp/terminations.py` (e.g., `0.02`, `0.3`)
+  - `arcproLab/mdp/policy_wrapper.py` (e.g., `15.0`, `40.0`, `1.0`, `0.05`)
+  - `arcproLab/mdp/track_manager.py` (fallback coordinates `-125.0`, `62.0`)
+- Impact: Makes the logic fragile and difficult to tune or adapt to new robots/maps.
+- Fix approach: Move these values to configuration files (`arcpro_env_cfg.py` or separate YAML/JSON configs).
 
 ## Security Considerations
 
-- Not detected.
+**Hardcoded Absolute Paths:**
+- Risk: Exposes the local machine's directory structure and user names in the repository.
+- Files: `train.sh`, `verify_sim.sh`, `verify_sim_metric.sh`, `run_gui_verify.sh`
+- Current mitigation: None.
+- Recommendations: Replace with environment variables or relative paths.
+
+**Unpinned Dependencies:**
+- Risk: Potential for "dependency confusion" attacks or inclusion of malicious versions of libraries.
+- Files: `requirements.txt`
+- Current mitigation: None.
+- Recommendations: Pin dependencies and use a lockfile (e.g., `poetry.lock` or `Pipfile.lock`).
+
+## Performance Bottlenecks
+
+**Track Manager Sampling Logic:**
+- Problem: `TrackManager.sample_waypoints_from_usd` traverses the entire USD stage, which can be slow for very large scenes.
+- Files: `arcproLab/mdp/track_manager.py`
+- Cause: Iterative searching of all meshes in the stage.
+- Improvement path: Optimize the search by specifying the parent prim for road meshes or cache the results (currently saves to `.npy`, which is good, but sampling is still a potential bottleneck on first run).
 
 ## Fragile Areas
 
-- Not detected.
+**USD Sampling Heuristics:**
+- Files: `arcproLab/mdp/track_manager.py`
+- Why fragile: Relies on string-based keyword matching (e.g., `pavement`, `road`, `track`, `drivable_surfaces`) for identifying road meshes. If a map uses different naming conventions, it will fail to generate waypoints correctly.
+- Safe modification: Use USD attributes or tags instead of name-based filtering.
+- Test coverage: Gaps in verifying sampling correctness across different maps.
 
-## Scaling Limits
-
-- Not detected.
-
-## Dependencies at Risk
-
-- Not detected, beyond the general observation of `TODO`/`FIXME` in core dependencies like `gymnasium` and `torchgen`.
+**Policy Wrapper Normalization:**
+- Files: `arcproLab/mdp/policy_wrapper.py`
+- Why fragile: Uses ImageNet normalization constants (`[0.485, 0.456, 0.406]`, `[0.229, 0.224, 0.225]`), which may not match the distribution of the simulation's visual data.
+- Safe modification: Compute normalization statistics from the actual training dataset.
 
 ## Missing Critical Features
 
-- Not detected.
+**Lack of Centralized Utilities:**
+- Problem: No `utils/` or `tools/` directory for shared helper functions, leading to logic duplication or scripts being hidden in `trash/`.
+- Blocks: Better code organization and reuse.
 
 ## Test Coverage Gaps
 
-- Not explicitly analyzed in this phase.
+**Untested Core Logic:**
+- What's not tested: Reward functions, termination criteria, observation managers, and policy inference logic.
+- Files:
+  - `arcproLab/mdp/rewards.py`
+  - `arcproLab/mdp/terminations.py`
+  - `arcproLab/mdp/observations.py`
+  - `arcproLab/mdp/policy_wrapper.py`
+- Risk: Regressions or logic errors could go unnoticed during development, especially when tuning physics or reward parameters.
+- Priority: High
 
 ---
 
-*Concerns audit: 2024-07-30*
+*Concerns audit: 2024-11-20*

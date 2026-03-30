@@ -1,21 +1,28 @@
 # External Integrations
 
-**Analysis Date:** 2024-05-23
+**Analysis Date:** 2024-10-24
 
 ## APIs & External Services
 
 **Simulation Platform:**
-- NVIDIA Isaac Sim / Omniverse USD - Provides the simulated environment for robot training and verification.
-  - SDK/Client: Isaac Lab (inferred from codebase structure and project name)
-  - Auth: Not explicitly detected, likely managed via Omniverse Launcher or local setup.
+- NVIDIA Isaac Sim / Isaac Lab - The primary simulation engine.
+  - SDK/Client: `isaaclab` python package.
+  - Auth: No direct authentication required (local installation).
 
 ## Data Storage
 
 **Databases:**
-- None detected.
+- Not detected.
 
 **File Storage:**
-- Local filesystem for models (`arcproLab/models/road_following_model.pth`), track data (`arcproLab/mdp/track_centerline.npy`), and USD assets (`openStreetUSD/`).
+- **USD Scene Files:** Integration of Universal Scene Description (USD) for simulation environments.
+  - Location: `openStreetUSD/` contains track environments like `no_graph_sim_cleaned.usd`.
+- **Robot Assets:**
+  - Location: `arcproLab/assets/robot/F1Tenth_Metric.usd`.
+- **Model Checkpoints:**
+  - Location: `logs/ppo/` for training outputs.
+- **Static Map Data:**
+  - Location: `arcproLab/mdp/track_centerline.npy` for track logic and reward calculation.
 
 **Caching:**
 - None detected.
@@ -23,41 +30,42 @@
 ## Authentication & Identity
 
 **Auth Provider:**
-- None detected. Local development setup.
+- None (Local system).
 
 ## Monitoring & Observability
 
 **Error Tracking:**
-- None detected.
+- None.
 
 **Logs:**
-- Standard Python logging or print statements to console. No dedicated logging framework detected.
+- **TensorBoard:** SB3 training logs are stored as event files in `logs/ppo/`.
+- **Standard Output:** Training progress and simulation diagnostics are logged to console.
 
 ## CI/CD & Deployment
 
 **Hosting:**
-- Local development environment.
-- CI/CD inferred from `.github/workflows/ci.yml` - suggests GitHub Actions for CI.
+- Local workstation or HPC servers.
 
 **CI Pipeline:**
-- GitHub Actions (via `.github/workflows/ci.yml`) - for continuous integration (testing, linting).
+- GitHub Actions - Defined in `.github/workflows/ci.yml`. Runs flake8 and pytest.
 
 ## Environment Configuration
 
 **Required env vars:**
-- None explicitly detected in code (e.g., `os.environ`). Configuration likely handled through command-line arguments or internal module imports.
+- `ISAACLAB_PATH` - Path to the Isaac Lab shell script (e.g., `/home/arika/IsaacLab/isaaclab.sh`).
+- `LD_LIBRARY_PATH` - Often required by Isaac Sim for finding NVIDIA drivers and libraries.
 
 **Secrets location:**
-- Not applicable for this project's current scope (no external services requiring secrets).
+- Not applicable (no cloud secrets).
 
 ## Webhooks & Callbacks
 
 **Incoming:**
-- None detected.
+- None.
 
 **Outgoing:**
-- None detected.
+- None.
 
 ---
 
-*Integration audit: 2024-05-23*
+*Integration audit: 2024-10-24*

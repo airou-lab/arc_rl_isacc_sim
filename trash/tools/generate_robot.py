@@ -3,6 +3,7 @@ from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Generate a clean, fully-functioning F1Tenth robot USD.")
 parser.add_argument("output_path", type=str, nargs='?', default="f1tenth_trainer/assets/F1Tenth_Generated.usd", help="Path to the output USD file.")
+parser.add_argument("--scale", type=float, default=20.0, help="Scale factor (e.g., 1.0 for metric, 20.0 for giant).")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -11,9 +12,9 @@ simulation_app = app_launcher.app
 
 from pxr import Usd, UsdGeom, Gf, UsdPhysics, UsdShade, Sdf
 
-def generate_f1tenth_from_scratch(output_path):
-    # F1Tenth Spec (Native 20x Giant Scale)
-    SCALE = 20.0
+def generate_f1tenth_from_scratch(output_path, scale_factor):
+    # F1Tenth Spec (e.g., 20x Giant Scale or 1.0x Metric Scale)
+    SCALE = scale_factor
     wheelbase = 0.325 * SCALE
     track_width = 0.245 * SCALE
     wheel_radius = 0.052 * SCALE
@@ -130,7 +131,7 @@ def main():
     out_path = args_cli.output_path
     if os.path.exists(out_path):
         os.remove(out_path)
-    generate_f1tenth_from_scratch(out_path)
+    generate_f1tenth_from_scratch(out_path, args_cli.scale)
     simulation_app.close()
 
 if __name__ == "__main__":

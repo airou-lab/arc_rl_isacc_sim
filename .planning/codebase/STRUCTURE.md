@@ -1,152 +1,110 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-03-26
+**Analysis Date:** 2024-10-31
 
 ## Directory Layout
 
 ```
-[project-root]/
-├── .github/          # GitHub Actions CI/CD workflows
-├── .planning/        # Project planning, roadmap, and codebase documentation
-├── arcproLab/        # Main application source code for Isaac Lab RL environment
-│   ├── assets/       # Static assets, e.g., robot models
-│   ├── mdp/          # Markov Decision Process (MDP) components for RL environment
-│   ├── models/       # Trained RL policies or models
-│   └── scripts/      # Executable scripts for training, verification, and utility
-├── docs/             # High-level project documentation and research
-├── openStreetUSD/    # USD assets for simulation environments (e.g., tracks)
-├── tests/            # Unit and integration tests
-├── trash/            # Contains various utility tools, likely for USD manipulation or debugging
-└── venv/             # Python virtual environment
+arcpro_rl_isaac_sim/
+├── arcproLab/          # Core Python logic and RL definitions
+│   ├── assets/         # Simulation assets (USD files for robots)
+│   ├── mdp/            # Markov Decision Process logic (rewards, obs, terms)
+│   ├── models/         # Pre-trained policy models (.pth)
+│   ├── scripts/        # Training and verification entry points
+│   └── *_cfg.py        # Environment and Robot configuration files
+├── docs/               # Technical documentation and project plans
+├── openStreetUSD/      # Environment simulation scenes (.usd)
+├── tests/              # Unit and integration tests
+├── trash/              # Legacy tools and experimental scripts
+├── .planning/          # GSD planning and codebase analysis docs
+└── *.sh                # Shell script shortcuts for training and verification
 ```
 
 ## Directory Purposes
 
-**`.github/`:**
-- Purpose: Contains GitHub Actions workflows for continuous integration and continuous deployment.
-- Contains: YAML files defining CI/CD pipelines.
-- Key files: `.github/workflows/ci.yml`
+**arcproLab/:**
+- Purpose: Main application package containing configuration and RL logic.
+- Contains: Configuration classes, scripts, and MDP modules.
+- Key files: `arcpro_env_cfg.py`, `arcpro_robot_cfg.py`.
 
-**`.planning/`:**
-- Purpose: Stores project planning documents, including high-level requirements, roadmap, and automatically generated codebase analysis.
-- Contains: Markdown documents for various planning aspects.
-- Key files: `.planning/PROJECT.md`, `.planning/codebase/ARCHITECTURE.md`
+**arcproLab/mdp/:**
+- Purpose: Logic for state observations, rewards, and episode termination.
+- Contains: Python modules implementing Isaac Lab manager-based terms.
+- Key files: `observations.py`, `rewards.py`, `track_manager.py`.
 
-**`arcproLab/`:**
-- Purpose: The core Python package for defining and interacting with the Isaac Lab reinforcement learning environment.
-- Contains: Python modules, configuration files, assets, and scripts related to the RL setup.
-- Key files: `arcproLab/__init__.py`, `arcproLab/arcpro_env_cfg.py`, `arcproLab/arcpro_robot_cfg.py`
+**arcproLab/scripts/:**
+- Purpose: Operational scripts for interacting with the simulation.
+- Contains: CLI scripts for training and verifying policies.
+- Key files: `train_policy.py`, `verify_policy.py`, `verify_metric.py`.
 
-**`arcproLab/assets/`:**
-- Purpose: Stores static assets used within the Isaac Lab simulation, such as robot descriptions.
-- Contains: USD files or other model definitions.
-- Key files: `arcproLab/assets/robot/`
+**openStreetUSD/:**
+- Purpose: Holds the 3D environments (Universal Scene Description).
+- Contains: USD stages representing tracks and surrounding infrastructure.
+- Key files: `no_graph_sim_cleaned.usd`.
 
-**`arcproLab/mdp/`:**
-- Purpose: Defines the individual components of the Reinforcement Learning Markov Decision Process.
-- Contains: Python modules for observations, rewards, terminations, events, and policy wrappers.
-- Key files: `arcproLab/mdp/observations.py`, `arcproLab/mdp/rewards.py`, `arcproLab/mdp/terminations.py`
-
-**`arcproLab/models/`:**
-- Purpose: Stores pre-trained machine learning models or RL policies.
-- Contains: Model checkpoint files (e.g., `.pth`).
-- Key files: `arcproLab/models/road_following_model.pth`
-
-**`arcproLab/scripts/`:**
-- Purpose: Contains executable Python scripts for running various operations, including training, verification, and utility functions related to the RL environment.
-- Contains: Python scripts that serve as main entry points.
-- Key files: `arcproLab/scripts/train_policy.py`, `arcproLab/scripts/verify_policy.py`
-
-**`docs/`:**
-- Purpose: Stores general project documentation, overviews, and research notes.
-- Contains: Markdown documents.
-- Key files: `docs/RL_OVERVIEW.md`, `docs/PROJECT.md`
-
-**`openStreetUSD/`:**
-- Purpose: Contains Universal Scene Description (USD) files that define the simulation environments, such as tracks and scenes.
-- Contains: USD asset files.
-- Key files: `openStreetUSD/arcpro_RL_open_street_sim.usd`
-
-**`tests/`:**
-- Purpose: Contains unit and integration tests for the codebase.
-- Contains: Python test files.
-- Key files: `tests/test_track_manager.py`
-
-**`trash/`:**
-- Purpose: This directory appears to contain a large collection of utility scripts, possibly for debugging, manipulating USD assets, or internal development tools. While named "trash", its contents suggest it's actively used for specialized tasks.
-- Contains: Numerous Python scripts.
-- Key files: `trash/tools/bake_track.py`, `trash/tools/measure_robot.py`
+**trash/tools/:**
+- Purpose: A collection of standalone utility scripts for USD manipulation.
+- Contains: Tools for physics repair, scaling, and scene cleaning.
+- Key files: `clean_physics.py`, `rescale_usd.py`, `deep_bake.py`.
 
 ## Key File Locations
 
 **Entry Points:**
-- `train.sh`: Main shell script for initiating RL training.
-- `verify_sim.sh`: Shell script for initiating simulation verification.
-- `arcproLab/scripts/train_policy.py`: Python script for RL training.
-- `arcproLab/scripts/verify_policy.py`: Python script for verifying trained policies.
+- `arcproLab/scripts/train_policy.py`: Starts RL training.
+- `arcproLab/scripts/verify_policy.py`: Runs a trained policy for visual check.
+- `arcproLab/scripts/verify_metric.py`: Benchmarks policy performance.
 
 **Configuration:**
-- `requirements.txt`: Python package dependencies.
-- `arcproLab/arcpro_env_cfg.py`: Environment configuration for Isaac Lab.
-- `arcproLab/arcpro_robot_cfg.py`: Robot configuration for Isaac Lab.
+- `arcproLab/arcpro_env_cfg.py`: Environment and physics settings.
+- `arcproLab/arcpro_robot_cfg.py`: Robot articulation and actuator settings.
 
 **Core Logic:**
-- `arcproLab/mdp/`: Directory containing core RL MDP logic.
-- `arcproLab/mdp/track_manager.py`: Manages track data and generation.
+- `arcproLab/mdp/track_manager.py`: Core logic for track-relative navigation.
+- `arcproLab/mdp/observations.py`: Telemetry vector construction.
 
 **Testing:**
-- `tests/test_track_manager.py`: Example unit test.
+- `tests/test_track_manager.py`: Validation of track waypoint logic.
 
 ## Naming Conventions
 
 **Files:**
-- **Python modules:** `snake_case.py` (e.g., `rewards.py`, `train_policy.py`)
-- **Configuration files:** `snake_case_cfg.py` (e.g., `arcpro_env_cfg.py`)
-- **USD files:** `snake_case.usd` (e.g., `arcpro_RL_open_street_sim.usd`)
-- **Shell scripts:** `snake_case.sh` (e.g., `train.sh`)
+- `*_cfg.py`: Configuration files (e.g., `arcpro_env_cfg.py`).
+- `verify_*.py`: Scripts used for performance measurement and visual checks.
+- `test_*.py`: Pytest-compatible unit tests.
 
 **Directories:**
-- **Python packages:** `snake_case` (e.g., `arcproLab`, `mdp`, `scripts`)
-- **Special purpose:** `.dot_prefixed` for hidden/config directories (e.g., `.github`, `.planning`)
+- `mdp/`: Standard Isaac Lab naming for Markov Decision Process logic.
+- `assets/`: 3D model storage.
 
 ## Where to Add New Code
 
-**New Feature (RL environment component):**
-- Primary code (e.g., new observation type): `arcproLab/mdp/`
-- Configuration for new component: Update relevant `arcproLab/*_env_cfg.py` or `arcproLab/*_robot_cfg.py`
+**New Feature (e.g., new reward):**
+- Implementation: `arcproLab/mdp/rewards.py`.
+- Integration: Update `RewardCfg` in `arcproLab/arcpro_env_cfg.py`.
 
-**New Training/Verification Script:**
-- Implementation: `arcproLab/scripts/`
-- Associated shell wrapper (if needed): Project root (e.g., `new_script.sh`)
+**New Environment/Track:**
+- 3D Model: Place USD in `openStreetUSD/`.
+- Configuration: Reference in `arcproLab/arcpro_env_cfg.py` within `ARCProSceneCfg.track`.
 
-**New Robot Model:**
-- USD model definition: `arcproLab/assets/robot/`
-- Configuration: Create or update a `arcproLab/*_robot_cfg.py` file.
-
-**New Track/Simulation Environment:**
-- USD scene definition: `openStreetUSD/`
-- Track generation logic (if procedural): `arcproLab/generate_track.py` or a new utility in `arcproLab/`
+**New Component/Module:**
+- Shared utility: `arcproLab/mdp/` if related to the RL loop.
+- Standalone tool: `trash/tools/` (or create a new `tools/` directory if official).
 
 **Utilities:**
-- General helper functions: `arcproLab/utils/` (if such a directory were to be created, otherwise perhaps `arcproLab/` directly or `trash/tools/` for specialized tools).
+- Shared helpers: `arcproLab/mdp/` for logic, `arcproLab/` for generic python utilities.
 
 ## Special Directories
 
-**`.venv/` or `venv/`:**
-- Purpose: Python virtual environment for managing project dependencies.
-- Generated: Yes, by `python -m venv` or similar.
-- Committed: No (typically listed in `.gitignore`).
+**.planning/:**
+- Purpose: Contains GSD project metadata, roadmaps, and codebase analysis.
+- Generated: No (Created by Agent).
+- Committed: Yes.
 
-**`__pycache__/`:**
-- Purpose: Stores bytecode compiled Python files (`.pyc`).
-- Generated: Yes, automatically by Python.
-- Committed: No (typically listed in `.gitignore`).
-
-**`.pytest_cache/`:**
-- Purpose: Cache directory for `pytest` test runner.
-- Generated: Yes, by `pytest`.
-- Committed: No (typically listed in `.gitignore`).
+**trash/:**
+- Purpose: Staging area for experimental and legacy scripts.
+- Generated: No.
+- Committed: Yes.
 
 ---
 
-*Structure analysis: 2026-03-26*
+*Structure analysis: 2024-10-31*

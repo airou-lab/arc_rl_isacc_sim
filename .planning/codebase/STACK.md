@@ -1,65 +1,72 @@
 # Technology Stack
 
-**Analysis Date:** 2024-05-23
+**Analysis Date:** 2024-10-24
 
 ## Languages
 
 **Primary:**
-- Python 3.x - Core logic, RL implementations, scripting
+- Python 3.10+ - Core logic, simulation scripting, and reinforcement learning.
 
 **Secondary:**
-- Not detected
+- Bash - Automation scripts for training and verification (`train.sh`, `verify_sim.sh`).
+- C++ - Underlying engine for NVIDIA Isaac Sim and USD (not directly edited).
 
 ## Runtime
 
 **Environment:**
-- Python 3.x (specific version depends on environment setup, implied by requirements.txt)
+- NVIDIA Isaac Sim / Isaac Lab - High-fidelity robotics simulation environment.
+- CUDA - GPU acceleration for simulation and deep learning.
 
 **Package Manager:**
-- pip
-- Lockfile: requirements.txt is present
+- pip - Managed via `requirements.txt`.
+- Lockfile: missing (no `requirements.lock` or `poetry.lock`).
 
 ## Frameworks
 
 **Core:**
-- PyTorch (torch) - Deep learning framework for RL policy training and execution
-- NumPy (numpy) - Numerical operations, array manipulation
+- Isaac Lab - Robot learning framework built on NVIDIA Isaac Sim.
+- PyTorch 2.x - Deep learning framework for policy training and inference.
+- Stable Baselines3 (SB3) - Implementation of PPO and other RL algorithms.
+- Gymnasium - Standard API for reinforcement learning environments.
 
 **Testing:**
-- Pytest (pytest) - Unit and integration testing
+- pytest - Unit testing framework for logic like track management.
 
 **Build/Dev:**
-- Not explicitly managed by a dedicated build tool, standard Python development practices.
+- NVIDIA Omniverse - Underlying platform for Isaac Sim.
+- Pixar USD (Universal Scene Description) - Scene and robot description format.
 
 ## Key Dependencies
 
 **Critical:**
-- torch - Fundamental for defining, training, and running neural network policies.
-- numpy - Essential for numerical computations within the RL environment and agent.
+- `isaaclab` - Provides the `ManagerBasedRLEnv` and simulation utilities.
+- `torch` - Tensor computations and neural network modules.
+- `stable-baselines3` - RL training loop and algorithm implementations.
+- `numpy` (<2.0) - Numerical computations, specifically for track data.
 
 **Infrastructure:**
-- Isaac Sim / Omniverse USD - Inferred from the project name (arc_rl_isacc_sim) and the presence of `.usd` files (e.g., `openStreetUSD/arcpro_RL_open_street_sim.usd`). This is the simulation platform where the RL agent operates. (Note: Isaac Sim itself is not listed in `requirements.txt` as it's an external platform/SDK rather than a pip package in this context).
+- `pxr-usd` (Pixar USD) - Low-level USD API for scene manipulation.
+- `omni.isaac.*` - Isaac Sim core extensions.
 
 ## Configuration
 
 **Environment:**
-- Python environment managed by `venv` (indicated by `.venv/` and `venv/` directories).
-- Dependencies are listed in `requirements.txt`.
-- No explicit application-specific configuration files (e.g., `.ini`, `.yaml`) detected beyond Python modules themselves.
+- Configured via Python classes using `isaaclab.utils.configclass`.
+- Environment variables like `ISAACLAB_PATH` are used to locate the simulator.
 
 **Build:**
-- Standard Python packaging practices. No custom build config files detected.
+- No traditional build step; Python scripts are executed via the `isaaclab.sh` wrapper.
 
 ## Platform Requirements
 
 **Development:**
-- Python 3.x compatible environment.
-- NVIDIA GPU with CUDA for PyTorch acceleration (implied by RL/deep learning context).
-- Isaac Sim installation for full simulation capabilities.
+- Ubuntu 20.04/22.04 (standard for Isaac Sim).
+- NVIDIA GPU (RTX 30-series or higher recommended).
+- NVIDIA Driver 525+.
 
 **Production:**
-- Deployment target likely an environment with Python 3.x and NVIDIA hardware capable of running Isaac Sim or a deployed policy.
+- Headless Linux servers with high-performance NVIDIA GPUs.
 
 ---
 
-*Stack analysis: 2024-05-23*
+*Stack analysis: 2024-10-24*
