@@ -39,7 +39,7 @@ if ARCPRO_LAB_DIR not in sys.path:
     sys.path.append(ARCPRO_LAB_DIR)
 
 from isaaclab.envs import ManagerBasedRLEnv
-from arcpro_metric_env_cfg import ARCProEnvCfg
+from arcpro_env_cfg import ARCProEnvCfg
 from mdp.policy_wrapper import PolicyWrapper
 from mdp.track_manager import get_track_manager
 

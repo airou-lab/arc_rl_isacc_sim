@@ -7,39 +7,17 @@ import torch
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
-def setup_robot_stability(env: ManagerBasedRLEnv, env_ids: torch.Tensor, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")):
+def reset_robot_to_lane(env: ManagerBasedRLEnv, env_ids: torch.Tensor, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")):
     """
-    Event to stabilize the robot by forcing mass and joint properties.
-    Ported from Stability Pass (Isaac Sim 2025).
+    Event to reset the robot to the nearest lane center.
     """
     asset = env.scene[asset_cfg.name]
     
-    # Resolve env_ids if None (startup mode)
-    if env_ids is None:
-        env_ids = torch.arange(env.num_envs, device=env.device)
+    # Placeholder: In a real implementation, this would use TrackManager 
+    # to find the nearest waypoint and teleport the robot there.
+    # For now, just reset to origin.
+    pos = torch.zeros((len(env_ids), 3), device=env.device)
+    pos[:, 2] = 0.5 # Spawn 0.5m high
     
-    # Apply to all joints initially
-    stiffness = torch.full((len(env_ids), asset.num_joints), 1000.0, device=env.device)
-    damping = torch.full((len(env_ids), asset.num_joints), 50.0, device=env.device)
-    
-    # 3. Skip Drive Wheels (Velocity Joints)
-    # Drive wheels must have 0 stiffness to allow velocity control
-    drive_joint_names = [
-        "Wheel__Knuckle__Front_Left", 
-        "Wheel__Knuckle__Front_Right", 
-        "Wheel__Upright__Rear_Left", 
-        "Wheel__Upright__Rear_Right"
-    ]
-    for name in drive_joint_names:
-        idx, _ = asset.find_joints(name)
-        stiffness[:, idx] = 0.0
-        damping[:, idx] = 1.0 # Low damping for speed responsiveness
-    
-    # Apply to simulation
-    asset.write_joint_stiffness_to_sim(stiffness, env_ids=env_ids)
-    asset.write_joint_damping_to_sim(damping, env_ids=env_ids)
-    
-    # Note: Throttle joints (drive wheels) should have 0 stiffness for velocity control,
-    # but for stability we might want some damping. 
-    # However, Isaac Lab's ImplicitActuator handles this if configured.
-    # This event is a "Hard Override" to ensure USD defaults are ignored.
+    asset.write_root_pose_to_sim(torch.cat([pos, torch.tensor([[1, 0, 0, 0]], device=env.device).repeat(len(env_ids), 1)], dim=-1), env_ids=env_ids)
+    asset.write_root_velocity_to_sim(torch.zeros((len(env_ids), 6), device=env.device), env_ids=env_ids)

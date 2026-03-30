@@ -10,7 +10,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from isaaclab.utils import configclass
 from isaaclab.envs import ManagerBasedRLEnvCfg, ViewerCfg
-from isaaclab.managers import ObservationGroupCfg, ObservationTermCfg as ObsTerm, ActionTermCfg as ActionTerm, RewardTermCfg as RewTerm, TerminationTermCfg as DoneTerm, SceneEntityCfg
+from isaaclab.managers import ObservationGroupCfg, ObservationTermCfg as ObsTerm, ActionTermCfg as ActionTerm, RewardTermCfg as RewTerm, TerminationTermCfg as DoneTerm, SceneEntityCfg, EventTermCfg
 from isaaclab.assets import AssetBaseCfg
 from isaaclab.sensors import TiledCameraCfg
 from isaaclab.scene import InteractiveSceneCfg
@@ -19,7 +19,17 @@ import isaaclab.sim as sim_utils
 import isaaclab.envs.mdp as mdp
 
 from arcpro_robot_cfg import ARCPRO_ROBOT_CFG
-import mdp.observations as mdp_obs, mdp.rewards as mdp_rew, mdp.terminations as mdp_done
+import mdp.observations as mdp_obs, mdp.rewards as mdp_rew, mdp.terminations as mdp_done, mdp.events as mdp_events
+
+@configclass
+class EventCfg:
+    """Configuration for events."""
+
+    reset_robot_to_lane = EventTermCfg(
+        func=mdp_events.reset_robot_to_lane,
+        mode="reset",
+        params={"asset_cfg": SceneEntityCfg("robot")},
+    )
 
 @configclass
 class ARCProSceneCfg(InteractiveSceneCfg):
@@ -97,6 +107,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     actions: ActionCfg = ActionCfg()
     rewards: RewardCfg = RewardCfg()
     terminations: TerminationCfg = TerminationCfg()
+    events: EventCfg = EventCfg()
 
     sim: SimulationCfg = SimulationCfg(
         dt=0.005, # 200Hz for balanced performance
