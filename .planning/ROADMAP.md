@@ -11,6 +11,9 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab 
 - [x] **Phase 4: Robot Refinement** - Applied 20x scaling and corrected spawn stability.
 - [x] **Phase 7: Revert to True Physics Mode** - Reverted to 1.0x metric scaling for robot and track, grounding the simulation at Z=0 and removing workarounds.
 - [ ] **Phase 5: Policy Integration** - Reorganize repository and hook up Hierarchical Policy architecture.
+  - [x] 05-01-PLAN.md — Integration of ResNet18 road-following policy.
+  - [ ] 05-01-ASSET-VERIFY-PLAN.md — Verification and selection of definitive USD assets.
+  - [ ] 05-02-PLAN.md — Implementation of Hierarchical Policy and 12-float telemetry.
 - [ ] **Phase 6: Intersection Navigation** - Implement graph-based route planning.
 
 ## Progress
@@ -21,9 +24,9 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab 
 | 2. Isaac Lab Migration | 1/1 | COMPLETE | 2026-03-21 |
 | 3. Infrastructure | 1/1 | COMPLETE | 2026-03-22 |
 | 4. Robot Refinement | 1/1 | COMPLETE | 2026-03-23 |
-| 5. Policy Integration | 1/2 | In Progress | - |
+| 5. Policy Integration | 1/3 | In Progress | - |
 | 6. Intersection Nav | 0/3 | Planned | - |
 | 7. Revert to True Physics Mode | 1/1 | COMPLETE | 2026-03-30 |
 
 ---
-*Roadmap updated: 2026-03-31*
+*Roadmap updated: 2026-04-01*
