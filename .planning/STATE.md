@@ -10,6 +10,8 @@
 The project has successfully transitioned to "True Physics" mode (Phase 7). We are now focusing on completing Milestone 1 by integrating the Hierarchical Policy architecture, the 12-float telemetry protocol, and Gaussian-weighted rewards in the 1.0x metric environment. Phase 6 has been moved to Milestone 2 (v2.0) due to its architectural complexity.
 
 ## Recent Activity
+- **Verification Restoration**: Restored `verify_policy.py` and supporting scripts to `arcproLab/scripts/`. ResNet18 baseline is ready for **USER TESTING**.
+- **Phase 05-01 (ResNet18 Policy)**: **PENDING USER APPROVAL / NEEDS TESTING**. Road-following baseline needs verification in the 1.0x metric environment.
 - **Phase 05-01 (Asset Verification)**: **STALE / REVISIT**. Investigated OSM "Original" tracks; identified "Invisible Barriers" at tile junctions. Current workaround is `no_graph_sim_final.usd`. Needs revisit to fix stitching.
 - **Physical Stabilization**: Applied 3.5kg mass and contact offsets to the F1Tenth model. Developed a "Bake & Harden" workflow (`Flatten()` + `convexDecomposition`) for raw maps.
 - **Visual Preservation**: Solved the "White Sheet" issue using `materialPurpose="physics"` for material binding.
@@ -20,7 +22,7 @@ The project has successfully transitioned to "True Physics" mode (Phase 7). We a
 - **3D Navigation**: Confirmed `track_centerline.npy` contains 3D waypoints; navigation is altitude-aware.
 - **Asset Archive**: Legacy and experimental USDs moved to `openStreetUSD/archive/` with cataloging.
 
-## Active Tasks (Phase 5-02)
+## Active Tasks (Phase 5-02 - WAITING USER CONFIRMATION)
 - [ ] Implement 12-Float Telemetry Protocol in `observations.py`.
 - [ ] Implement 'Hybrid Racer' Gaussian rewards in `rewards.py`.
 - [ ] Implement 'lane-aligned' randomized spawning in `events.py`.
