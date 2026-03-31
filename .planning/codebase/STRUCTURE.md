@@ -5,100 +5,96 @@
 ## Directory Layout
 
 ```
-arc_rl_isaac_sim/
-├── arcproLab/              # Main application package
-│   ├── assets/             # Robot USD assets (F1Tenth_Metric.usd)
-│   ├── mdp/                # Markov Decision Process logic (obs, rewards, etc.)
-│   │   ├── track_manager.py # Coordinates and track-specific logic
-│   │   └── track_centerline.npy # Waypoint data for errors
-│   ├── scripts/            # Executable scripts for training and verification
-│   ├── arcpro_env_cfg.py   # Main Isaac Lab environment config
-│   ├── arcpro_robot_cfg.py # F1Tenth robot configuration
-│   └── verify.py           # GUI verification script
-├── docs/                   # Project documentation and phase history
-├── openStreetUSD/          # USD files for the simulation track
-├── tests/                  # Unit tests (track_manager, etc.)
-├── trash/                  # Deprecated or experimental files (pre-metric scaling)
-└── .planning/              # GSD internal planning documents
+arcpro_rl_isacc_sim/
+├── arcproLab/          # Core environment package
+│   ├── assets/         # Robot USD models
+│   ├── mdp/            # RL logic (Observation, Reward, Termination)
+│   ├── models/         # Trained policy neural networks
+│   └── scripts/        # Training and verification executables
+├── openStreetUSD/      # Environment/Track USD assets
+├── tests/              # Unit tests for MDP logic
+├── trash/              # Archive of deprecated scripts and legacy tools
+│   └── tools/          # Extensive library of USD/Physics utility scripts
+└── docs/               # Documentation for the RL system
 ```
 
 ## Directory Purposes
 
 **arcproLab/:**
-- Purpose: Root package for the Isaac Lab implementation.
-- Contains: Configuration, assets, and MDP components.
+- Purpose: Main Python package containing the Isaac Lab environment implementation.
+- Contains: Configuration classes and subpackages for robot assets and RL logic.
 - Key files: `arcpro_env_cfg.py`, `arcpro_robot_cfg.py`.
 
 **arcproLab/mdp/:**
-- Purpose: Implements the reinforcement learning interface.
-- Contains: Python modules for observations, rewards, events, and terminations.
-- Key files: `observations.py`, `track_manager.py`.
+- Purpose: Markov Decision Process (MDP) components for Reinforcement Learning.
+- Contains: Functions for rewards, observations, and termination conditions.
+- Key files: `track_manager.py` (Core geometry handler), `observations.py`.
 
 **arcproLab/scripts/:**
-- Purpose: Executable scripts for interacting with the simulation.
-- Contains: Training, verification, and metric-checking scripts.
+- Purpose: Entry point scripts for running the simulation.
+- Contains: Python scripts for training policies and verifying them in Isaac Sim.
 - Key files: `train_policy.py`, `verify_policy.py`.
 
 **openStreetUSD/:**
-- Purpose: Stores track environment USD files.
-- Contains: Cleaned and final versions of track meshes.
-- Key files: `no_graph_sim_cleaned.usd`.
+- Purpose: Stores the 3D environment assets imported from OpenStreetMap or generated via USD pipelines.
+- Contains: `.usd` files representing the track geometry and physics.
+- Key files: `no_graph_sim_final.usd`.
+
+**trash/tools/:**
+- Purpose: A repository of specialized utility scripts for USD manipulation, physics repair, and asset auditing.
+- Contains: Python scripts for scaling USDs, fixing joints, auditing mass, and cleaning physics.
+- Key files: `nuclear_physics_fix.py`, `repair_materials_gsd.py`, `scale_usd.py`.
 
 ## Key File Locations
 
 **Entry Points:**
-- `arcproLab/scripts/train_policy.py`: Training entry point.
-- `arcproLab/verify.py`: GUI verification of robot and environment.
+- `arcproLab/scripts/train_policy.py`: Starts the RL training process.
+- `arcproLab/scripts/verify_policy.py`: Runs a trained policy for evaluation.
 
 **Configuration:**
-- `arcproLab/arcpro_env_cfg.py`: Environment parameters (gravity, dt, PhysX).
-- `arcproLab/arcpro_robot_cfg.py`: Robot asset path, scales, and actuators.
+- `arcproLab/arcpro_env_cfg.py`: Defines the Isaac Lab environment setup (Scene, Managers, Sim Settings).
+- `arcproLab/arcpro_robot_cfg.py`: Defines the robot articulation, actuators, and initial state.
 
 **Core Logic:**
-- `arcproLab/mdp/track_manager.py`: Waypoint management and track error calculation.
-- `arcproLab/mdp/observations.py`: 12-element telemetry vector construction.
+- `arcproLab/mdp/track_manager.py`: Logic for sampling the USD track and providing centerline coordinates.
+- `arcproLab/mdp/observations.py`: Logic for constructing the telemetry vector from simulation state.
 
 **Testing:**
-- `tests/test_track_manager.py`: Logic verification for track geometry calculations.
+- `tests/test_track_manager.py`: Unit tests for the waypoint sampling and error calculation logic.
 
 ## Naming Conventions
 
 **Files:**
-- Configuration: `*_cfg.py`
-- Scripts: Verb-noun e.g., `train_policy.py`, `verify_spawn.py`.
+- Snake Case: `train_policy.py`, `arcpro_env_cfg.py`.
 
 **Directories:**
-- Python packages: `camelCase` (e.g., `arcproLab`) or standard lowercase.
-- Data storage: `snake_case` or `camelCase`.
+- Camel Case (Internal Packages): `arcproLab`.
+- Snake Case (Resource Directories): `openStreetUSD`.
 
 ## Where to Add New Code
 
-**New Feature (MDP):**
-- Implementation: `arcproLab/mdp/` (create new file or add to existing if applicable).
-- Configuration: Update `arcproLab/arcpro_env_cfg.py`.
+**New RL Feature (e.g., Collision Reward):**
+- Primary code: `arcproLab/mdp/rewards.py` (add a new reward function).
+- Configuration: `arcproLab/arcpro_env_cfg.py` (add the function to `RewardCfg`).
 
-**New Observation Term:**
-- Implementation: `arcproLab/mdp/observations.py`.
-- Config: Register in `ObservationCfg` within `arcproLab/arcpro_env_cfg.py`.
+**New Sensor/Robot Change:**
+- Implementation: `arcproLab/arcpro_robot_cfg.py` (modify `ArticularionCfg` or `ActuatorCfg`).
+- Assets: Place new USD models in `arcproLab/assets/robot/`.
 
-**New Robot Type:**
-- Implementation: `arcproLab/arcpro_robot_cfg.py` (add new `ArticulationCfg`).
-- Asset: `arcproLab/assets/robot/`.
-
-**Utilities:**
-- Implementation: `arcproLab/mdp/` or new top-level directory if broadly useful.
+**USD Manipulation Utility:**
+- Shared helpers: `trash/tools/` (or create a new `utils/` directory if it becomes a permanent part of the workflow).
 
 ## Special Directories
 
-**trash/:**
-- Purpose: Contains deprecated files from previous phases (e.g., pre-metric scaling experiments).
-- Generated: No.
-- Committed: Yes.
+**openStreetUSD/archive/:**
+- Purpose: Contains legacy or intermediate versions of the environment USD.
+- Generated: No (manually curated)
+- Committed: Yes
 
-**docs/:**
-- Purpose: Documentation and verification history.
-- Generated: No.
-- Committed: Yes.
+**arcproLab/models/:**
+- Purpose: Stores trained PyTorch model weights (`.pth`).
+- Generated: Yes (during training)
+- Committed: Yes (for pre-trained policies)
 
 ---
 

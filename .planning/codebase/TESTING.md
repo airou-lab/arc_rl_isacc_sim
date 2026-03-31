@@ -1,147 +1,121 @@
 # Testing Patterns
 
-**Analysis Date:** 2025-03-26
+**Analysis Date:** 2024-05-21
 
 ## Test Framework
 
 **Runner:**
 - `pytest`
-- Configuration: Standard `pytest` invocation.
+- `isaaclab.sh` is used as a wrapper to run Isaac Sim scripts.
 
 **Assertion Library:**
-- Standard Python `assert` statements.
-- `torch.allclose()` or `torch.all()` for tensor-based numerical and boolean comparisons.
-- `np.allclose()` or `np.array_equal()` for NumPy-based comparisons.
+- `pytest` (standard `assert` statements)
+- `torch.allclose` for numerical verification in physics tests.
 
 **Run Commands:**
 ```bash
-pytest                 # Run all logic tests (mocked)
-./run_gui_verify.sh    # Run simulation-based verification with GUI
-./verify_sim.sh        # Run headless simulation verification
+# Run unit tests
+pytest tests/
+
+# Run physics and spawn verification (headless)
+./verify_sim.sh
+
+# Run metric accuracy verification (headless)
+./verify_sim_metric.sh
+
+# Run visual policy verification (GUI)
+./run_gui_verify.sh
 ```
 
 ## Test File Organization
 
 **Location:**
-- Dedicated `tests/` directory at the project root for unit tests.
-- Standalone verification scripts in `arcproLab/scripts/`.
+- Unit tests are located in `tests/`.
+- Verification and sanity check scripts are in `arcproLab/scripts/`.
 
 **Naming:**
-- Unit test files: `test_*.py` (e.g., `tests/test_track_manager.py`).
-- Verification scripts: `verify_*.py` (e.g., `arcproLab/scripts/verify_metric.py`).
-
-**Structure:**
-```
-[project-root]/
-├── tests/
-│   └── test_*.py      # Logic-only tests (fast, no Isaac Sim required)
-└── arcproLab/
-    └── scripts/
-        └── verify_*.py # Simulation-based verification (requires Isaac Sim)
-```
+- Unit tests: `test_*.py`.
+- Verification scripts: `verify_*.py`.
 
 ## Test Structure
 
-**Suite Organization (Mocked):**
+**Suite Organization:**
 ```python
-import pytest
-import torch
-import sys
-from unittest.mock import MagicMock
-
-# Environment setup: Mock Isaac Sim before importing core components
-sys.modules["omni"] = MagicMock()
-sys.modules["omni.usd"] = MagicMock()
-sys.modules["pxr"] = MagicMock()
-
+# tests/test_track_manager.py
 @pytest.fixture
-def mock_component():
-    # Setup: Initialize component with mocks
-    component = MyComponent(device="cpu")
-    yield component
+def mock_track_manager():
+    # Mock omni and pxr before creating TrackManager
+    sys.modules["omni"] = MagicMock()
+    # ...
+    tm = TrackManager(device="cpu")
+    # ...
+    return tm
+
+def test_closest_waypoint(mock_track_manager):
+    # Setup
+    pos = torch.tensor([[2.1, 0.5, 0.0]], device="cpu")
+    # Action
+    closest = mock_track_manager.get_closest_waypoint_data(pos)
+    # Assertion
+    assert closest[0, 0] == 2.0
 ```
-
-**Suite Organization (Simulation):**
-```python
-# Entry point for Isaac Sim verification scripts
-from isaaclab.app import AppLauncher
-app_launcher = AppLauncher(headless=True)
-simulation_app = app_launcher.app
-
-import torch
-from arcproLab.arcpro_env_cfg import ARCProEnvCfg
-
-def main():
-    # Setup environment
-    env_cfg = ARCProEnvCfg()
-    # Run loop
-    while simulation_app.is_running():
-        # Step and assert
-        ...
-```
-
-**Patterns:**
-- **Fixture-based Setup:** Using `@pytest.fixture` to initialize objects and provide synthetic test data.
-- **Dependency Mocking:** Injecting mocks into `sys.modules` to decouple tests from the heavy Isaac Sim environment.
-- **Verification Scripts:** Comprehensive scripts that run the full simulation loop to verify physics stability and reward metrics.
 
 ## Mocking
 
-**Framework:** `unittest.mock.MagicMock` (standard library).
+**Framework:** `unittest.mock.MagicMock`
 
 **Patterns:**
-- Mocking `omni`, `omni.usd`, and `pxr` allows running unit tests without a GPU or an Isaac Sim installation.
-- Injecting synthetic data (e.g., waypoints) into components like `TrackManager` for isolated testing.
+```python
+# Mocking Isaac Sim dependencies for pure unit tests
+sys.modules["omni"] = MagicMock()
+sys.modules["omni.usd"] = MagicMock()
+sys.modules["pxr"] = MagicMock()
+```
 
 **What to Mock:**
-- External simulation libraries.
-- GPU-dependent operations in unit tests.
+- Isaac Sim modules (`omni`, `pxr`) when running in a standard Python environment (outside `isaaclab.sh`).
+- GPU/Cuda operations when testing on CPU-only runners.
 
-**What NOT to Mock:**
-- Core mathematical logic.
-- Observation and reward calculations that rely on tensor operations.
+## Verification Workflows
 
-## Fixtures and Factories
+### 1. Physics & Spawn Verification (`verify_spawn.py`)
+- Purpose: Sanity check to ensure the robot drops correctly onto the track and the environment initializes without errors.
+- Workflow:
+    1. Spawn environment using `ARCProEnvCfg`.
+    2. Check initial robot position and error calculations.
+    3. Run 50 steps of simulation with zero actions.
+    4. Log positions and termination status.
 
-**Test Data:**
-- Manual creation of small, predictable tensors for input/output verification.
-- Synthetic waypoints for track testing.
+### 2. Metric Accuracy Verification (`verify_metric.py`)
+- Purpose: Ensure the 1.0x metric scaling is correctly applied and telemetry reports realistic values.
+- Workflow:
+    1. Spawn environment in headless mode.
+    2. Drive the robot forward at a target velocity (e.g., 40 rad/s ~ 2.0 m/s).
+    3. Audit joint velocities and lateral errors.
 
-**Location:**
-- Defined within the relevant `test_*.py` files or in a common `conftest.py` if shared.
-
-## Coverage
-
-**Requirements:** None explicitly enforced, but critical logic paths (e.g., `TrackManager`) are prioritized for unit testing.
-
-**View Coverage:**
-- Standard `pytest-cov` can be used.
-
-## Test Types
-
-**Unit Tests:**
-- **Scope:** Mathematical and logical functions (e.g., distance calculations, error metrics).
-- **Files:** `tests/test_track_manager.py`.
-
-**Integration Tests:**
-- **Scope:** Interaction between multiple components, though often with mocked environment.
-- **Files:** Verification scripts like `arcproLab/scripts/verify_policy.py`.
-
-**E2E / Simulation Verification:**
-- **Scope:** Full-loop simulation runs to verify policy behavior in the USD environment.
-- **Files:** `verify_sim.sh`, `arcproLab/scripts/verify_metric.py`.
+### 3. Visual Policy Verification (`run_gui_verify.sh`)
+- Purpose: Visual inspection of the robot's behavior with the SB3 policy enabled.
+- Workflow:
+    1. Launch `verify_policy.py` with `--enable_cameras` and GUI.
+    2. Display real-time telemetry in a `TelemetryWindow`.
+    3. Observe lane following and obstacle avoidance behavior.
 
 ## Common Patterns
 
 **Async Testing:**
-- None in standard unit tests. Isaac Sim scripts use synchronous loops (with `simulation_app.update()`).
+- Simulation steps are synchronous but use `torch.no_grad()` to avoid overhead during verification:
+  ```python
+  with torch.no_grad():
+      obs, rewards, terminations, truncations, extras = env.step(actions)
+  ```
 
 **Error Testing:**
-- Typically handled via `try...except` in the source code rather than explicit test suites.
-
-**Physics Verification:**
-- Using `verify_metric.py` to ensure the robot falls naturally and tracks its own pose correctly under standard PhysX settings.
+- Verify error calculation logic in `TrackManager` using synthetic waypoints and known robot positions:
+  ```python
+  lat_err, head_err = tm.compute_errors(pos, yaw)
+  assert torch.allclose(lat_err, expected_val)
+  ```
 
 ---
 
-*Testing analysis: 2025-03-26*
+*Testing analysis: 2024-05-21*

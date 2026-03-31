@@ -70,6 +70,10 @@ Output: Verified "final" USD assets for track and robot, and updated environment
         - Collision Mesh Integrity: Confirm the road surface is a valid collision mesh (not broken into disparate planes that cause physics jitter).
         - Grounding: Verify that applying a Z-offset of -1.25m (at 0.0825 scale) brings the road surface exactly to Z=0.0 in the world frame.
     - Select the asset that passes all checks as the definitive track.
+    - **Technical Note (Clipping/Hollowness)**:
+        - During verification, `original_usd.usd` and other unflattened assets exhibited "Ghost Prim" behavior where the robot falls through the road surface.
+        - **Cause**: The physics backend (Fabric) failed to resolve nested USD references for the road meshes. While the prim exists in the hierarchy, its underlying vertex/index data is missing, resulting in a collision shape with zero volume.
+        - **Solution**: Assets MUST be flattened (baking all references) before use in Isaac Lab to ensure stable physics registration.
   </action>
   <verify>
     <automated>python3 trash/tools/inspect_collisions.py --usd openStreetUSD/no_graph_sim_final.usd</automated>

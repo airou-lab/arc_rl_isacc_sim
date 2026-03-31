@@ -21,9 +21,9 @@
 
 ## v1.2 Simulation Fidelity (Phase 7)
 
-- [ ] **REQ-SIM-METRIC**: Simulation uses 1.0x metric scale for both robot and track.
-- [ ] **REQ-SIM-STABILITY**: Physics remain stable without damping/stiffness overrides.
-- [ ] **REQ-SIM-TRANSFER**: Configuration is realistic enough for sim-to-real transfer.
+- [x] **REQ-SIM-METRIC**: Simulation uses 1.0x metric scale for both robot and track.
+- [x] **REQ-SIM-STABILITY**: Physics remain stable without damping/stiffness overrides.
+- [x] **REQ-SIM-TRANSFER**: Configuration is realistic enough for sim-to-real transfer.
 
 ## Traceability
 
@@ -39,9 +39,9 @@
 | REQ-INT-CTRL | Phase 6 | Planned |
 | REQ-INT-OBS | Phase 6 | Planned |
 | REQ-INT-REWARD | Phase 6 | Planned |
-| REQ-SIM-METRIC | Phase 7 | In Progress |
-| REQ-SIM-STABILITY | Phase 7 | In Progress |
-| REQ-SIM-TRANSFER | Phase 7 | In Progress |
+| REQ-SIM-METRIC | Phase 7 | COMPLETE |
+| REQ-SIM-STABILITY | Phase 7 | COMPLETE |
+| REQ-SIM-TRANSFER | Phase 7 | COMPLETE |
 
 ---
 *Requirements updated: 2026-03-25*

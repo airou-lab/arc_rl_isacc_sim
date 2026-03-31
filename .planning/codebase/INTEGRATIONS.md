@@ -1,66 +1,85 @@
 # External Integrations
 
-**Analysis Date:** 2025-03-21
+**Analysis Date:** 2024-10-24
 
 ## APIs & External Services
 
 **Simulation:**
-- NVIDIA Omniverse Isaac Sim - Simulation engine providing physics (PhysX) and rendering (RTX).
-- Isaac Lab v1.0.1 - Integration layer for RL tasks, environments, and managers.
+- NVIDIA Isaac Sim - Primary simulation platform for robotics.
+  - SDK/Client: `isaaclab` and `omni` Python packages.
+  - Auth: Local license / Omniverse Nucleus (if used).
 
-**RL Algorithms:**
-- Stable Baselines3 (SB3) - Third-party RL library integrated via `Sb3VecEnvWrapper` for training PPO policies (`arcproLab/scripts/train_policy.py`).
+**Visualization:**
+- Tiled Camera Sensor - In-sim camera used for visual observations in `arcproLab/arcpro_env_cfg.py`.
+  - Data types: RGB, 160x90 resolution.
 
 ## Data Storage
 
 **Databases:**
-- Not detected.
+- None detected.
 
 **File Storage:**
-- Local filesystem for checkpointing models (`logs/ppo/`) and loading pre-trained weights (`arcproLab/models/road_following_model.pth`).
-- USD files for static assets and environment scenes (`openStreetUSD/`, `arcproLab/assets/`).
+- USD (Universal Scene Description) - Used for all 3D assets (track and robot).
+  - Track: `openStreetUSD/no_graph_sim_final.usd`.
+  - Robot: `arcproLab/assets/robot/F1Tenth_Metric.usd`.
+- NumPy (`.npy`) - Used for waypoints in `arcproLab/mdp/track_centerline.npy`.
 
 **Caching:**
-- None detected.
+- Track Manager Cache - `TrackManager` samples and saves waypoints to `.npy` to avoid re-sampling the USD stage.
 
 ## Authentication & Identity
 
 **Auth Provider:**
-- None required for current local development.
+- NVIDIA Omniverse - Handles license authentication for the simulator.
 
 ## Monitoring & Observability
 
 **Error Tracking:**
-- Custom `TrackManager` for computing lateral and heading errors relative to a track centerline (`arcproLab/mdp/track_manager.py`).
+- None detected.
 
 **Logs:**
-- TensorBoard integration via Stable Baselines3 for training progress monitoring (`train_policy.py`).
-- Console output and custom UI windows for real-time telemetry audit (`arcproLab/mdp/visual_analytics.py`).
+- Console - Extensive use of `print()` for status and warning messages in `arcproLab/mdp/track_manager.py`.
 
 ## CI/CD & Deployment
 
 **Hosting:**
-- Local NVIDIA RTX workstations.
+- Local workstation or GPU cluster (Slurm/Docker).
 
 **CI Pipeline:**
-- GitHub Actions for linting and unit testing (`.github/workflows/ci.yml`).
+- GitHub Actions - `.github/workflows/ci.yml` (present in repository root).
 
 ## Environment Configuration
 
 **Required env vars:**
-- None detected. Configuration is primary class-based within the codebase (`arcproLab/arcpro_env_cfg.py`).
+- `CUDA_VISIBLE_DEVICES` - Specifies GPU to use.
+- `ISAAC_SIM_PATH` - (Implicit) Path to Isaac Sim installation.
 
 **Secrets location:**
-- Not applicable. No external API keys or secrets used in the current version.
+- Not applicable.
+
+## 1.0x Metric PhysX Configuration
+
+The codebase is explicitly configured for 1.0x metric scale physics to ensure high-fidelity simulation of the F1Tenth vehicle.
+
+**Global PhysX (arcproLab/arcpro_env_cfg.py):**
+- **Solver:** TGS (Temporal Gauss-Seidel) - `solver_type=1`.
+- **Iteration Count:** 8 position, 4 velocity.
+- **Time Step (`dt`):** 0.005s (200Hz).
+- **Collision:** CCD (Continuous Collision Detection) enabled.
+- **GPU Buffers:** Explicitly configured high-capacity buffers (e.g., `gpu_max_rigid_contact_count=2**21`).
+
+**Robot Articulation (arcproLab/arcpro_robot_cfg.py):**
+- **Precision Solver:** 32 position iterations, 16 velocity iterations.
+- **Scale:** `(1.0, 1.0, 1.0)` (True metric scale).
 
 ## Webhooks & Callbacks
 
 **Incoming:**
-- None.
+- None detected.
 
 **Outgoing:**
-- None.
+- None detected.
 
 ---
 
-*Integration audit: 2025-03-21*
+*Integration audit: 2024-10-24*

@@ -41,18 +41,19 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.DistantLightCfg(intensity=3000.0, color=(1.0, 1.0, 1.0))
     )
 
-    # Track from no_graph_sim_cleaned.usd (Offset by -1.25m to bring road surface to Z=0)
+    # Track from no_graph_sim_final.usd (Stable grounded track from main branch)
     track = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Track",
         spawn=sim_utils.UsdFileCfg(
-            usd_path=os.path.join(os.path.dirname(__file__), "..", "openStreetUSD", "no_graph_sim_cleaned.usd"),
+            usd_path=os.path.join(os.path.dirname(__file__), "..", "openStreetUSD", "no_graph_sim_final.usd"),
             collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True),
             scale=(0.0825, 0.0825, 0.0825), 
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -1.25)),
     )
+
     
-    # Robot (1.0x Metric Scale, 0.5m drop above the track at ground-level)
+    # Robot (1.0x Metric Scale, 0.5m drop above the track)
     robot = ARCPRO_ROBOT_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=ARCPRO_ROBOT_CFG.spawn.replace(
@@ -120,6 +121,10 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
             bounce_threshold_velocity=0.5, 
             enable_ccd=True, 
             enable_stabilization=True,
+            gpu_max_rigid_contact_count=2**21,
+            gpu_max_rigid_patch_count=2**18,
+            gpu_heap_capacity=2**26,
+            gpu_found_lost_pairs_capacity=2**21,
         ),
     )
 
