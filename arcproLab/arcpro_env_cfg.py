@@ -90,8 +90,7 @@ class ActionCfg:
 
 @configclass
 class RewardCfg:
-    # GSD Phase 5-02: Hybrid Racer Gaussian Reward
-    hybrid_racer = RewTerm(func=mdp_rew.hybrid_racer_reward, weight=1.0)
+    speed = RewTerm(func=mdp_rew.speed_reward, weight=1.0)
 
 @configclass
 class TerminationCfg:
