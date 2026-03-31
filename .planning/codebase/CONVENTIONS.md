@@ -1,121 +1,86 @@
 # Coding Conventions
 
-**Analysis Date:** 2025-03-26
+**Analysis Date:** 2024-05-21
 
 ## Naming Patterns
 
 **Files:**
-- Python source files: `snake_case.py` (e.g., `rewards.py`, `track_manager.py`).
-- Test files: `test_snake_case.py` (e.g., `test_track_manager.py`).
-- Configuration files: `arcpro_env_cfg.py`, `arcpro_robot_cfg.py`.
+- Snake case for all scripts and modules: `verify_spawn.py`, `arcpro_env_cfg.py`, `track_manager.py`.
+- Lowercase for directories: `arcproLab/`, `mdp/`, `scripts/`.
+- UPPERCASE for shell scripts: `run_gui_verify.sh`, `train.sh`.
 
-**Functions/Methods:**
-- `snake_case` (e.g., `speed_reward`, `get_telemetry_vector`, `sample_waypoints_from_usd`).
-- Callback functions for Isaac Lab: `func=mdp_obs.get_telemetry_vector`.
+**Functions:**
+- Snake case: `get_track_manager()`, `compute_errors()`, `reset_robot_to_lane()`.
 
 **Variables:**
-- `snake_case` (e.g., `lat_err`, `head_err`, `_TRACK_MANAGER` - global singletons use `UPPER_SNAKE_CASE` or `_PRIVATE_UPPER_SNAKE_CASE`).
-- Tensor variables: Often use descriptive names or abbreviations like `pos`, `vel`, `q`, `jv`.
+- Snake case: `env_cfg`, `robot_pos`, `lat_err`.
 
-**Types:**
-- Classes: `PascalCase` (e.g., `TrackManager`, `PolicyWrapper`, `ARCProEnvCfg`).
-- Configuration classes: `@configclass` from `isaaclab.utils` for hierarchical configs.
+**Types/Classes:**
+- PascalCase for configurations and classes: `ARCProEnvCfg`, `TrackManager`, `PolicyWrapper`.
+- `@configclass` decorator is mandatory for Isaac Lab configuration classes.
 
 ## Code Style
 
 **Formatting:**
-- Indentation: 4 spaces.
-- Adherence to PEP 8 guidelines is expected. `flake8` is listed in `requirements.txt`.
-- Trailing commas are often used in multi-line lists/dictionaries for cleaner diffs.
+- `flake8` for linting.
+- Follow PEP 8 guidelines.
 
 **Linting:**
-- Tool used: `flake8` (indicated by `requirements.txt`).
-- Key rules: Standard PEP 8 rules for readability and consistency.
+- Configured in `requirements.txt` as a dev dependency.
 
 ## Import Organization
 
 **Order:**
-1. Standard library imports (e.g., `os`, `sys`, `argparse`).
-2. Third-party imports (e.g., `torch`, `numpy`, `isaaclab`, `omni`, `pxr`).
-3. Local project imports (e.g., `from mdp.track_manager import TrackManager`).
+1. Standard library imports (`os`, `sys`, `argparse`).
+2. Third-party library imports (`torch`, `numpy`, `matplotlib`).
+3. Isaac Lab imports (`isaaclab.*`).
+4. Local project imports (`arcpro_env_cfg`, `mdp.*`).
 
 **Path Aliases:**
-- `sys.path.append(os.path.dirname(os.path.abspath(__file__)))` in configuration files to facilitate sibling imports.
-- `sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "arcproLab"))` in test files.
-- Manual `sys.path` modification in scripts to ensure root and package directories are available (e.g., `arcproLab/scripts/verify_metric.py`).
+- `sys.path.append` is used in scripts to ensure local modules are discoverable:
+  ```python
+  sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+  ```
+
+## 1.0x Metric Scaling Conventions
+
+**Global Scale:**
+- All physics entities MUST use 1.0x metric scale (meters, kilograms, seconds).
+- `MetersPerUnit` should be `1.0`.
+
+**Track Scaling:**
+- OSM-based USD assets (e.g., `no_graph_sim_final.usd`) use a scale factor of `0.0825` to convert internal units to standard ~3.5m lane widths.
+- Track Z-offset: `-1.25m` to ground the road surface at global `Z=0`.
+
+**Robot Scaling:**
+- Robot USD assets (e.g., `F1Tenth_Metric.usd`) use a scale factor of `1.0`.
+- Robot spawn height: `0.5m` (drop onto grounded track).
+
+**Telemetry Scaling:**
+- Waypoints in `track_centerline.npy` must be pre-scaled by `0.0825` to match the 1.0x metric simulation.
 
 ## Error Handling
 
 **Patterns:**
-- Explicit `try...except` blocks for external dependencies and optional features (e.g., `TrackManager` sampling from USD).
-- Specific exception handling: `FileNotFoundError`, `RuntimeError`, or general `Exception as e`.
-- NaN handling: Explicitly checking and replacing NaNs with zeros in reward and observation functions (e.g., `arcproLab/mdp/rewards.py`).
-- Fallback logic: Providing default values or simplified behaviors if a resource (like a waypoint file) is missing.
+- Try-except blocks for optional component initialization (e.g., `TrackManager`, `TelemetryWindow`).
+- Log error messages to console with clear prefixes like `[Verify]`.
 
 ## Logging
 
-**Framework:**
-- Standard `print()` statements with component-specific prefixes (e.g., `[TrackManager] Loaded ...`).
+**Framework:** `print()` for script output and telemetry.
 
 **Patterns:**
-- Informational logging during initialization and loading phases.
-- Conditional printing in simulation loops (e.g., `if count % 20 == 0:`) to avoid flooding the console.
-
-## Comments
-
-**When to Comment:**
-- Docstrings (triple double quotes) for modules, classes, and functions.
-- "Args" and "Returns" sections in docstrings for methods with multiple parameters or specific return types.
-- Inline comments to explain complex mathematical logic, coordinate system transforms, or indices in tensors (e.g., observation vector mapping).
-- Copyright and license headers in every file.
-
-**JSDoc/TSDoc:**
-- Not applicable (Python project).
-
-## Function Design
-
-**Size:**
-- Single-responsibility functions. Complex logic is broken down into smaller helper methods (e.g., `TrackManager` splitting loading, sampling, and computation).
-
-**Parameters:**
-- Type hints are consistently used for function parameters.
-- Default values are provided for optional parameters (e.g., `device: str = "cuda:0"`).
-- Manager-based RL functions (rewards, observations) take `env: ManagerBasedRLEnv` as the primary argument.
-
-**Return Values:**
-- Type hints for return values.
-- `torch.Tensor` is standard for data-heavy operations.
+- Use formatted strings for telemetry output: `f"Step {count:4d} | Pos: ({pos[0,0]:.2f}, ...)"`.
+- Regular intervals for logging (e.g., `if count % 20 == 0`).
 
 ## Module Design
 
 **Exports:**
-- Modules export functions and classes directly.
-- Singletons: `_TRACK_MANAGER` with `get_track_manager()` accessor.
+- Explicit imports from `mdp` submodules in `arcpro_env_cfg.py`.
 
 **Barrel Files:**
-- `__init__.py` files used for marking package directories (`mdp/`).
-
-## Isaac Lab Patterns
-
-**Configuration:**
-- Hierarchical configs using `@configclass`.
-- Separation of Scene, Observation, Action, Reward, and Termination configurations.
-- `__post_init__` for late-binding configuration adjustments.
-
-**Scripts:**
-- Use of `AppLauncher` for launching Isaac Sim.
-- `argparse` for CLI arguments, including `AppLauncher.add_app_launcher_args(parser)`.
-- Conditional imports based on headless mode.
-
-## Stability and Physics
-
-**Standard PhysX Settings:**
-- Use TGS (Temporal Gauss-Seidel) solver: `solver_type=1` in `PhysxCfg`.
-- High precision for robots: `solver_position_iteration_count=32`, `solver_velocity_iteration_count=16` in `ArticulationRootPropertiesCfg`.
-- Enable standard features: `enable_ccd=True`, `enable_stabilization=True`.
-- **No stability workarounds:** Artificial friction, mass overrides, or root fixing (unless static) are avoided in favor of high-fidelity physical parameters.
-- **1.0x Scaling:** All assets must use real-world 1.0x metric scale (`scale=(1.0, 1.0, 1.0)`) to ensure gravity and inertia are calculated correctly by PhysX.
+- `mdp/__init__.py` used to group submodules.
 
 ---
 
-*Convention analysis: 2025-03-26*
+*Convention analysis: 2024-05-21*

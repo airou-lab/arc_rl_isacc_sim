@@ -1,8 +1,14 @@
 # Codebase Concerns
 
-**Analysis Date:** 2025-03-31
+**Analysis Date:** 2025-05-15
 
 ## Tech Debt
+
+**Track Smoothing Requirement:**
+- Issue: Standard tile-based USD exports from OpenStreetUSD are physically "bumpy" at junctions, which leads to training instability.
+- Files: `openStreetUSD/no_graph_sim_final.usd`
+- Impact: High-frequency jitter and the robot getting stuck at tile boundaries during high-speed RL training.
+- Fix approach: Use manually smoothed single-mesh tracks (like `no_graph_sim_final.usd`) instead of raw tile-based exports for production training to ensure a continuous collision surface.
 
 **Incomplete Telemetry Protocol:**
 - Issue: The `get_telemetry_vector` function only populates 7 of the 12 indices required by the legacy ARCPro policy protocol. Indices for acceleration, target distance, and specific status flags are missing.
@@ -23,6 +29,12 @@
 - Fix approach: Pass these parameters from the configuration class to the wrapper.
 
 ## Known Bugs
+
+**Wheel Tunneling Risks:**
+- Symptoms: Robot wheels passing through the road surface (tunneling) at high speeds or under load.
+- Files: `arcproLab/arcpro_env_cfg.py`, `arcproLab/arcpro_robot_cfg.py`
+- Trigger: Thin (zero-thickness) track meshes and high-velocity impacts.
+- Workaround: Enabled `enable_ccd=True` (Continuous Collision Detection) in `SimulationCfg` and increased solver iterations to 8/4. Future fix involves adding physical thickness (e.g., 5cm) to track collision meshes.
 
 **Height Termination Trigger at Spawn:**
 - Issue: `height_termination` is set to trigger if `height > 0.3m`, but the robot is spawned (dropped) at `0.5m` in `arcpro_env_cfg.py`.
@@ -51,10 +63,16 @@
 
 ## Fragile Areas
 
+**Invisible Barriers (Tile-based Maps):**
+- Files: `openStreetUSD/original_production.usd`
+- Why fragile: The map is composed of hundreds of non-manifold, tilted tiles whose physics hulls do not "stitch" together perfectly. This creates "invisible barriers" or bumps at junctions.
+- Safe modification: Avoid using raw tiled maps for RL training. If used, ensure `contactOffset` (e.g., 0.02m) is applied to wheel collision meshes to bridge minor gaps between tiles.
+- Test coverage: `trash/tools/inspect_collisions.py` can be used to audit mesh gaps.
+
 **Metric Scaling (1.0x Mode):**
 - Files: `arcproLab/arcpro_env_cfg.py`
 - Why fragile: The track uses a "magic number" scale of `0.0825` to achieve "1.0x metric scale". If the source USD is modified or replaced, this scale factor will likely break. 
-- Safe modification: Document the source of the `0.0825` factor (e.g., if it was converted from inches or feet).
+- Safe modification: Document the source of the `0.0825` factor (derived from coordinate conversion from the original OSM data).
 - Test coverage: No automated test currently verifies the physical dimensions of the spawned track vs. expected metric units.
 
 ## Scaling Limits
@@ -87,4 +105,4 @@
 
 ---
 
-*Concerns audit: 2025-03-31*
+*Concerns audit: 2025-05-15*

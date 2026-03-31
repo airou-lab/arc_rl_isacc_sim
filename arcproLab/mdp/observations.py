@@ -10,12 +10,28 @@ from isaaclab.envs import ManagerBasedRLEnv
 def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """
     Constructs the 12-element telemetry vector for the ARCPro policy.
-    Indices follow the legacy protocol established in Phase 1.
+    Indices:
+    [0]: turn_token (from env.extras or default 0.0)
+    [1]: go_signal (from env.extras or default 1.0)
+    [2]: goal_dist (0.0 for lane following)
+    [3]: forward_speed (m/s)
+    [4]: yaw_rate (rad/s)
+    [5]: last_steer
+    [6]: last_throttle
+    [7]: last_brake (0.0)
+    [8]: lateral_error (m)
+    [9]: heading_error (rad)
+    [10]: kappa (curvature from TrackManager)
+    [11]: cumulative_distance (m)
     """
     asset = env.scene[asset_cfg.name]
     
     # Initialize observation tensor (batch_size, 12)
     obs = torch.zeros((env.num_envs, 12), device=env.device)
+    
+    # Index 0 & 1: Mission Logic (Optional)
+    obs[:, 0] = env.extras.get("turn_token", torch.zeros(env.num_envs, device=env.device))
+    obs[:, 1] = env.extras.get("go_signal", torch.ones(env.num_envs, device=env.device))
     
     # Index 3: Forward Speed (m/s) - Local X velocity
     obs[:, 3] = asset.data.root_lin_vel_b[:, 0]
@@ -25,34 +41,35 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     
     # Indices 5-7: Last Actions (Clipped)
     try:
-        if env.action_manager.action is not None and env.action_manager.action.shape[1] >= 2:
-            obs[:, 5:7] = env.action_manager.action[:, :2] # Steer, Throttle
-    except:
-        pass # Actions not yet defined in Wave 1
+        # Action Manager stores the last applied action
+        if hasattr(env.action_manager, "action") and env.action_manager.action is not None:
+            # SB3 actions are usually (batch, action_dim)
+            # 5: Steer, 6: Throttle
+            obs[:, 5:7] = env.action_manager.action[:, :2] 
+    except Exception:
+        pass # Actions not yet defined/initialized
     
-    # Index 8 & 9: Lateral and Heading Error
-    # Use TrackManager for high-fidelity errors (not axis-aligned)
+    # Index 8, 9 & 10: Track Related (Errors and Curvature)
     from mdp.track_manager import get_track_manager
     tm = get_track_manager(device=env.device)
     
     # extract yaw from quaternion
     q = asset.data.root_quat_w
-    # yaw = atan2(2(qw*qz + qx*qy), 1 - 2(qy^2 + qz^2))
     yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
     
     lat_err, head_err = tm.compute_errors(asset.data.root_pos_w, yaw)
     obs[:, 8] = lat_err
     obs[:, 9] = head_err
     
+    # Index 10: Kappa (Local Curvature)
+    obs[:, 10] = tm.get_curvature(asset.data.root_pos_w)
+    
     # Index 11: Total Distance (Accumulated)
-    if "distance" in env.extras:
-        obs[:, 11] = env.extras["distance"]
+    obs[:, 11] = env.extras.get("distance", torch.zeros(env.num_envs, device=env.device))
         
     # Final verification for NaNs
     nan_mask = torch.isnan(obs)
     if nan_mask.any():
-        nan_indices = torch.where(nan_mask.any(dim=0))[0]
-        # Just zero out NaNs to keep training alive
         obs[nan_mask] = 0.0
         
     return obs

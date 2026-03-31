@@ -41,7 +41,7 @@ from stable_baselines3.common.vec_env import VecNormalize
 
 from isaaclab.envs import ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
-from isaaclab_tasks.utils.wrappers.sb3 import Sb3VecEnvWrapper
+from isaaclab_rl.sb3 import Sb3VecEnvWrapper
 
 def main():
     # 1. Setup Environment Configuration

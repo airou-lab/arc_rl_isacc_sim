@@ -1,28 +1,34 @@
 # Project State: ARCPro RL v1.2-dev
 
+## Current Milestone
+**Milestone 1: Physical Fidelity & Policy Foundation**
+
 ## Current Phase
 **Phase 5: Policy Integration**
 
 ## Summary
-The project has successfully transitioned to "True Physics" mode (Phase 7). We are now resuming Phase 5 to integrate the Hierarchical Policy architecture, the 12-float telemetry protocol, and Gaussian-weighted rewards in the 1.0x metric environment.
+The project has successfully transitioned to "True Physics" mode (Phase 7). We are now focusing on completing Milestone 1 by integrating the Hierarchical Policy architecture, the 12-float telemetry protocol, and Gaussian-weighted rewards in the 1.0x metric environment. Phase 6 has been moved to Milestone 2 (v2.0) due to its architectural complexity.
 
 ## Recent Activity
-- **Phase 7 Completion**: Reverted the simulation to 1.0x metric scaling for both the robot and the track. The road surface is grounded at Z=0 using a -1.25m offset.
-- **Metric Grounding**: Applied `0.0825` scale to the track and `-1.25m` Z-offset to ground the surface at Z=0.
-- **Telemetry Alignment**: Scaled `track_centerline.npy` by `0.0825` to align waypoint errors with the new metric environment.
-- **Hierarchical Planning**: Created `05-02-PLAN.md` to integrate the full hierarchical policy stack and 12-float protocol.
+- **Phase 05-01 (Asset Verification)**: **STALE / REVISIT**. Investigated OSM "Original" tracks; identified "Invisible Barriers" at tile junctions. Current workaround is `no_graph_sim_final.usd`. Needs revisit to fix stitching.
+- **Physical Stabilization**: Applied 3.5kg mass and contact offsets to the F1Tenth model. Developed a "Bake & Harden" workflow (`Flatten()` + `convexDecomposition`) for raw maps.
+- **Visual Preservation**: Solved the "White Sheet" issue using `materialPurpose="physics"` for material binding.
+- **Current Baseline**: Reverted to the stable `no_graph_sim_final.usd` at -1.25m offset for training smoothness.
 
 ## Key Achievements
-- **True Physics Grounded**: Simulation operates at a realistic 1.0x metric scale with standard PhysX settings.
-- **Metric Telemetry**: Confirmed that lateral/heading errors and speeds are correctly calculated in meters/seconds.
-- **Main Merge**: Successfully merged all "True Physics" changes into the `main` branch.
+- **True Physics Grounded**: Robot settles precisely at Z=0.0514m (matching wheel radius).
+- **3D Navigation**: Confirmed `track_centerline.npy` contains 3D waypoints; navigation is altitude-aware.
+- **Asset Archive**: Legacy and experimental USDs moved to `openStreetUSD/archive/` with cataloging.
 
-## Active Tasks (Phase 5)
+## Active Tasks (Phase 5-02)
 - [ ] Implement 12-Float Telemetry Protocol in `observations.py`.
 - [ ] Implement 'Hybrid Racer' Gaussian rewards in `rewards.py`.
-- [ ] Implement 'lane-aligned' spawning logic in `events.py`.
-- [ ] Integrate Hierarchical Path Planning Policy components from `arc_rl_isacc_policy`.
-- [ ] Verify full stack at 1.0x metric scale using `verify_policy.py`.
+- [ ] Implement 'lane-aligned' randomized spawning in `events.py`.
+- [ ] Integrate Hierarchical Policy stack from sibling repository.
+
+## Planned Tasks
+- [ ] **Phase 08: F1Tenth Physics Fidelity Restoration** - Restore damping/stiffness from original assets.
+- [ ] **Phase 06: Intersection Navigation** - Implement graph-based route planning.
 
 ## Completed (Phase 7 - True Physics Mode)
 - [x] Configure Environment Physics, Scaling, and Camera Offset in `arcpro_env_cfg.py`.
