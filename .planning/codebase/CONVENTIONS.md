@@ -1,86 +1,81 @@
 # Coding Conventions
 
-**Analysis Date:** 2024-05-21
+**Analysis Date:** 2024-10-24
 
 ## Naming Patterns
 
 **Files:**
-- Snake case for all scripts and modules: `verify_spawn.py`, `arcpro_env_cfg.py`, `track_manager.py`.
-- Lowercase for directories: `arcproLab/`, `mdp/`, `scripts/`.
-- UPPERCASE for shell scripts: `run_gui_verify.sh`, `train.sh`.
+- snake_case: `arcpro_env_cfg.py`, `track_manager.py`.
 
 **Functions:**
-- Snake case: `get_track_manager()`, `compute_errors()`, `reset_robot_to_lane()`.
+- snake_case: `compute_reward()`, `get_observations()`.
 
 **Variables:**
-- Snake case: `env_cfg`, `robot_pos`, `lat_err`.
+- snake_case: `joint_pos`, `throttle_limit`.
 
-**Types/Classes:**
-- PascalCase for configurations and classes: `ARCProEnvCfg`, `TrackManager`, `PolicyWrapper`.
-- `@configclass` decorator is mandatory for Isaac Lab configuration classes.
+**Types / Classes:**
+- PascalCase: `ArcProRobotCfg`, `HierarchicalPolicy`, `TrackManager`.
+
+**Constants:**
+- UPPER_CASE: `ARCPRO_ROBOT_CFG`, `WAYPOINT_NORM_SCALE`.
 
 ## Code Style
 
 **Formatting:**
-- `flake8` for linting.
-- Follow PEP 8 guidelines.
+- flake8 (implied by `requirements.txt`).
+- Standard Python (PEP 8) with emphasis on `@configclass` usage for Isaac Sim.
 
 **Linting:**
-- Configured in `requirements.txt` as a dev dependency.
+- flake8 for syntax and style checking.
 
 ## Import Organization
 
 **Order:**
-1. Standard library imports (`os`, `sys`, `argparse`).
-2. Third-party library imports (`torch`, `numpy`, `matplotlib`).
-3. Isaac Lab imports (`isaaclab.*`).
-4. Local project imports (`arcpro_env_cfg`, `mdp.*`).
+1. Standard library (`os`, `sys`, `math`).
+2. Major third-party libraries (`torch`, `numpy`).
+3. Isaac Sim / IsaacLab imports (`isaaclab.sim`, `isaaclab.envs`).
+4. Local project imports (`arcpro_robot_cfg`, `mdp.observations`).
 
 **Path Aliases:**
-- `sys.path.append` is used in scripts to ensure local modules are discoverable:
-  ```python
-  sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-  ```
-
-## 1.0x Metric Scaling Conventions
-
-**Global Scale:**
-- All physics entities MUST use 1.0x metric scale (meters, kilograms, seconds).
-- `MetersPerUnit` should be `1.0`.
-
-**Track Scaling:**
-- OSM-based USD assets (e.g., `no_graph_sim_final.usd`) use a scale factor of `0.0825` to convert internal units to standard ~3.5m lane widths.
-- Track Z-offset: `-1.25m` to ground the road surface at global `Z=0`.
-
-**Robot Scaling:**
-- Robot USD assets (e.g., `F1Tenth_Metric.usd`) use a scale factor of `1.0`.
-- Robot spawn height: `0.5m` (drop onto grounded track).
-
-**Telemetry Scaling:**
-- Waypoints in `track_centerline.npy` must be pre-scaled by `0.0825` to match the 1.0x metric simulation.
+- None detected; uses relative imports and `sys.path.append(os.path.dirname(os.path.abspath(__file__)))` in `arcpro_env_cfg.py`.
 
 ## Error Handling
 
 **Patterns:**
-- Try-except blocks for optional component initialization (e.g., `TrackManager`, `TelemetryWindow`).
-- Log error messages to console with clear prefixes like `[Verify]`.
+- Use of `warnings.warn` for sim-related warnings that shouldn't crash training.
+- `try-except` blocks around complex SB3-contrib logic (e.g., RNN state handling).
 
 ## Logging
 
-**Framework:** `print()` for script output and telemetry.
+**Framework:** TensorBoard (integrated with SB3) and standard Python `logging` / `print`.
 
 **Patterns:**
-- Use formatted strings for telemetry output: `f"Step {count:4d} | Pos: ({pos[0,0]:.2f}, ...)"`.
-- Regular intervals for logging (e.g., `if count % 20 == 0`).
+- Log to TensorBoard during training for metrics like `reward`, `loss`, `episode_length`.
+- `print` or `logging.info` for environment setup details.
+
+## Comments
+
+**When to Comment:**
+- Complexity: Commenting complex math in `track_manager.py`.
+- Reasoning: Commenting design decisions in `hierarchical_policy.py` (e.g., why a certain normalization scale was used).
+
+**JSDoc/TSDoc:**
+- Docstrings are standard for classes and functions, often following the IsaacLab style (brief summary followed by parameter descriptions).
+
+## Function Design
+
+**Size:** Preference for modular functions in `mdp/` submodules.
+
+**Parameters:** Use of keyword arguments and IsaacLab `SceneEntityCfg` for identifying assets.
+
+**Return Values:** Usually return tensors (for RL) or boolean/scalars (for rewards/terminations).
 
 ## Module Design
 
-**Exports:**
-- Explicit imports from `mdp` submodules in `arcpro_env_cfg.py`.
+**Exports:** Explicitly defining `ARCPRO_ROBOT_CFG` in config files.
 
-**Barrel Files:**
-- `mdp/__init__.py` used to group submodules.
+**Barrel Files:** `__init__.py` used to expose common names in `mdp/`.
 
 ---
 
-*Convention analysis: 2024-05-21*
+*Convention analysis: 2024-10-24*

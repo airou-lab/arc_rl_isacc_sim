@@ -5,65 +5,60 @@
 ## Languages
 
 **Primary:**
-- Python 3.10+ - Core logic, configuration, and RL environment implementation.
-
-**Secondary:**
-- USD (Universal Scene Description) - Scene and robot asset representation.
-- Bash - Execution scripts (`train.sh`, `verify_sim.sh`).
+- Python 3.11/3.12 - Core logic, simulation configuration, and training scripts.
 
 ## Runtime
 
 **Environment:**
-- NVIDIA Isaac Lab (formerly Orbit) - Framework for robot learning.
-- NVIDIA Isaac Sim - Core simulation engine.
-- NVIDIA Omniverse - Underlying platform for USD and simulation.
+- NVIDIA Isaac Sim 4.0.0+ - Primary simulation engine.
+- NVIDIA IsaacLab - Framework for manager-based RL environments.
 
 **Package Manager:**
-- Pip - Used for managing Python dependencies.
-- Lockfile: missing (uses `requirements.txt`).
+- pip - Managed via `requirements.txt`.
+- Virtual Environment: `.venv/` (Python 3.12) and `venv/` (Python 3.11) observed.
 
 ## Frameworks
 
 **Core:**
-- Isaac Lab - Manager-based RL environment framework.
-- PyTorch - Deep learning and GPU-accelerated tensor operations.
+- IsaacLab - Environment and scene management (`isaaclab.envs`, `isaaclab.managers`).
+- Stable Baselines3 (SB3) - RL algorithms and policy structures.
+- SB3-contrib - Recurrent PPO support for hierarchical policies.
 
 **Testing:**
-- Pytest - Unit and integration testing.
+- pytest - Unit and integration testing.
 
 **Build/Dev:**
-- Flake8 - Linting.
+- USD (Universal Scene Description) - Asset format for scenes and robots.
 
 ## Key Dependencies
 
 **Critical:**
-- `isaaclab` - Primary framework for the RL environment.
-- `torch` - Neural network training and tensor math.
-- `numpy < 2.0` - Data manipulation (restricted version for compatibility).
+- `torch` (PyTorch) - Neural network backend for policies.
+- `numpy` (<2.0) - Numerical computations and waypoint handling.
+- `sb3_contrib` - Required for `RecurrentPPO` and `RecurrentActorCriticPolicy`.
 
 **Infrastructure:**
-- `matplotlib` - Visualization and analytics in `arcproLab/mdp/visual_analytics.py`.
-- `pxr` (Pixar USD) - Python bindings for Universal Scene Description.
+- `matplotlib` - Used for visual analytics and metric verification.
+- `isaaclab` - Provides the `ManagerBasedRLEnv` abstraction.
 
 ## Configuration
 
 **Environment:**
-- Isaac Lab `configclass` - Decorator-based configuration system used in `arcproLab/arcpro_env_cfg.py`.
-- Environment Variables - Used for Isaac Sim paths and CUDA device selection.
+- Configured via Python classes using `@configclass` decorator from `isaaclab.utils`.
+- Key configs: `arcproLab/arcpro_env_cfg.py` (Scene/MDP) and `arcproLab/arcpro_robot_cfg.py` (Robot).
 
 **Build:**
-- `requirements.txt` - Python dependency list.
+- No formal build system; relies on Python scripts and USD asset loading.
 
 ## Platform Requirements
 
 **Development:**
-- NVIDIA GPU (RTX 30-series or newer recommended).
-- NVIDIA Driver (525.60.11+).
-- Ubuntu 20.04/22.04.
-- Isaac Sim 2023.1.1+.
+- Ubuntu 22.04+ (Standard for Isaac Sim).
+- NVIDIA GPU with RTX support (Required for Isaac Sim).
+- NVIDIA Driver 535+ (Recommended).
 
 **Production:**
-- NVIDIA Isaac Lab / Isaac Sim environment.
+- Deployment to F1Tenth hardware (sim-to-real) planned via ROS 2 (referenced in `hierarchical_policy.py` comments).
 
 ---
 

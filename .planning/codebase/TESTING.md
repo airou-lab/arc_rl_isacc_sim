@@ -1,121 +1,106 @@
 # Testing Patterns
 
-**Analysis Date:** 2024-05-21
+**Analysis Date:** 2024-10-24
 
 ## Test Framework
 
 **Runner:**
-- `pytest`
-- `isaaclab.sh` is used as a wrapper to run Isaac Sim scripts.
+- pytest (Version 7.0+)
+- Config: None (standard discovery)
 
 **Assertion Library:**
-- `pytest` (standard `assert` statements)
-- `torch.allclose` for numerical verification in physics tests.
+- Standard `assert` in Python.
 
 **Run Commands:**
 ```bash
-# Run unit tests
-pytest tests/
-
-# Run physics and spawn verification (headless)
-./verify_sim.sh
-
-# Run metric accuracy verification (headless)
-./verify_sim_metric.sh
-
-# Run visual policy verification (GUI)
-./run_gui_verify.sh
+pytest                  # Run unit tests in tests/
+./run_gui_verify.sh     # Run visual verification in Isaac Sim
+./verify_sim.sh         # Run headless simulation verification
+python3 arcproLab/scripts/verify_policy.py --checkpoint models/road_following_model.pth
 ```
 
 ## Test File Organization
 
 **Location:**
-- Unit tests are located in `tests/`.
-- Verification and sanity check scripts are in `arcproLab/scripts/`.
+- Logic tests: `tests/` directory.
+- Environment verification: `arcproLab/scripts/` (e.g., `verify_metric.py`).
 
 **Naming:**
-- Unit tests: `test_*.py`.
-- Verification scripts: `verify_*.py`.
+- `test_*.py` for unit tests.
+- `verify_*.py` for simulation-based verification.
+
+**Structure:**
+```
+tests/
+  └── test_track_manager.py
+```
 
 ## Test Structure
 
 **Suite Organization:**
 ```python
-# tests/test_track_manager.py
-@pytest.fixture
-def mock_track_manager():
-    # Mock omni and pxr before creating TrackManager
-    sys.modules["omni"] = MagicMock()
-    # ...
-    tm = TrackManager(device="cpu")
-    # ...
-    return tm
+import pytest
+import numpy as np
+from arcproLab.mdp.track_manager import TrackManager
 
-def test_closest_waypoint(mock_track_manager):
-    # Setup
-    pos = torch.tensor([[2.1, 0.5, 0.0]], device="cpu")
-    # Action
-    closest = mock_track_manager.get_closest_waypoint_data(pos)
-    # Assertion
-    assert closest[0, 0] == 2.0
+def test_find_closest_waypoint():
+    tm = TrackManager()
+    # Mock waypoints
+    tm.waypoints = np.array([[0,0,0], [1,0,0], [2,0,0]])
+    idx = tm.find_closest_waypoint(np.array([0.9, 0.1, 0]))
+    assert idx == 1
 ```
+
+**Patterns:**
+- **Unit Testing**: Standard pytest for logic without the full simulator.
+- **Metric Verification**: Use of dedicated scripts like `verify_metric.py` to check physics (e.g., robot mass, settled Z position) within a live simulation.
 
 ## Mocking
 
-**Framework:** `unittest.mock.MagicMock`
-
-**Patterns:**
-```python
-# Mocking Isaac Sim dependencies for pure unit tests
-sys.modules["omni"] = MagicMock()
-sys.modules["omni.usd"] = MagicMock()
-sys.modules["pxr"] = MagicMock()
-```
+**Framework:** `unittest.mock` (standard) or simple NumPy-based mocking of data.
 
 **What to Mock:**
-- Isaac Sim modules (`omni`, `pxr`) when running in a standard Python environment (outside `isaaclab.sh`).
-- GPU/Cuda operations when testing on CPU-only runners.
+- Waypoint data for `TrackManager`.
+- Robot state vectors for observation logic tests.
 
-## Verification Workflows
+**What NOT to Mock:**
+- Isaac Sim engine (use live verification instead).
 
-### 1. Physics & Spawn Verification (`verify_spawn.py`)
-- Purpose: Sanity check to ensure the robot drops correctly onto the track and the environment initializes without errors.
-- Workflow:
-    1. Spawn environment using `ARCProEnvCfg`.
-    2. Check initial robot position and error calculations.
-    3. Run 50 steps of simulation with zero actions.
-    4. Log positions and termination status.
+## Fixtures and Factories
 
-### 2. Metric Accuracy Verification (`verify_metric.py`)
-- Purpose: Ensure the 1.0x metric scaling is correctly applied and telemetry reports realistic values.
-- Workflow:
-    1. Spawn environment in headless mode.
-    2. Drive the robot forward at a target velocity (e.g., 40 rad/s ~ 2.0 m/s).
-    3. Audit joint velocities and lateral errors.
+**Test Data:**
+- `track_centerline.npy` used as the primary source for navigation tests.
 
-### 3. Visual Policy Verification (`run_gui_verify.sh`)
-- Purpose: Visual inspection of the robot's behavior with the SB3 policy enabled.
-- Workflow:
-    1. Launch `verify_policy.py` with `--enable_cameras` and GUI.
-    2. Display real-time telemetry in a `TelemetryWindow`.
-    3. Observe lane following and obstacle avoidance behavior.
+**Location:**
+- `arcproLab/mdp/track_centerline.npy`.
+
+## Coverage
+
+**Requirements:** None enforced.
+
+**View Coverage:**
+```bash
+pytest --cov=arcproLab
+```
+
+## Test Types
+
+**Unit Tests:**
+- Tests for navigation math and track tracking logic in `tests/`.
+
+**Integration Tests:**
+- Verification scripts that launch Isaac Sim to check asset loading and physical interactions.
+
+**E2E Tests (Visual):**
+- Scripts like `verify_policy.py` that allow a human to observe the robot's performance.
 
 ## Common Patterns
 
-**Async Testing:**
-- Simulation steps are synchronous but use `torch.no_grad()` to avoid overhead during verification:
-  ```python
-  with torch.no_grad():
-      obs, rewards, terminations, truncations, extras = env.step(actions)
-  ```
+**Async Testing:** Not used (standard for synchronous simulation steps).
 
 **Error Testing:**
-- Verify error calculation logic in `TrackManager` using synthetic waypoints and known robot positions:
-  ```python
-  lat_err, head_err = tm.compute_errors(pos, yaw)
-  assert torch.allclose(lat_err, expected_val)
-  ```
+- Use of `pytest.raises()` for expected errors.
 
 ---
 
-*Testing analysis: 2024-05-21*
+*Testing analysis: 2024-10-24*
