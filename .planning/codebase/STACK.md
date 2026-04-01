@@ -29,12 +29,13 @@
 
 **Build/Dev:**
 - USD (Universal Scene Description) - Asset format for scenes and robots.
+- **Robot Scale**: 0.5x metric scale for F1Tenth assets.
 
 ## Key Dependencies
 
 **Critical:**
 - `torch` (PyTorch) - Neural network backend for policies.
-- `numpy` (<2.0) - Numerical computations and waypoint handling.
+- `numpy` (<2.0) - Numerical computations and absolute waypoint handling.
 - `sb3_contrib` - Required for `RecurrentPPO` and `RecurrentActorCriticPolicy`.
 
 **Infrastructure:**
@@ -45,6 +46,7 @@
 
 **Environment:**
 - Configured via Python classes using `@configclass` decorator from `isaaclab.utils`.
+- **Telemetry Protocol**: Standardized 12-float vector mapping in `mdp/observations.py`.
 - Key configs: `arcproLab/arcpro_env_cfg.py` (Scene/MDP) and `arcproLab/arcpro_robot_cfg.py` (Robot).
 
 **Build:**
@@ -58,7 +60,8 @@
 - NVIDIA Driver 535+ (Recommended).
 
 **Production:**
-- Deployment to F1Tenth hardware (sim-to-real) planned via ROS 2 (referenced in `hierarchical_policy.py` comments).
+- Deployment to F1Tenth hardware (sim-to-real) at 0.5x scale.
+- Front-Wheel Drive (FWD) actuator configuration.
 
 ---
 

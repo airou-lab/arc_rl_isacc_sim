@@ -9,12 +9,20 @@
   - SDK: `omni`, `isaacsim`.
   - Auth: Local license / NVIDIA NGC.
 
+**RL Framework:**
+- stable-baselines3 / sb3-contrib - Used for RecurrentPPO training.
+  - **Telemetry Protocol**: Custom 12-float vector integration.
+
 ## Data Storage
 
 **Assets:**
 - OpenStreetUSD - USD map tiles and road assets.
-  - Files: `openStreetUSD/no_graph_sim_final.usd`, `openStreetUSD/archive/`.
+  - Files: `openStreetUSD/no_graph_sim_final.usd`.
   - Client: `UsdFileCfg` in `isaaclab.sim`.
+
+**Robot Asset:**
+- **F1Tenth_Metric.usd**: 0.5x scale metric robot.
+  - Location: `arcproLab/assets/robot/`.
 
 **Models:**
 - PyTorch Weights - Saved as `.pth` files.
@@ -22,7 +30,7 @@
   - Library: `torch.load()`.
 
 **Navigation Data:**
-- Waypoint Arrays - NumPy arrays containing track centerlines.
+- Waypoint Arrays - NumPy arrays containing **absolute** track centerlines.
   - Files: `arcproLab/mdp/track_centerline.npy`.
   - Format: 3D coordinates (altitude-aware).
 
@@ -43,12 +51,12 @@
 - GitHub Actions - Defined in `.github/workflows/ci.yml`.
 
 **Deployment Target:**
-- F1Tenth Hardware - Referenced via potential ROS 2 integration (`hierarchical_policy.py`).
+- F1Tenth Hardware - Physical robot using **Front-Wheel Drive (FWD)**.
 
 ## Environment Configuration
 
 **Required env vars:**
-- No explicit env vars in the current code; configuration is strictly through Python `configclass`.
+- No explicit env vars in current code; configuration is strictly through Python `configclass`.
 
 **Secrets location:**
 - Not detected / None.
