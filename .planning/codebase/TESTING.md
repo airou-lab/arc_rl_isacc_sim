@@ -37,30 +37,24 @@ tests/
 
 ## Test Structure
 
-**Suite Organization:**
+**Suite Organization (12-Float Telemetry Verification):**
 ```python
-import pytest
-import numpy as np
-from arcproLab.mdp.track_manager import TrackManager
-
-def test_find_closest_waypoint():
-    tm = TrackManager()
-    # Mock waypoints
-    tm.waypoints = np.array([[0,0,0], [1,0,0], [2,0,0]])
-    idx = tm.find_closest_waypoint(np.array([0.9, 0.1, 0]))
-    assert idx == 1
+def test_get_telemetry_vector(env):
+    obs = get_telemetry_vector(env)
+    assert obs.shape[1] == 12
+    assert obs[:, 3] > 0 # Speed should be positive when moving
 ```
 
 **Patterns:**
 - **Unit Testing**: Standard pytest for logic without the full simulator.
-- **Metric Verification**: Use of dedicated scripts like `verify_metric.py` to check physics (e.g., robot mass, settled Z position) within a live simulation.
+- **Metric Verification**: Use of dedicated scripts like `verify_metric.py` to check physics (e.g., **0.5x robot scale**, **3.5kg mass**, settled Z position) within a live simulation.
 
 ## Mocking
 
 **Framework:** `unittest.mock` (standard) or simple NumPy-based mocking of data.
 
 **What to Mock:**
-- Waypoint data for `TrackManager`.
+- **Absolute Waypoint data** for `TrackManager`.
 - Robot state vectors for observation logic tests.
 
 **What NOT to Mock:**
@@ -89,10 +83,10 @@ pytest --cov=arcproLab
 - Tests for navigation math and track tracking logic in `tests/`.
 
 **Integration Tests:**
-- Verification scripts that launch Isaac Sim to check asset loading and physical interactions.
+- Verification scripts that launch Isaac Sim to check asset loading and physical interactions at **0.5x scale**.
 
 **E2E Tests (Visual):**
-- Scripts like `verify_policy.py` that allow a human to observe the robot's performance.
+- Scripts like `verify_policy.py` that allow a human to observe the robot's performance using the **12-float protocol UI**.
 
 ## Common Patterns
 

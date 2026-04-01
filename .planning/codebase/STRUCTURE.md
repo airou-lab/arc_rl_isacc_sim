@@ -10,10 +10,10 @@
 │   ├── assets/         # Robot-specific USD files (F1Tenth_Metric.usd)
 │   ├── mdp/            # Markov Decision Process implementation
 │   │   ├── events.py   # Reset logic and spawning
-│   │   ├── observations.py # Telemetry and observation vectors
+│   │   ├── observations.py # 12-float telemetry and observation vectors
 │   │   ├── rewards.py  # Reward functions (Gaussian weighted)
 │   │   ├── terminations.py # Episode termination rules
-│   │   └── track_manager.py # Waypoint tracking and navigation math
+│   │   └── track_manager.py # Absolute waypoint tracking and navigation math
 │   ├── models/         # Trained model weights (.pth)
 │   ├── policy_stack/   # Hierarchical and Fusion policy logic
 │   └── scripts/        # Training and verification entry points
@@ -31,7 +31,7 @@
 
 **arcproLab/mdp/:**
 - Purpose: Logic for RL training iterations.
-- Contains: Feature extraction, reward shaping, and reset logic.
+- Contains: Feature extraction (12-float protocol), reward shaping, and reset logic.
 - Key files: `observations.py`, `rewards.py`, `track_manager.py`.
 
 **arcproLab/policy_stack/:**
@@ -41,7 +41,7 @@
 
 **trash/tools/:**
 - Purpose: Infrastructure and asset preparation scripts.
-- Contains: USD scaling, centering, and auditing tools.
+- Contains: USD scaling (0.5x), centering, and auditing tools.
 - Key files: `finalize_track_gsd.py`, `check_map_scale.py`.
 
 ## Key File Locations
@@ -51,11 +51,11 @@
 - `arcproLab/scripts/verify_policy.py`: Inference and verification entry point.
 
 **Configuration:**
-- `arcproLab/arcpro_env_cfg.py`: Environment and scene configuration.
-- `arcproLab/arcpro_robot_cfg.py`: Robot physical property configuration.
+- `arcproLab/arcpro_env_cfg.py`: Environment and scene configuration (0.5x scale).
+- `arcproLab/arcpro_robot_cfg.py`: Robot physical property configuration (FWD).
 
 **Core Logic:**
-- `arcproLab/mdp/track_manager.py`: Critical waypoint navigation logic.
+- `arcproLab/mdp/track_manager.py`: Critical **absolute waypoint** navigation logic.
 
 **Testing:**
 - `tests/test_track_manager.py`: Logic tests for navigation math.
