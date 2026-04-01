@@ -12,7 +12,7 @@ from isaaclab.utils import configclass
 from isaaclab.envs import ManagerBasedRLEnvCfg, ViewerCfg
 from isaaclab.managers import ObservationGroupCfg, ObservationTermCfg as ObsTerm, ActionTermCfg as ActionTerm, RewardTermCfg as RewTerm, TerminationTermCfg as DoneTerm, SceneEntityCfg, EventTermCfg
 from isaaclab.assets import AssetBaseCfg
-from isaaclab.sensors import TiledCameraCfg, ContactSensorCfg
+from isaaclab.sensors import TiledCameraCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
 import isaaclab.sim as sim_utils
@@ -51,37 +51,24 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -1.25)),
     )
+
     
-    # Robot (0.5x Metric Scale, lane-aligned spawn)
-    # Target: Nearest WP [-1.36, -0.33, -1.606]
-    # Set Z to 0.1 and shifted right (X decreased to -1.56)
+    # Robot (1.0x Metric Scale, 0.5m drop above the track)
     robot = ARCPRO_ROBOT_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=ARCPRO_ROBOT_CFG.spawn.replace(
-            scale=(0.5, 0.5, 0.5), # REZIED TO HALF
+            scale=(1.0, 1.0, 1.0),
         ),
-        init_state=ARCPRO_ROBOT_CFG.init_state.replace(
-            pos=(-1.56, -0.33, 0.1),
-            rot=(0.696, 0.0, 0.0, -0.718), # Yaw -1.606 rad to quaternion
-        ), 
+        init_state=ARCPRO_ROBOT_CFG.init_state.replace(pos=(0.0, 0.0, 0.5)), 
     )
     
-    # Camera (Halved offset for 0.5x robot)
+    # Camera
     tiled_camera = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraSensor",
         update_period=0.0,
         spawn=sim_utils.PinholeCameraCfg(),
-        offset=TiledCameraCfg.OffsetCfg(pos=(0.14, 0.0, 0.08), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
+        offset=TiledCameraCfg.OffsetCfg(pos=(0.28, 0.0, 0.16), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
         data_types=["rgb"], width=160, height=90,
-    )
-
-    # Contact Sensor
-    contact_forces = ContactSensorCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/.*", 
-        update_period=0.0, 
-        history_length=3, 
-        debug_vis=False,
-        filter_prim_paths_expr=["{ENV_REGEX_NS}/Track/.*"]
     )
 
 @configclass
@@ -99,17 +86,15 @@ class ObservationCfg:
 @configclass
 class ActionCfg:
     steering = mdp.JointPositionActionCfg(asset_name="robot", joint_names=["Joint_Steer_L", "Joint_Steer_R"], scale=1.0, preserve_order=True)
-    # FWD Mapping: Only FL and FR joints for throttle
-    throttle = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["Joint_Drive_FL", "Joint_Drive_FR"], scale=1.0, preserve_order=True)
+    throttle = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["Joint_Drive_.*"], scale=1.0, preserve_order=True)
 
 @configclass
 class RewardCfg:
-    composite = RewTerm(func=mdp_rew.composite_reward, weight=1.0)
+    speed = RewTerm(func=mdp_rew.speed_reward, weight=1.0)
 
 @configclass
 class TerminationCfg:
     # height = DoneTerm(func=mdp_done.height_termination)
-    # white_line_contact = DoneTerm(func=mdp_done.white_line_contact)
     pass
 
 @configclass
@@ -136,6 +121,10 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
             bounce_threshold_velocity=0.5, 
             enable_ccd=True, 
             enable_stabilization=True,
+            gpu_max_rigid_contact_count=2**21,
+            gpu_max_rigid_patch_count=2**18,
+            gpu_heap_capacity=2**26,
+            gpu_found_lost_pairs_capacity=2**21,
         ),
     )
 

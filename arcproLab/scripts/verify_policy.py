@@ -79,15 +79,6 @@ def main():
     print("Resetting environment...")
     obs, _ = env.reset()
     print("Environment reset complete.")
-    
-    # Alignment Check
-    if tm is not None:
-        p0 = env.scene["robot"].data.root_pos_w[0]
-        q0 = env.scene["robot"].data.root_quat_w[0]
-        y0 = torch.atan2(2.0 * (q0[0] * q0[3] + q0[1] * q0[2]), 1.0 - 2.0 * (q0[2]**2 + q0[3]**2))
-        l_err, h_err = tm.compute_errors(p0.unsqueeze(0), y0.unsqueeze(0))
-        print(f"[Alignment Check] Robot Spawn: {p0.cpu().numpy()}")
-        print(f"[Alignment Check] Nearest WP Error: Lat={l_err.item():.3f}m, Hdg={h_err.item():.3f}rad")
 
     # Setup Telemetry Window
     telemetry = None
@@ -119,8 +110,8 @@ def main():
                     images = v_data 
                 
             if images is not None:
-                # Action shape is 4 (2 steering + 2 throttle) as per ActionCfg
-                actions = torch.zeros((env.num_envs, 4), device=env.device)
+                # Action shape is 6 (2 steering + 4 throttle)
+                actions = torch.zeros((env.num_envs, 6), device=env.device)
                 
                 for i in range(env.num_envs):
                     img = images[i]
@@ -134,40 +125,41 @@ def main():
                     actions[i, 0] = steering
                     actions[i, 1] = steering
                     
-                    # Throttle (Indices 2, 3) -> Joint_Drive_FL, FR
+                    # Throttle (Indices 2, 3, 4, 5) -> Joint_Drive_FL, FR, RL, RR
                     actions[i, 2] = -target_rad_s # FL
                     actions[i, 3] = -target_rad_s # FR
+                    actions[i, 4] = -target_rad_s # RL
+                    actions[i, 5] = -target_rad_s # RR
                     
-                    # Telemetry for env 0 (12-float vector from policy group)
+                    # Telemetry for env 0
                     if i == 0:
-                         tel = obs["policy"][0] # (12,)
-                         
                          pos = env.scene["robot"].data.root_pos_w
                          vel = env.scene["robot"].data.root_lin_vel_w
                          v_norm = torch.linalg.norm(vel[0]).item()
+                         
+                         lat_err_val = "N/A"
+                         if tm is not None:
+                             q = env.scene["robot"].data.root_quat_w
+                             yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
+                             lat_err, head_err = tm.compute_errors(pos, yaw)
+                             lat_err_val = f"{lat_err[0].item():.3f}m"
                          
                          # Audit joint velocities
                          jv = env.scene["robot"].data.joint_vel[0, drive_indices]
                          jv_drive = jv.cpu().numpy().tolist()
                          
                          if count % 20 == 0:
-                             print(f"Step {count:4d} | Pos: ({pos[0,0]:.2f}, {pos[0,1]:.2f}, {pos[0,2]:.3f}) | Vel: {tel[3]:.2f}m/s | LatErr: {tel[8]:.3f}m | HdgErr: {tel[9]:.3f}rad")
-                             print(f"          | Steer: {steering:.3f} | Kappa: {tel[10]:.4f} | Dist: {tel[11]:.2f}m")
+                             print(f"Step {count:4d} | Pos: ({pos[0,0]:.2f}, {pos[0,1]:.2f}, {pos[0,2]:.3f}) | Vel: {v_norm:.2f}m/s | LatErr: {lat_err_val}")
+                             print(f"          | Steer: {steering:.3f} | JV_Drive: {jv_drive}")
                          
                          if telemetry is not None:
-                             # Update telemetry window with 12-float values
-                             # Index mapping: [3] Speed, [5] Steer, [8] LatErr
-                             telemetry.update(count, tel[3].item(), tel[5].item(), f"{tel[8].item():.3f}m", jv_drive)
+                             telemetry.update(count, v_norm, steering, lat_err_val, jv_drive)
                 
                 # step environment
-                obs, reward, terminated, truncated, _ = env.step(actions)
-                
-                if count % 20 == 0:
-                    print(f"          | Reward: {reward[0].item():.3f}")
+                obs, _, _, _, _ = env.step(actions)
             else:
                 # Fallback: Just drive forward if no camera
-                # Index 2, 3 are drive joints in the 4-dim action space
-                actions = torch.zeros((env.num_envs, 4), device=env.device)
+                actions = torch.zeros((env.num_envs, 6), device=env.device)
                 actions[:, 2:] = -40.0
                 obs, _, _, _, _ = env.step(actions)
                 

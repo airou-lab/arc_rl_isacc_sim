@@ -22,7 +22,6 @@ class ArcProRobotCfg(ArticulationCfg):
             solver_velocity_iteration_count=16, # Precision solver
             fix_root_link=False, # EXPLICITLY UNLOCK ROOT FOR GRAVITY
         ),
-        activate_contact_sensors=True,
     )
 
     init_state: ArticulationCfg.InitialStateCfg = ArticulationCfg.InitialStateCfg(

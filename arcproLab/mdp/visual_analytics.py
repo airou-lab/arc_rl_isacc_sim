@@ -47,11 +47,10 @@ class TelemetryWindow:
                     self.jv_rr_label = ui.Label("0.0")
                 
                 ui.Spacer(height=15)
-                ui.Label("GSD Phase 5-02 Status:", style={"font_size": 12, "color": 0xFF00FF00})
-                ui.Label("- Protocol: 12-Float (Legacy)", style={"font_size": 10})
-                ui.Label("- Drive: FWD (FL/FR)", style={"font_size": 10})
-                ui.Label("- Reward: Original Composite", style={"font_size": 10})
-                ui.Label("- Metric Scale: 1.0x", style={"font_size": 10})
+                ui.Label("GSD Phase 7 Status:", style={"font_size": 12, "color": 0xFFAAAAAA})
+                ui.Label("- Map Scale: 8.0x", style={"font_size": 10})
+                ui.Label("- Physics: SDF (High Fidelity)", style={"font_size": 10})
+                ui.Label("- Camera: Manual Control", style={"font_size": 10})
 
     def update(self, step, speed, steering, lat_err, jv_drive):
         self.step_label.text = str(step)

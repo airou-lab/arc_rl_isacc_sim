@@ -143,7 +143,11 @@ class TrackManager:
         
         wps = np.stack([resampled_x, resampled_y, yaws], axis=1)
         
-        # No shifting - use absolute USD world coordinates
+        # 5. Shift to Origin (match Isaac Lab env spawn at 0,0)
+        offset = wps[0, :2].copy()
+        wps[:, :2] -= offset
+        print(f"[TrackManager] Shifted waypoints by {offset} to center at (0,0)")
+        
         self.waypoints = torch.tensor(wps, device=self.device, dtype=torch.float32)
         print(f"[TrackManager] Successfully sampled {len(self.waypoints)} waypoints from USD.")
 
@@ -172,12 +176,7 @@ class TrackManager:
             lat_err: (num_envs,)
             head_err: (num_envs,)
         """
-        # Find closest waypoints
-        diff = pos[:, None, :2] - self.waypoints[None, :, :2]
-        dist_sq = torch.sum(diff**2, dim=-1)
-        closest_indices = torch.argmin(dist_sq, dim=-1)
-        
-        wp_data = self.waypoints[closest_indices]
+        wp_data = self.get_closest_waypoint_data(pos)
         wp_pos = wp_data[:, :2]
         wp_yaw = wp_data[:, 2]
         
@@ -189,6 +188,8 @@ class TrackManager:
         # Lateral error: signed distance to the track centerline
         # vector from wp to robot
         v_wp_to_rob = pos[:, :2] - wp_pos
+        # track tangent vector (cos(yaw), sin(yaw))
+        v_tangent = torch.stack([torch.cos(wp_yaw), torch.sin(wp_yaw)], dim=-1)
         # track normal vector (-sin(yaw), cos(yaw))
         v_normal = torch.stack([-torch.sin(wp_yaw), torch.cos(wp_yaw)], dim=-1)
         
@@ -196,55 +197,6 @@ class TrackManager:
         lat_err = torch.sum(v_wp_to_rob * v_normal, dim=-1)
         
         return lat_err, head_err
-
-    def get_curvature(self, pos: torch.Tensor, lookahead: int = 10) -> torch.Tensor:
-        """
-        Computes path curvature (1/m) using a 3-point circle fit.
-        Uses [closest_idx, closest_idx + lookahead, closest_idx + 2*lookahead].
-        Args:
-            pos: (num_envs, 3) - World positions
-            lookahead: Number of waypoints to look ahead for smoothing.
-        Returns:
-            kappa: (num_envs,) - Curvature in 1/m.
-        """
-        # 1. Find closest indices
-        diff = pos[:, None, :2] - self.waypoints[None, :, :2]
-        dist_sq = torch.sum(diff**2, dim=-1)
-        idx1 = torch.argmin(dist_sq, dim=-1)
-        
-        # 2. Points for circle fit (wrap indices for circular tracks)
-        num_wps = len(self.waypoints)
-        idx2 = (idx1 + lookahead) % num_wps
-        idx3 = (idx1 + 2 * lookahead) % num_wps
-        
-        p1 = self.waypoints[idx1, :2]
-        p2 = self.waypoints[idx2, :2]
-        p3 = self.waypoints[idx3, :2]
-        
-        # 3. Menger Curvature formula: 4*Area / (d12 * d23 * d31)
-        # Area = |x1(y2-y3) + x2(y3-y1) + x3(y1-y2)| / 2
-        area = 0.5 * torch.abs(
-            p1[:, 0] * (p2[:, 1] - p3[:, 1]) +
-            p2[:, 0] * (p3[:, 1] - p1[:, 1]) +
-            p3[:, 0] * (p1[:, 1] - p2[:, 1])
-        )
-        
-        d12 = torch.norm(p1 - p2, dim=-1)
-        d23 = torch.norm(p2 - p3, dim=-1)
-        d31 = torch.norm(p3 - p1, dim=-1)
-        
-        # Avoid division by zero
-        denom = d12 * d23 * d31
-        kappa = torch.where(denom > 1e-4, 4.0 * area / denom, torch.zeros_like(area))
-        
-        # Signed curvature (optional, but legacy protocol usually uses absolute or left-positive)
-        # Here we use cross product of (p2-p1) and (p3-p2) to determine sign
-        v1 = p2 - p1
-        v2 = p3 - p2
-        cross_z = v1[:, 0] * v2[:, 1] - v1[:, 1] * v2[:, 0]
-        kappa = kappa * torch.sign(cross_z)
-        
-        return kappa
 
 # Singleton instance for the environment
 _TRACK_MANAGER = None
