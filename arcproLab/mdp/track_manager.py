@@ -151,19 +151,6 @@ class TrackManager:
         self.waypoints = torch.tensor(wps, device=self.device, dtype=torch.float32)
         print(f"[TrackManager] Successfully sampled {len(self.waypoints)} waypoints from USD.")
 
-    def get_closest_waypoint_indices(self, pos: torch.Tensor) -> torch.Tensor:
-        """
-        Finds the indices of the closest waypoint for each environment.
-        Args:
-            pos: (num_envs, 3) - World positions of robots
-        Returns:
-            (num_envs,) - Indices of closest waypoints
-        """
-        diff = pos[:, None, :2] - self.waypoints[None, :, :2]
-        dist_sq = torch.sum(diff**2, dim=-1)
-        closest_indices = torch.argmin(dist_sq, dim=-1)
-        return closest_indices
-
     def get_closest_waypoint_data(self, pos: torch.Tensor) -> torch.Tensor:
         """
         Finds the closest waypoint for each environment.
@@ -172,55 +159,12 @@ class TrackManager:
         Returns:
             (num_envs, 3) - [wp_x, wp_y, wp_yaw] of closest waypoints
         """
-        closest_indices = self.get_closest_waypoint_indices(pos)
+        # (num_envs, 1, 2) - robots
+        # (1, num_waypoints, 2) - waypoints
+        diff = pos[:, None, :2] - self.waypoints[None, :, :2]
+        dist_sq = torch.sum(diff**2, dim=-1)
+        closest_indices = torch.argmin(dist_sq, dim=-1)
         return self.waypoints[closest_indices]
-
-    def get_kappa(self, pos: torch.Tensor, lookahead_m: float = 2.0) -> torch.Tensor:
-        """
-        Computes curvature (kappa) using 3-point circle fit.
-        Points: [Current, Midpoint, Lookahead]
-        """
-        num_envs = pos.shape[0]
-        closest_indices = self.get_closest_waypoint_indices(pos)
-        
-        # Assume 0.5m density from sample_waypoints_from_usd
-        step = int(lookahead_m / 0.5)
-        if step < 2: step = 2
-        
-        idx1 = closest_indices
-        idx2 = (closest_indices + step // 2) % len(self.waypoints)
-        idx3 = (closest_indices + step) % len(self.waypoints)
-        
-        p1 = self.waypoints[idx1, :2]
-        p2 = self.waypoints[idx2, :2]
-        p3 = self.waypoints[idx3, :2]
-        
-        x1, y1 = p1[:, 0], p1[:, 1]
-        x2, y2 = p2[:, 0], p2[:, 1]
-        x3, y3 = p3[:, 0], p3[:, 1]
-        
-        # Area of triangle
-        area = 0.5 * torch.abs(x1*(y2 - y3) + x2*(y3 - y1) + x3*(y1 - y2))
-        
-        # Side lengths
-        a = torch.sqrt((x2 - x3)**2 + (y2 - y3)**2)
-        b = torch.sqrt((x1 - x3)**2 + (y1 - y3)**2)
-        c = torch.sqrt((x1 - x2)**2 + (y1 - y2)**2)
-        
-        # Radius of circumcircle R = (abc) / (4A)
-        # Kappa = 1/R = 4A / (abc)
-        kappa = (4.0 * area) / (a * b * c + 1e-6)
-        
-        # Determine sign (left turn positive)
-        # Vector p1->p3
-        v13 = p3 - p1
-        # Vector p1->p2
-        v12 = p2 - p1
-        # Cross product in 2D
-        cross = v12[:, 0] * v13[:, 1] - v12[:, 1] * v13[:, 0]
-        kappa = kappa * torch.sign(cross)
-        
-        return kappa
 
     def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor):
         """
