@@ -28,12 +28,13 @@ def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     - if abs(lat_err) < 0.5: +1.0
     - else: -abs(lat_err) * 2.0
     """
-    obs = env.observation_manager.compute()["policy"]
+    # Use the Observation Manager to get lateral error (Index 8)
+    obs = env.observation_manager.compute_group("policy")["telemetry"]
     lat_err = obs[:, 8]
     
     reward = torch.where(
         torch.abs(lat_err) < 0.5,
-        torch.ones_like(lat_err),
+        torch.ones_like(lat_err, device=env.device),
         -torch.abs(lat_err) * 2.0
     )
     
@@ -41,6 +42,22 @@ def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     nan_mask = torch.isnan(reward)
     if nan_mask.any():
         reward[nan_mask] = 0.0
+    return reward
+
+def collision_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Flat penalty for collisions (bounding box hits).
+    Original Logic: -20.0
+    """
+    # Check if a collision termination was triggered. 
+    # Usually named 'base_contact' or similar in Isaac Lab
+    try:
+        hit = env.termination_manager.get_term("base_contact")
+    except:
+        # Fallback if term not found
+        hit = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+        
+    reward = torch.where(hit, torch.tensor(-20.0, device=env.device), torch.tensor(0.0, device=env.device))
     return reward
 
 def line_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:

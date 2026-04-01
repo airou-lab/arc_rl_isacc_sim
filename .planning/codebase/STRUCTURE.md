@@ -5,99 +5,91 @@
 ## Directory Layout
 
 ```
-arc_rl_isaac_sim/
-├── arcproLab/              # Main application package
-│   ├── assets/             # Robot USD assets (F1Tenth_Metric.usd)
-│   ├── mdp/                # Markov Decision Process logic (obs, rewards, etc.)
-│   │   ├── track_manager.py # Coordinates and track-specific logic
-│   │   └── track_centerline.npy # Waypoint data for errors
-│   ├── scripts/            # Executable scripts for training and verification
-│   ├── arcpro_env_cfg.py   # Main Isaac Lab environment config
-│   ├── arcpro_robot_cfg.py # F1Tenth robot configuration
-│   └── verify.py           # GUI verification script
-├── docs/                   # Project documentation and phase history
-├── openStreetUSD/          # USD files for the simulation track
-├── tests/                  # Unit tests (track_manager, etc.)
-├── trash/                  # Deprecated or experimental files (pre-metric scaling)
-└── .planning/              # GSD internal planning documents
+[project-root]/
+├── arcproLab/          # Core Python logic and RL environment
+│   ├── assets/         # Robot-specific USD files (F1Tenth_Metric.usd)
+│   ├── mdp/            # Markov Decision Process implementation
+│   │   ├── events.py   # Reset logic and spawning
+│   │   ├── observations.py # Telemetry and observation vectors
+│   │   ├── rewards.py  # Reward functions (Gaussian weighted)
+│   │   ├── terminations.py # Episode termination rules
+│   │   └── track_manager.py # Waypoint tracking and navigation math
+│   ├── models/         # Trained model weights (.pth)
+│   ├── policy_stack/   # Hierarchical and Fusion policy logic
+│   └── scripts/        # Training and verification entry points
+├── docs/               # Project documentation and roadmap
+├── openStreetUSD/      # Map assets and world geometry
+│   └── archive/        # Legacy/Experimental USD assets
+├── tests/              # Pytest suite
+├── trash/              # Legacy tools and one-off scripts
+│   └── tools/          # USD manipulation and auditing tools
+├── requirements.txt    # Python dependencies
+└── train.sh            # Training execution script
 ```
 
 ## Directory Purposes
 
-**arcproLab/:**
-- Purpose: Root package for the Isaac Lab implementation.
-- Contains: Configuration, assets, and MDP components.
-- Key files: `arcpro_env_cfg.py`, `arcpro_robot_cfg.py`.
-
 **arcproLab/mdp/:**
-- Purpose: Implements the reinforcement learning interface.
-- Contains: Python modules for observations, rewards, events, and terminations.
-- Key files: `observations.py`, `track_manager.py`.
+- Purpose: Logic for RL training iterations.
+- Contains: Feature extraction, reward shaping, and reset logic.
+- Key files: `observations.py`, `rewards.py`, `track_manager.py`.
 
-**arcproLab/scripts/:**
-- Purpose: Executable scripts for interacting with the simulation.
-- Contains: Training, verification, and metric-checking scripts.
-- Key files: `train_policy.py`, `verify_policy.py`.
+**arcproLab/policy_stack/:**
+- Purpose: Advanced neural network architectures.
+- Contains: Hierarchical policies and planning-control separation.
+- Key files: `policies/hierarchical_policy.py`.
 
-**openStreetUSD/:**
-- Purpose: Stores track environment USD files.
-- Contains: Cleaned and final versions of track meshes.
-- Key files: `no_graph_sim_cleaned.usd`.
+**trash/tools/:**
+- Purpose: Infrastructure and asset preparation scripts.
+- Contains: USD scaling, centering, and auditing tools.
+- Key files: `finalize_track_gsd.py`, `check_map_scale.py`.
 
 ## Key File Locations
 
 **Entry Points:**
-- `arcproLab/scripts/train_policy.py`: Training entry point.
-- `arcproLab/verify.py`: GUI verification of robot and environment.
+- `arcproLab/scripts/train_policy.py`: Main training entry point.
+- `arcproLab/scripts/verify_policy.py`: Inference and verification entry point.
 
 **Configuration:**
-- `arcproLab/arcpro_env_cfg.py`: Environment parameters (gravity, dt, PhysX).
-- `arcproLab/arcpro_robot_cfg.py`: Robot asset path, scales, and actuators.
+- `arcproLab/arcpro_env_cfg.py`: Environment and scene configuration.
+- `arcproLab/arcpro_robot_cfg.py`: Robot physical property configuration.
 
 **Core Logic:**
-- `arcproLab/mdp/track_manager.py`: Waypoint management and track error calculation.
-- `arcproLab/mdp/observations.py`: 12-element telemetry vector construction.
+- `arcproLab/mdp/track_manager.py`: Critical waypoint navigation logic.
 
 **Testing:**
-- `tests/test_track_manager.py`: Logic verification for track geometry calculations.
+- `tests/test_track_manager.py`: Logic tests for navigation math.
 
 ## Naming Conventions
 
 **Files:**
-- Configuration: `*_cfg.py`
-- Scripts: Verb-noun e.g., `train_policy.py`, `verify_spawn.py`.
+- Snake case: `arcpro_env_cfg.py`.
 
 **Directories:**
-- Python packages: `camelCase` (e.g., `arcproLab`) or standard lowercase.
-- Data storage: `snake_case` or `camelCase`.
+- CamelCase/SnakeCase: `arcproLab/`, `openStreetUSD/`.
 
 ## Where to Add New Code
 
 **New Feature (MDP):**
-- Implementation: `arcproLab/mdp/` (create new file or add to existing if applicable).
-- Configuration: Update `arcproLab/arcpro_env_cfg.py`.
+- Primary code: `arcproLab/mdp/`.
+- Tests: `tests/`.
 
-**New Observation Term:**
-- Implementation: `arcproLab/mdp/observations.py`.
-- Config: Register in `ObservationCfg` within `arcproLab/arcpro_env_cfg.py`.
-
-**New Robot Type:**
-- Implementation: `arcproLab/arcpro_robot_cfg.py` (add new `ArticulationCfg`).
-- Asset: `arcproLab/assets/robot/`.
+**New Component/Module:**
+- Implementation: `arcproLab/` or `arcproLab/policy_stack/`.
 
 **Utilities:**
-- Implementation: `arcproLab/mdp/` or new top-level directory if broadly useful.
+- Simulation-related: `arcproLab/mdp/`.
+- Asset-related: `trash/tools/`.
 
 ## Special Directories
 
-**trash/:**
-- Purpose: Contains deprecated files from previous phases (e.g., pre-metric scaling experiments).
+**openStreetUSD/archive/:**
+- Purpose: Stores experimental map assets to prevent project root clutter.
 - Generated: No.
 - Committed: Yes.
 
-**docs/:**
-- Purpose: Documentation and verification history.
-- Generated: No.
+**trash/:**
+- Purpose: Legacy or "at-risk" scripts that are not part of the core training pipeline but provide necessary maintenance functions.
 - Committed: Yes.
 
 ---

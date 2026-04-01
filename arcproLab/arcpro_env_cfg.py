@@ -12,7 +12,7 @@ from isaaclab.utils import configclass
 from isaaclab.envs import ManagerBasedRLEnvCfg, ViewerCfg
 from isaaclab.managers import ObservationGroupCfg, ObservationTermCfg as ObsTerm, ActionTermCfg as ActionTerm, RewardTermCfg as RewTerm, TerminationTermCfg as DoneTerm, SceneEntityCfg, EventTermCfg
 from isaaclab.assets import AssetBaseCfg
-from isaaclab.sensors import TiledCameraCfg
+from isaaclab.sensors import TiledCameraCfg, ContactSensorCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
 import isaaclab.sim as sim_utils
@@ -41,18 +41,19 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.DistantLightCfg(intensity=3000.0, color=(1.0, 1.0, 1.0))
     )
 
-    # Track from no_graph_sim_cleaned.usd (Offset by -1.25m to bring road surface to Z=0)
+    # Track from no_graph_sim_final.usd (Stable grounded track from main branch)
     track = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Track",
         spawn=sim_utils.UsdFileCfg(
-            usd_path=os.path.join(os.path.dirname(__file__), "..", "openStreetUSD", "no_graph_sim_cleaned.usd"),
+            usd_path=os.path.join(os.path.dirname(__file__), "..", "openStreetUSD", "no_graph_sim_final.usd"),
             collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True),
             scale=(0.0825, 0.0825, 0.0825), 
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -1.25)),
     )
+
     
-    # Robot (1.0x Metric Scale, 0.5m drop above the track at ground-level)
+    # Robot (1.0x Metric Scale, 0.5m drop above the track)
     robot = ARCPRO_ROBOT_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=ARCPRO_ROBOT_CFG.spawn.replace(
@@ -68,6 +69,15 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.PinholeCameraCfg(),
         offset=TiledCameraCfg.OffsetCfg(pos=(0.28, 0.0, 0.16), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
         data_types=["rgb"], width=160, height=90,
+    )
+
+    # Contact Sensor
+    contact_forces = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/.*", 
+        update_period=0.0, 
+        history_length=3, 
+        debug_vis=False,
+        filter_prim_paths_expr=["{ENV_REGEX_NS}/Track/.*"]
     )
 
 @configclass
@@ -90,11 +100,14 @@ class ActionCfg:
 @configclass
 class RewardCfg:
     speed = RewTerm(func=mdp_rew.speed_reward, weight=1.0)
+    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=1.0)
+    collision = RewTerm(func=mdp_rew.collision_penalty, weight=1.0)
 
 @configclass
 class TerminationCfg:
     # height = DoneTerm(func=mdp_done.height_termination)
-    pass
+    white_line_contact = DoneTerm(func=mdp_done.white_line_contact)
+    base_contact = DoneTerm(func=mdp_done.white_line_contact)
 
 @configclass
 class ARCProEnvCfg(ManagerBasedRLEnvCfg):
@@ -120,6 +133,10 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
             bounce_threshold_velocity=0.5, 
             enable_ccd=True, 
             enable_stabilization=True,
+            gpu_max_rigid_contact_count=2**21,
+            gpu_max_rigid_patch_count=2**18,
+            gpu_heap_capacity=2**26,
+            gpu_found_lost_pairs_capacity=2**21,
         ),
     )
 

@@ -1,147 +1,106 @@
 # Testing Patterns
 
-**Analysis Date:** 2025-03-26
+**Analysis Date:** 2024-10-24
 
 ## Test Framework
 
 **Runner:**
-- `pytest`
-- Configuration: Standard `pytest` invocation.
+- pytest (Version 7.0+)
+- Config: None (standard discovery)
 
 **Assertion Library:**
-- Standard Python `assert` statements.
-- `torch.allclose()` or `torch.all()` for tensor-based numerical and boolean comparisons.
-- `np.allclose()` or `np.array_equal()` for NumPy-based comparisons.
+- Standard `assert` in Python.
 
 **Run Commands:**
 ```bash
-pytest                 # Run all logic tests (mocked)
-./run_gui_verify.sh    # Run simulation-based verification with GUI
-./verify_sim.sh        # Run headless simulation verification
+pytest                  # Run unit tests in tests/
+./run_gui_verify.sh     # Run visual verification in Isaac Sim
+./verify_sim.sh         # Run headless simulation verification
+python3 arcproLab/scripts/verify_policy.py --checkpoint models/road_following_model.pth
 ```
 
 ## Test File Organization
 
 **Location:**
-- Dedicated `tests/` directory at the project root for unit tests.
-- Standalone verification scripts in `arcproLab/scripts/`.
+- Logic tests: `tests/` directory.
+- Environment verification: `arcproLab/scripts/` (e.g., `verify_metric.py`).
 
 **Naming:**
-- Unit test files: `test_*.py` (e.g., `tests/test_track_manager.py`).
-- Verification scripts: `verify_*.py` (e.g., `arcproLab/scripts/verify_metric.py`).
+- `test_*.py` for unit tests.
+- `verify_*.py` for simulation-based verification.
 
 **Structure:**
 ```
-[project-root]/
-├── tests/
-│   └── test_*.py      # Logic-only tests (fast, no Isaac Sim required)
-└── arcproLab/
-    └── scripts/
-        └── verify_*.py # Simulation-based verification (requires Isaac Sim)
+tests/
+  └── test_track_manager.py
 ```
 
 ## Test Structure
 
-**Suite Organization (Mocked):**
+**Suite Organization:**
 ```python
 import pytest
-import torch
-import sys
-from unittest.mock import MagicMock
+import numpy as np
+from arcproLab.mdp.track_manager import TrackManager
 
-# Environment setup: Mock Isaac Sim before importing core components
-sys.modules["omni"] = MagicMock()
-sys.modules["omni.usd"] = MagicMock()
-sys.modules["pxr"] = MagicMock()
-
-@pytest.fixture
-def mock_component():
-    # Setup: Initialize component with mocks
-    component = MyComponent(device="cpu")
-    yield component
-```
-
-**Suite Organization (Simulation):**
-```python
-# Entry point for Isaac Sim verification scripts
-from isaaclab.app import AppLauncher
-app_launcher = AppLauncher(headless=True)
-simulation_app = app_launcher.app
-
-import torch
-from arcproLab.arcpro_env_cfg import ARCProEnvCfg
-
-def main():
-    # Setup environment
-    env_cfg = ARCProEnvCfg()
-    # Run loop
-    while simulation_app.is_running():
-        # Step and assert
-        ...
+def test_find_closest_waypoint():
+    tm = TrackManager()
+    # Mock waypoints
+    tm.waypoints = np.array([[0,0,0], [1,0,0], [2,0,0]])
+    idx = tm.find_closest_waypoint(np.array([0.9, 0.1, 0]))
+    assert idx == 1
 ```
 
 **Patterns:**
-- **Fixture-based Setup:** Using `@pytest.fixture` to initialize objects and provide synthetic test data.
-- **Dependency Mocking:** Injecting mocks into `sys.modules` to decouple tests from the heavy Isaac Sim environment.
-- **Verification Scripts:** Comprehensive scripts that run the full simulation loop to verify physics stability and reward metrics.
+- **Unit Testing**: Standard pytest for logic without the full simulator.
+- **Metric Verification**: Use of dedicated scripts like `verify_metric.py` to check physics (e.g., robot mass, settled Z position) within a live simulation.
 
 ## Mocking
 
-**Framework:** `unittest.mock.MagicMock` (standard library).
-
-**Patterns:**
-- Mocking `omni`, `omni.usd`, and `pxr` allows running unit tests without a GPU or an Isaac Sim installation.
-- Injecting synthetic data (e.g., waypoints) into components like `TrackManager` for isolated testing.
+**Framework:** `unittest.mock` (standard) or simple NumPy-based mocking of data.
 
 **What to Mock:**
-- External simulation libraries.
-- GPU-dependent operations in unit tests.
+- Waypoint data for `TrackManager`.
+- Robot state vectors for observation logic tests.
 
 **What NOT to Mock:**
-- Core mathematical logic.
-- Observation and reward calculations that rely on tensor operations.
+- Isaac Sim engine (use live verification instead).
 
 ## Fixtures and Factories
 
 **Test Data:**
-- Manual creation of small, predictable tensors for input/output verification.
-- Synthetic waypoints for track testing.
+- `track_centerline.npy` used as the primary source for navigation tests.
 
 **Location:**
-- Defined within the relevant `test_*.py` files or in a common `conftest.py` if shared.
+- `arcproLab/mdp/track_centerline.npy`.
 
 ## Coverage
 
-**Requirements:** None explicitly enforced, but critical logic paths (e.g., `TrackManager`) are prioritized for unit testing.
+**Requirements:** None enforced.
 
 **View Coverage:**
-- Standard `pytest-cov` can be used.
+```bash
+pytest --cov=arcproLab
+```
 
 ## Test Types
 
 **Unit Tests:**
-- **Scope:** Mathematical and logical functions (e.g., distance calculations, error metrics).
-- **Files:** `tests/test_track_manager.py`.
+- Tests for navigation math and track tracking logic in `tests/`.
 
 **Integration Tests:**
-- **Scope:** Interaction between multiple components, though often with mocked environment.
-- **Files:** Verification scripts like `arcproLab/scripts/verify_policy.py`.
+- Verification scripts that launch Isaac Sim to check asset loading and physical interactions.
 
-**E2E / Simulation Verification:**
-- **Scope:** Full-loop simulation runs to verify policy behavior in the USD environment.
-- **Files:** `verify_sim.sh`, `arcproLab/scripts/verify_metric.py`.
+**E2E Tests (Visual):**
+- Scripts like `verify_policy.py` that allow a human to observe the robot's performance.
 
 ## Common Patterns
 
-**Async Testing:**
-- None in standard unit tests. Isaac Sim scripts use synchronous loops (with `simulation_app.update()`).
+**Async Testing:** Not used (standard for synchronous simulation steps).
 
 **Error Testing:**
-- Typically handled via `try...except` in the source code rather than explicit test suites.
-
-**Physics Verification:**
-- Using `verify_metric.py` to ensure the robot falls naturally and tracks its own pose correctly under standard PhysX settings.
+- Use of `pytest.raises()` for expected errors.
 
 ---
 
-*Testing analysis: 2025-03-26*
+*Testing analysis: 2024-10-24*

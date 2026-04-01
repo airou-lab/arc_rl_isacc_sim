@@ -1,73 +1,65 @@
 # Technology Stack
 
-**Analysis Date:** 2025-03-21
+**Analysis Date:** 2024-10-24
 
 ## Languages
 
 **Primary:**
-- Python 3.12 - Core logic, training scripts, environment configuration, and inference.
-
-**Secondary:**
-- USD (Universal Scene Description) - Asset definition for robots (`arcproLab/assets/robot/F1Tenth_Metric.usd`) and environments (`openStreetUSD/no_graph_sim_cleaned.usd`).
-- Bash - Execution scripts for training and verification (`train.sh`, `run_gui_verify.sh`).
+- Python 3.11/3.12 - Core logic, simulation configuration, and training scripts.
 
 ## Runtime
 
 **Environment:**
-- NVIDIA Omniverse Isaac Sim - Underlying simulation engine.
-- Isaac Lab v1.0.1 - High-level framework for RL in Isaac Sim.
-- Ubuntu 22.04 - Recommended host OS for NVIDIA Omniverse.
+- NVIDIA Isaac Sim 4.0.0+ - Primary simulation engine.
+- NVIDIA IsaacLab - Framework for manager-based RL environments.
 
 **Package Manager:**
-- `pip` - Used for managing Python dependencies.
-- Lockfile: Missing (relying on `requirements.txt` and environment setup).
+- pip - Managed via `requirements.txt`.
+- Virtual Environment: `.venv/` (Python 3.12) and `venv/` (Python 3.11) observed.
 
 ## Frameworks
 
 **Core:**
-- Isaac Lab v1.0.1 - Used for environment management (`ManagerBasedRLEnv`) and scene configuration.
-- Stable Baselines3 (SB3) - Used for training high-level PPO policies (`arcproLab/scripts/train_policy.py`).
-- PyTorch (torch) - Backend for both SB3 and the vision-based ResNet18 model (`arcproLab/mdp/policy_wrapper.py`).
+- IsaacLab - Environment and scene management (`isaaclab.envs`, `isaaclab.managers`).
+- Stable Baselines3 (SB3) - RL algorithms and policy structures.
+- SB3-contrib - Recurrent PPO support for hierarchical policies.
 
 **Testing:**
-- pytest - Unit testing framework for core logic (`tests/test_track_manager.py`).
+- pytest - Unit and integration testing.
 
 **Build/Dev:**
-- flake8 - Python linting tool (used in CI).
-- GitHub Actions - CI pipeline for linting and unit tests (`.github/workflows/ci.yml`).
+- USD (Universal Scene Description) - Asset format for scenes and robots.
 
 ## Key Dependencies
 
 **Critical:**
-- `isaaclab` - Essential for all simulation-based logic.
-- `stable-baselines3` - Provides the PPO implementation for high-level control.
-- `torch` - Deep learning framework for inference and training.
-- `torchvision` - Used for ResNet18 model architecture and image transforms.
+- `torch` (PyTorch) - Neural network backend for policies.
+- `numpy` (<2.0) - Numerical computations and waypoint handling.
+- `sb3_contrib` - Required for `RecurrentPPO` and `RecurrentActorCriticPolicy`.
 
 **Infrastructure:**
-- `numpy < 2` - Numerical operations (constrained to < 2.0 for compatibility with Omniverse/Isaac Lab).
-- `matplotlib` - Data visualization for analytics and debugging.
+- `matplotlib` - Used for visual analytics and metric verification.
+- `isaaclab` - Provides the `ManagerBasedRLEnv` abstraction.
 
 ## Configuration
 
 **Environment:**
-- Managed via Python-based configuration classes using `@configclass` from `isaaclab.utils`.
-- Main config: `arcproLab/arcpro_env_cfg.py` for the simulation environment.
-- Robot config: `arcproLab/arcpro_robot_cfg.py` for the F1Tenth vehicle.
+- Configured via Python classes using `@configclass` decorator from `isaaclab.utils`.
+- Key configs: `arcproLab/arcpro_env_cfg.py` (Scene/MDP) and `arcproLab/arcpro_robot_cfg.py` (Robot).
 
 **Build:**
-- No standard build system (e.g., setuptools/poetry) detected. Uses absolute and relative path manipulation in scripts.
+- No formal build system; relies on Python scripts and USD asset loading.
 
 ## Platform Requirements
 
 **Development:**
-- NVIDIA GPU with RTX support (required for Isaac Sim).
-- NVIDIA Drivers compatible with CUDA 12.x.
-- Python 3.12.
+- Ubuntu 22.04+ (Standard for Isaac Sim).
+- NVIDIA GPU with RTX support (Required for Isaac Sim).
+- NVIDIA Driver 535+ (Recommended).
 
 **Production:**
-- Deployment target: Local workstation or server with NVIDIA GPU for real-time simulation.
+- Deployment to F1Tenth hardware (sim-to-real) planned via ROS 2 (referenced in `hierarchical_policy.py` comments).
 
 ---
 
-*Stack analysis: 2025-03-21*
+*Stack analysis: 2024-10-24*

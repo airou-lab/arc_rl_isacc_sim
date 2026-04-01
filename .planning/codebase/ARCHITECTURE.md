@@ -4,95 +4,86 @@
 
 ## Pattern Overview
 
-**Overall:** Manager-Based Reinforcement Learning (Isaac Lab)
+**Overall:** Manager-Based Reinforcement Learning Environment (IsaacLab pattern).
 
 **Key Characteristics:**
-- **Configuration-Driven:** Environment and robot properties are defined using structured configuration classes (`ARCProEnvCfg`, `ArcProRobotCfg`).
-- **MDP-Centric:** Core RL logic (observations, rewards, etc.) is decoupled from the simulation engine through manager-based abstractions.
-- **Metric Scaling:** The environment is standardized to 1:1 metric scale (meters) for all physical calculations and robot dimensions.
-- **Grounded Physics:** Uses a "drop-in" approach where the robot is spawned above the track with gravity enabled (`fix_root_link=False`), allowing for natural physics interactions.
+- **Modular MDP Components**: Rewards, observations, terminations, and events are decoupled into separate modules in `arcproLab/mdp/`.
+- **Configuration-Driven Simulation**: All environment and robot parameters are defined via `@configclass` structures in `arcpro_env_cfg.py` and `arcpro_robot_cfg.py`.
+- **Hierarchical Policy Architecture**: A two-stage policy that separates path planning (waypoint prediction) from low-level Ackermann control.
 
 ## Layers
 
 **Configuration Layer:**
-- Purpose: Defines the simulation scene, assets, and MDP structure.
-- Location: `arcproLab/arcpro_env_cfg.py`, `arcproLab/arcpro_robot_cfg.py`
-- Contains: `ARCProEnvCfg`, `ArcProRobotCfg`, `ARCProSceneCfg`.
-- Depends on: `isaaclab.utils.configclass`, `isaaclab.envs`, `isaaclab.assets`.
-- Used by: `ManagerBasedRLEnv`, training and verification scripts.
+- Purpose: Defines the scene, robot properties, and training hyperparameters.
+- Location: `arcproLab/arcpro_env_cfg.py`, `arcproLab/arcpro_robot_cfg.py`.
+- Contains: IsaacLab configuration classes.
+- Depends on: `isaaclab.utils.configclass`.
 
 **MDP Layer (Markov Decision Process):**
-- Purpose: Implements the RL interface: how the agent sees, acts, and is rewarded.
-- Location: `arcproLab/mdp/`
-- Contains: `observations.py`, `rewards.py`, `terminations.py`, `events.py`.
-- Depends on: `torch`, `isaaclab.managers`.
-- Used by: `ARCProEnvCfg` (to map functions to managers).
+- Purpose: Implements the RL interface (Observations, Rewards, etc.).
+- Location: `arcproLab/mdp/`.
+- Contains: `observations.py`, `rewards.py`, `terminations.py`, `events.py`, `track_manager.py`.
+- Used by: `arcpro_env_cfg.py`.
 
-**Service Layer (Track Management):**
-- Purpose: Provides geometric and topological information about the racing track.
-- Location: `arcproLab/mdp/track_manager.py`
-- Contains: `TrackManager` class.
-- Depends on: `torch`, `numpy`, `omni.usd` (for sampling).
-- Used by: `mdp/observations.py` to calculate lateral and heading errors.
+**Policy Layer:**
+- Purpose: Implements neural network architectures and RL algorithms.
+- Location: `arcproLab/policy_stack/`.
+- Contains: `policies/hierarchical_policy.py`, `agent/agent_node.py`.
+- Depends on: `stable_baselines3`, `sb3_contrib`, `torch`.
 
 **Asset Layer:**
-- Purpose: Provides 3D models and physics properties for the simulation.
-- Location: `arcproLab/assets/robot/`, `openStreetUSD/`
-- Contains: `F1Tenth_Metric.usd`, `no_graph_sim_cleaned.usd`.
-- Depends on: NVIDIA Omniverse USD format.
-- Used by: Configuration Layer (`ARCProSceneCfg`).
+- Purpose: Stores USD assets and pre-computed track data.
+- Location: `arcproLab/assets/`, `openStreetUSD/`.
+- Contains: `.usd` files for robot and track, `.npy` for waypoints.
 
 ## Data Flow
 
-**Inference Loop:**
+**Training Loop:**
 
-1. **Sim Update:** Isaac Sim advances physics and sensors.
-2. **Observations:** `ObservationManager` calls `get_telemetry_vector` (in `mdp/observations.py`), which queries `TrackManager` for track errors.
-3. **Policy:** Policy (SB3 or manual) receives the telemetry vector and outputs actions.
-4. **Actions:** `ActionManager` applies steering and throttle values to the robot's joints (`Joint_Steer_*`, `Joint_Drive_*`).
-5. **Physics:** `PhysX` engine calculates new robot pose based on joint forces and gravity.
+1. **Environment Initialization**: `arcpro_env_cfg.py` loads the track (`no_graph_sim_final.usd`) and robot (`F1Tenth_Metric.usd`).
+2. **Observation Gathering**: `mdp/observations.py` computes telemetry (12-float protocol) and vision input.
+3. **Policy Inference**: `policy_stack/policies/hierarchical_policy.py` predicts waypoint deviations and converts them to Ackermann commands.
+4. **Action Application**: Commands (steer, throttle) are sent back to the Isaac Sim actuators.
+5. **Reward & Termination**: `mdp/rewards.py` and `mdp/terminations.py` evaluate the state for training signal.
 
 **State Management:**
-- **Global State:** Managed by `ManagerBasedRLEnv`.
-- **Track State:** Managed by `TrackManager` (singleton), which loads/samples track waypoints once.
+- Handled by Isaac Sim's physics state and managed via IsaacLab's `ManagerBasedRLEnv`.
 
 ## Key Abstractions
 
 **TrackManager:**
-- Purpose: Centralizes track coordinate logic and error calculation.
-- Examples: `arcproLab/mdp/track_manager.py`
-- Pattern: Singleton/Service.
+- Purpose: Handles waypoint tracking, track distance calculations, and progress monitoring.
+- Examples: `arcproLab/mdp/track_manager.py`.
+- Pattern: Singleton/Utility used within MDP functions.
 
-**ArticulationCfg:**
-- Purpose: Defines the robot's physical structure, joints, and actuators.
-- Examples: `arcproLab/arcpro_robot_cfg.py`
-- Pattern: Isaac Lab Asset Configuration.
+**HierarchicalPolicy:**
+- Purpose: Separates planning from control.
+- Examples: `arcproLab/policy_stack/policies/hierarchical_policy.py`.
+- Pattern: Actor-Critic with internal latent representations and separate heads.
 
 ## Entry Points
 
 **Training Script:**
-- Location: `arcproLab/scripts/train_policy.py`
-- Triggers: CLI execution via `python`.
-- Responsibilities: Initializes environment, wraps for SB3, runs the PPO training loop.
+- Location: `arcproLab/scripts/train_policy.py` (via `train.sh`).
+- Responsibilities: Initializes the environment and starts the RL training loop.
 
 **Verification Script:**
-- Location: `arcproLab/verify.py`
-- Triggers: CLI execution or `run_gui_verify.sh`.
-- Responsibilities: Visual verification of robot spawning and basic movement in the environment.
+- Location: `arcproLab/scripts/verify_policy.py`.
+- Responsibilities: Runs inference with a trained model and visualizes metrics.
 
 ## Error Handling
 
-**Strategy:** Fail-fast on configuration errors, robust recovery for simulation NaNs.
+**Strategy:** Exception raising and standard Python logging.
 
 **Patterns:**
-- **NaN Sanitization:** Observations are checked for NaNs in `mdp/observations.py` and zeroed out to prevent policy collapse.
-- **Fallback Logic:** `TrackManager` uses a fallback straight-line track if waypoint files or USD sampling fails.
+- `warnings.warn` for non-critical sim issues.
+- `try-except` blocks in training loop to catch SB3-contrib specific RNN state errors.
 
 ## Cross-Cutting Concerns
 
-**Logging:** Uses `TensorBoard` via SB3 during training.
-**Validation:** Robot spawning and physics are validated in `verify_spawn.py` and `verify.py`.
-**Scaling:** All coordinates are in meters (Metric Transition Phase).
+**Logging:** Local TensorBoard logging via SB3.
+**Validation:** `track_manager.py` performs waypoint validation.
+**Metric Scaling:** Consistent 1.0x metric scale enforcement in `arcpro_env_cfg.py`.
 
 ---
 

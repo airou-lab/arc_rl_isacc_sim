@@ -1,57 +1,57 @@
 # External Integrations
 
-**Analysis Date:** 2025-03-21
+**Analysis Date:** 2024-10-24
 
 ## APIs & External Services
 
 **Simulation:**
-- NVIDIA Omniverse Isaac Sim - Simulation engine providing physics (PhysX) and rendering (RTX).
-- Isaac Lab v1.0.1 - Integration layer for RL tasks, environments, and managers.
-
-**RL Algorithms:**
-- Stable Baselines3 (SB3) - Third-party RL library integrated via `Sb3VecEnvWrapper` for training PPO policies (`arcproLab/scripts/train_policy.py`).
+- NVIDIA Isaac Sim - Real-time physics engine and renderer.
+  - SDK: `omni`, `isaacsim`.
+  - Auth: Local license / NVIDIA NGC.
 
 ## Data Storage
 
-**Databases:**
-- Not detected.
+**Assets:**
+- OpenStreetUSD - USD map tiles and road assets.
+  - Files: `openStreetUSD/no_graph_sim_final.usd`, `openStreetUSD/archive/`.
+  - Client: `UsdFileCfg` in `isaaclab.sim`.
 
-**File Storage:**
-- Local filesystem for checkpointing models (`logs/ppo/`) and loading pre-trained weights (`arcproLab/models/road_following_model.pth`).
-- USD files for static assets and environment scenes (`openStreetUSD/`, `arcproLab/assets/`).
+**Models:**
+- PyTorch Weights - Saved as `.pth` files.
+  - Files: `arcproLab/models/road_following_model.pth`.
+  - Library: `torch.load()`.
 
-**Caching:**
-- None detected.
+**Navigation Data:**
+- Waypoint Arrays - NumPy arrays containing track centerlines.
+  - Files: `arcproLab/mdp/track_centerline.npy`.
+  - Format: 3D coordinates (altitude-aware).
 
 ## Authentication & Identity
 
 **Auth Provider:**
-- None required for current local development.
+- None - Local execution.
 
 ## Monitoring & Observability
 
-**Error Tracking:**
-- Custom `TrackManager` for computing lateral and heading errors relative to a track centerline (`arcproLab/mdp/track_manager.py`).
-
 **Logs:**
-- TensorBoard integration via Stable Baselines3 for training progress monitoring (`train_policy.py`).
-- Console output and custom UI windows for real-time telemetry audit (`arcproLab/mdp/visual_analytics.py`).
+- Local TensorBoard - Standard for SB3 training.
+  - Location: `logs/ppo/`.
 
 ## CI/CD & Deployment
 
-**Hosting:**
-- Local NVIDIA RTX workstations.
-
 **CI Pipeline:**
-- GitHub Actions for linting and unit testing (`.github/workflows/ci.yml`).
+- GitHub Actions - Defined in `.github/workflows/ci.yml`.
+
+**Deployment Target:**
+- F1Tenth Hardware - Referenced via potential ROS 2 integration (`hierarchical_policy.py`).
 
 ## Environment Configuration
 
 **Required env vars:**
-- None detected. Configuration is primary class-based within the codebase (`arcproLab/arcpro_env_cfg.py`).
+- No explicit env vars in the current code; configuration is strictly through Python `configclass`.
 
 **Secrets location:**
-- Not applicable. No external API keys or secrets used in the current version.
+- Not detected / None.
 
 ## Webhooks & Callbacks
 
@@ -63,4 +63,4 @@
 
 ---
 
-*Integration audit: 2025-03-21*
+*Integration audit: 2024-10-24*
