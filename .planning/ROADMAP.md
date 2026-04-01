@@ -13,8 +13,9 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 - [x] **Phase 7: Revert to True Physics Mode** - Reverted to 1.0x metric scaling.
 - [ ] **Phase 5: Policy Integration** - Implement Hierarchical Policy and 12-float telemetry. (CURRENT FOCUS)
   - [ ] 05-01-PLAN.md — Integration of ResNet18 road-following policy. (PENDING USER APPROVAL / NEEDS TESTING)
-  - [~] 05-01-ASSET-VERIFY-PLAN.md — (STALE) Verification of USD assets; needs revisit for "Invisible Barriers".
-  - [ ] 05-02-PLAN.md — Implementation of Hierarchical Policy and 12-float telemetry. (WAITING USER CONFIRMATION)
+  - [ ] 05-02-01-PLAN.md — Advanced Telemetry & Curvature Calculation. (PLANNED)
+  - [ ] 05-02-02-PLAN.md — ResNet18 Fusion Policy Stack. (PLANNED)
+  - [ ] 05-02-03-PLAN.md — Randomized Lane-Aligned Spawning. (PLANNED)
 - [ ] **Phase 8: F1Tenth Physics Fidelity Restoration** - Restore damping/stiffness and high-fidelity parameters.
 
 ## Milestone 2: Autonomous Urban Navigation (v2.0)
