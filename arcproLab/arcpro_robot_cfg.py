@@ -16,6 +16,16 @@ class ArcProRobotCfg(ArticulationCfg):
     spawn: sim_utils.UsdFileCfg = sim_utils.UsdFileCfg(
         usd_path=os.path.join(os.path.dirname(__file__), "assets", "robot", "F1Tenth_Metric.usd"),
         scale=(1.0, 1.0, 1.0), 
+        rigid_props=sim_utils.RigidBodyPropertiesCfg(
+            disable_gravity=False,
+            retain_accelerations=False,
+            linear_damping=0.0,
+            angular_damping=0.0,
+            max_linear_velocity=1000.0,
+            max_angular_velocity=1000.0,
+            max_depenetration_velocity=100.0,
+        ),
+        mass_props=sim_utils.MassPropertiesCfg(mass=20.0), # Realistic 20kg for 8x scale
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=False,
             solver_position_iteration_count=32, # Precision solver
@@ -33,17 +43,17 @@ class ArcProRobotCfg(ArticulationCfg):
     actuators: dict = {
         "steering": ImplicitActuatorCfg(
             joint_names_expr=["Joint_Steer_.*"],
-            effort_limit_sim=100.0,
+            effort_limit_sim=1000.0,
             velocity_limit_sim=10.0,
-            stiffness=1000.0,
-            damping=10.0,
+            stiffness=2000.0, 
+            damping=100.0,
         ),
         "throttle": ImplicitActuatorCfg(
             joint_names_expr=["Joint_Drive_.*"],
-            effort_limit_sim=1000.0,
-            velocity_limit_sim=100.0,
+            effort_limit_sim=10000.0,
+            velocity_limit_sim=200.0,
             stiffness=0.0,
-            damping=10.0, 
+            damping=500.0, 
         ),
     }
 

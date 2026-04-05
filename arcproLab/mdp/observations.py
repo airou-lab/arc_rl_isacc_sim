@@ -18,7 +18,8 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     obs = torch.zeros((env.num_envs, 12), device=env.device)
     
     # Index 3: Forward Speed (m/s) - Local X velocity
-    obs[:, 3] = asset.data.root_lin_vel_b[:, 0]
+    # Normalize for 8x car (1m/s big car = 0.125m/s small car logic)
+    obs[:, 3] = asset.data.root_lin_vel_b[:, 0] * 0.125
     
     # Index 4: Yaw Rate (rad/s) - Local Z angular velocity
     obs[:, 4] = asset.data.root_ang_vel_b[:, 2]
@@ -41,7 +42,8 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
     
     lat_err, head_err = tm.compute_errors(asset.data.root_pos_w, yaw)
-    obs[:, 8] = lat_err
+    # Normalize lateral error for 8x car (meters relative to giant scale)
+    obs[:, 8] = lat_err * 0.125
     obs[:, 9] = head_err
     
     # Index 11: Total Distance (Accumulated)

@@ -71,9 +71,13 @@ class TrackManager:
         for prim in Usd.PrimRange(stage.GetPseudoRoot()):
             if prim.IsA(UsdGeom.Mesh):
                 prim_path = str(prim.GetPath())
-                # Filter for track meshes. 
-                # In arcpro_RL_open_street_sim.usd, road meshes are under /World/drivable_surfaces
-                is_track = any(keyword in prim_path.lower() for keyword in ["pavement", "road", "track", "drivable_surfaces"])
+                # Filter for actual road meshes only.
+                # Avoid 'track' keyword as it catches the entire root hierarchy (grass, terrain, etc)
+                is_track = any(keyword in prim_path.lower() for keyword in ["pavement", "road", "drivable_surfaces"])
+                
+                # Explicitly exclude grass and terrain
+                if any(k in prim_path.lower() for k in ["grass", "terrain", "field"]):
+                    is_track = False
                 
                 if is_track:
                     mesh = UsdGeom.Mesh(prim)
@@ -143,10 +147,10 @@ class TrackManager:
         
         wps = np.stack([resampled_x, resampled_y, yaws], axis=1)
         
-        # 5. Shift to Origin (match Isaac Lab env spawn at 0,0)
-        offset = wps[0, :2].copy()
-        wps[:, :2] -= offset
-        print(f"[TrackManager] Shifted waypoints by {offset} to center at (0,0)")
+        # 5. NO SHIFT (Keep in World Coordinates to match manual GUI placement)
+        # offset = wps[0, :2].copy()
+        # wps[:, :2] -= offset
+        # print(f"[TrackManager] Shifted waypoints by {offset} to center at (0,0)")
         
         self.waypoints = torch.tensor(wps, device=self.device, dtype=torch.float32)
         print(f"[TrackManager] Successfully sampled {len(self.waypoints)} waypoints from USD.")

@@ -13,10 +13,12 @@ from isaaclab.app import AppLauncher
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Verify the SB3 policy in the Isaac Lab environment.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
+parser.add_argument("--max_steps", type=int, default=20000, help="Maximum number of simulation steps.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 args_cli = parser.parse_args()
+args_cli.enable_cameras = True # Hardcode for TiledCamera support
 
 # launch omniverse app
 app_launcher = AppLauncher(args_cli)
@@ -53,7 +55,7 @@ def main():
     # setup configuration
     env_cfg = ARCProEnvCfg()
     env_cfg.scene.num_envs = args_cli.num_envs
-    env_cfg.enable_cameras = args_cli.enable_cameras
+    env_cfg.enable_cameras = True # FORCE ENABLE for policy
     env_cfg.__post_init__() 
     
     # setup environment
@@ -92,7 +94,7 @@ def main():
 
     # simulation loop
     count = 0
-    max_steps = 20000 
+    max_steps = args_cli.max_steps
     print(f"Starting simulation loop for {max_steps} steps...")
     while simulation_app.is_running() and count < max_steps:
         # Mandatory GUI update for real-time visibility

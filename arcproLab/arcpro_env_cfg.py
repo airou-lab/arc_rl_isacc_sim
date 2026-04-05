@@ -8,6 +8,10 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# Define base directories
+ARCPRO_LAB_DIR = os.path.dirname(os.path.abspath(__file__))
+USD_DIR = os.path.join(ARCPRO_LAB_DIR, "..", "openStreetUSD")
+
 from isaaclab.utils import configclass
 from isaaclab.envs import ManagerBasedRLEnvCfg, ViewerCfg
 from isaaclab.managers import ObservationGroupCfg, ObservationTermCfg as ObsTerm, ActionTermCfg as ActionTerm, RewardTermCfg as RewTerm, TerminationTermCfg as DoneTerm, SceneEntityCfg, EventTermCfg
@@ -41,33 +45,45 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.DistantLightCfg(intensity=3000.0, color=(1.0, 1.0, 1.0))
     )
 
-    # Track from no_graph_sim_final.usd (Stable grounded track from main branch)
+    # Ground Plane (Visual + Safety Backup)
+    ground_plane = AssetBaseCfg(
+        prim_path="/World/defaultGroundPlane",
+        spawn=sim_utils.GroundPlaneCfg(),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -1.0)),
+    )
+
+    # Track from no_graph_sim.usd (Original visuals, hardened in-place)
     track = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Track",
         spawn=sim_utils.UsdFileCfg(
-            usd_path=os.path.join(os.path.dirname(__file__), "..", "openStreetUSD", "no_graph_sim_final.usd"),
-            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True),
-            scale=(0.0825, 0.0825, 0.0825), 
+            usd_path=os.path.join(USD_DIR, "no_graph_sim.usd"),
+            collision_props=sim_utils.CollisionPropertiesCfg(
+                collision_enabled=True,
+                contact_offset=0.05, 
+            ),
+            scale=(1.0, 1.0, 1.0), 
         ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -1.25)),
+        # Shift track to align with manual spawn point and waypoints
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
     )
 
+
     
-    # Robot (1.0x Metric Scale, 0.5m drop above the track)
+    # Robot (8.0x Metric Scale based on GUI resize)
     robot = ARCPRO_ROBOT_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=ARCPRO_ROBOT_CFG.spawn.replace(
-            scale=(1.0, 1.0, 1.0),
+            scale=(8.0, 8.0, 8.0),
         ),
-        init_state=ARCPRO_ROBOT_CFG.init_state.replace(pos=(0.0, 0.0, 0.5)), 
+        init_state=ARCPRO_ROBOT_CFG.init_state.replace(pos=(-129.465, 46.927, 2.0)), 
     )
     
-    # Camera
+    # Camera (Scaled offset for 8x robot)
     tiled_camera = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraSensor",
         update_period=0.0,
         spawn=sim_utils.PinholeCameraCfg(),
-        offset=TiledCameraCfg.OffsetCfg(pos=(0.28, 0.0, 0.16), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
+        offset=TiledCameraCfg.OffsetCfg(pos=(2.24, 0.0, 1.28), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
         data_types=["rgb"], width=160, height=90,
     )
 
@@ -99,8 +115,8 @@ class TerminationCfg:
 
 @configclass
 class ARCProEnvCfg(ManagerBasedRLEnvCfg):
-    # Adjust viewer to see the scene at ground-level
-    viewer: ViewerCfg = ViewerCfg(eye=(15.0, 15.0, 15.0), lookat=(0.0, 0.0, 0.0))
+    # Adjust viewer to see the robot at its new world position
+    viewer: ViewerCfg = ViewerCfg(eye=(-120.0, 55.0, 10.0), lookat=(-129.0, 46.0, 0.0))
     
     enable_cameras: bool = True
     scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=1, env_spacing=1000.0)
@@ -121,10 +137,10 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
             bounce_threshold_velocity=0.5, 
             enable_ccd=True, 
             enable_stabilization=True,
-            gpu_max_rigid_contact_count=2**21,
-            gpu_max_rigid_patch_count=2**18,
-            gpu_heap_capacity=2**26,
-            gpu_found_lost_pairs_capacity=2**21,
+            gpu_max_rigid_contact_count=2**20, # 1M contacts
+            gpu_max_rigid_patch_count=2**17,
+            gpu_heap_capacity=2**26, # 64MB heap
+            gpu_found_lost_pairs_capacity=2**20,
         ),
     )
 
