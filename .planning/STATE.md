@@ -1,25 +1,27 @@
 # Project State: ARCPro RL v1.2-dev
 
 ## Current Milestone
-**Milestone 1: Physical Fidelity & Policy Foundation** (Modernization Phase)
+**Milestone 1: Physical Fidelity & Policy Foundation** (Training Stabilization)
 
 ## Current Phase
-**Phase 07: Gymnasium & Warning Resolution** (Research)
+**Phase 08: Training Loop Stabilization** (Research)
 
 ## Summary
-Completed core physics restoration and policy integration. Rolling back experimental navigation features to focus on codebase modernization, including a full Gymnasium migration and resolution of simulation warnings (PhysX, Fabric, USD).
+Successfully modernized the Gymnasium stack and resolved critical USD reference noise. The simulation environment is now "hygienic," with AWD motion verified. The current focus is resolving "teleportation" issues during resets by fixing the raycast-to-road mesh detection in the event manager.
 
 ## Recent Activity
-- **Physics Restored**: Verified 20kg mass and 5.0 damping constants.
-- **Merge Complete**: Synchronized `main` with all Phase 05/06 completions.
-- **Rollback**: Removed experimental RoadGraph logic to clear the path for modernization.
+- **Sub-Phase 07-01 Complete**: Cleaned `no_graph_sim.usd`, fixed signposts, and updated `SimulationCfg`.
+- **API Modernization**: Standardized all imports to `gymnasium` and added legacy noise filters.
+- **Verification**: Confirmed clean startup logs (no unresolved references).
 
 ## Key Achievements
-- **Robust Spawning**: Raycast-based lane snapping is active and stable.
-- **AWD Baseline**: Established reliable 4-wheel drive power for the 1.0x metric scale.
+- **Hygienic USDs**: Production stages are free of broken F1Tenth and Signpost links.
+- **Standardized API**: Codebase is compliant with Gymnasium 1.0+ standards.
+- **Stable PhysX**: Disabled CCD and enabled external force iterations for smoother heavy-robot motion.
 
 ## Planned Tasks
-- [ ] **Phase 07: Gymnasium & Warning Resolution** - Modernize stack and clean terminal output.
-  - [x] **Todo**: Fix Isaac Lab RL Import Error (`fix-isaaclab-rl-import.md`)
 - [ ] **Phase 08: Training Loop Stabilization** - Finalize reset logic and torque verification.
+  - [ ] **Task 1**: Fix Raycast Mesh Detection (Fix the "FAILED to find road mesh" error).
+  - [ ] **Task 2**: Torque Verification (Ensure AWD produces expected acceleration).
+  - [ ] **Task 3**: Reward Balance (Verify reward ranges are not causing early termination).
 - [ ] **Phase 09: Intersection Navigation** - Implement graph-based routing.

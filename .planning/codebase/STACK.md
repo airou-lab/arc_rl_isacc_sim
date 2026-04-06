@@ -1,6 +1,6 @@
 # Technology Stack
 
-**Analysis Date:** 2025-04-04
+**Analysis Date:** 2025-04-05
 
 ## Languages
 
@@ -11,11 +11,12 @@
 
 **Environment:**
 - NVIDIA Isaac Sim 4.0.0+ - Primary simulation engine.
-- NVIDIA IsaacLab - Framework for manager-based RL environments.
+- NVIDIA IsaacLab 1.0.0+ - Framework for manager-based RL environments.
+- Gymnasium 1.0.0+ (1.2.3 detected) - Standard RL interface.
 
 **Package Manager:**
 - pip - Managed via `requirements.txt`.
-- Virtual Environment: `.venv/` (Python 3.12) and `venv/` (Python 3.11) observed.
+- Virtual Environment: `venv/` (Python 3.11/3.12) observed.
 
 ## Frameworks
 
@@ -29,7 +30,7 @@
 
 **Build/Dev:**
 - USD (Universal Scene Description) - Asset format for scenes and robots.
-- **Robot Scale**: 1.0x metric scale (canonical) for F1Tenth assets. Note: `arcpro_env_cfg.py` currently uses an 8.0x override for scene matching.
+- **Robot Scale**: 1.0x metric scale (canonical) for F1Tenth assets. Note: `arcpro_env_cfg.py` uses an 8.0x override for scene matching in GUI Mode.
 
 ## Key Dependencies
 
@@ -37,6 +38,7 @@
 - `torch` (PyTorch) - Neural network backend for policies.
 - `numpy` (<2.0) - Numerical computations and absolute waypoint handling.
 - `sb3_contrib` - Required for `RecurrentPPO` and `RecurrentActorCriticPolicy`.
+- `isaaclab_rl.sb3` - Fixed import path for `Sb3VecEnvWrapper`.
 
 **Infrastructure:**
 - `matplotlib` - Used for visual analytics and metric verification.
@@ -49,8 +51,12 @@
 - **Telemetry Protocol**: Standardized 12-float vector mapping in `mdp/observations.py`.
 - Key configs: `arcproLab/arcpro_env_cfg.py` (Scene/MDP) and `arcproLab/arcpro_robot_cfg.py` (Robot).
 
-**Build:**
-- No formal build system; relies on Python scripts and USD asset loading.
+**Physics Optimizations (Phase 07):**
+- **Simulation Frequency**: 200Hz (`dt=0.005`).
+- **Render Frequency**: 25Hz (`render_interval=8`, `decimation=8`).
+- **Solver**: PhysX TGS (`solver_type=1`).
+- **Accuracy**: 8 position / 4 velocity iterations.
+- **Stability**: `enable_external_forces_every_iteration=True` for smoother AWD (Four-Wheel Drive) motion.
 
 ## Platform Requirements
 
@@ -66,4 +72,4 @@
 
 ---
 
-*Stack analysis: 2025-04-04*
+*Stack analysis: 2025-04-05*

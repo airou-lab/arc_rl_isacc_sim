@@ -1,6 +1,6 @@
 # Codebase Concerns
 
-**Analysis Date:** 2025-04-04
+**Analysis Date:** 2025-04-05
 
 ## Tech Debt
 
@@ -22,7 +22,11 @@
 - Issue: Tile junctions in OSM-generated tracks sometimes have "invisible barriers" or collisions.
 - Files: `openStreetUSD/` assets.
 - Trigger: Robot crossing a tile boundary.
-- Workaround: Use of "hardened" or "cleaned" USD variants.
+- Workaround: Phase 07 "Hardening" process applied via `repair_usd_references.py`.
+- Status: Partially mitigated, still present in some legacy OSM assets.
+
+**[Dead F1Tenth Folder Reference]:**
+- Status: **Resolved in Phase 07** via `repair_usd_references.py` which removes the missing `/World/F1Tenth` prim.
 
 ## Security Considerations
 
@@ -34,7 +38,7 @@
 **[PhysX Solver Overhead]:**
 - Problem: The use of TGS (Task Graph Scheduler) and 8/4 iterations is balanced but might be slow for large numbers of environments.
 - Files: `arcproLab/arcpro_env_cfg.py`.
-- Cause: Required for stable 20kg dynamics at high frequency.
+- Cause: Required for stable 20kg dynamics at high frequency (200Hz).
 - Improvement path: Experiment with reduced iterations or simplified collision hulls.
 
 ## Fragile Areas
@@ -43,6 +47,11 @@
 - Files: `arcproLab/mdp/track_centerline.npy`.
 - Why fragile: If the track USD is updated but the centerline is not re-generated, navigation will fail.
 - Test coverage: `tests/test_track_manager.py` checks logic but not data validity.
+
+**[USD External References]:**
+- Files: `openStreetUSD/no_graph_sim.usd`.
+- Why fragile: Historically pointed to absolute paths or missing assets (signposts).
+- Mitigation: `repair_usd_references.py` redirects these to local placeholders.
 
 ## Scaling Limits
 
@@ -68,4 +77,4 @@
 
 ---
 
-*Concerns audit: 2025-04-04*
+*Concerns audit: 2025-04-05*
