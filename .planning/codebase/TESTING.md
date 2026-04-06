@@ -1,6 +1,6 @@
 # Testing Patterns
 
-**Analysis Date:** 2024-10-24
+**Analysis Date:** 2025-04-04
 
 ## Test Framework
 
@@ -47,7 +47,7 @@ def test_get_telemetry_vector(env):
 
 **Patterns:**
 - **Unit Testing**: Standard pytest for logic without the full simulator.
-- **Metric Verification**: Use of dedicated scripts like `verify_metric.py` to check physics (e.g., **0.5x robot scale**, **3.5kg mass**, settled Z position) within a live simulation.
+- **Metric Verification**: Use of dedicated scripts like `verify_metric.py` to check physics (e.g., **1.0x metric scale**, **20kg mass**, **4WD configuration**) within a live simulation.
 
 ## Mocking
 
@@ -83,7 +83,7 @@ pytest --cov=arcproLab
 - Tests for navigation math and track tracking logic in `tests/`.
 
 **Integration Tests:**
-- Verification scripts that launch Isaac Sim to check asset loading and physical interactions at **0.5x scale**.
+- Verification scripts that launch Isaac Sim to check asset loading and physical interactions at **1.0x metric scale**.
 
 **E2E Tests (Visual):**
 - Scripts like `verify_policy.py` that allow a human to observe the robot's performance using the **12-float protocol UI**.
@@ -97,4 +97,4 @@ pytest --cov=arcproLab
 
 ---
 
-*Testing analysis: 2024-10-24*
+*Testing analysis: 2025-04-04*

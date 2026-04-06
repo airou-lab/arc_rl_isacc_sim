@@ -1,6 +1,6 @@
 # External Integrations
 
-**Analysis Date:** 2024-10-24
+**Analysis Date:** 2025-04-04
 
 ## APIs & External Services
 
@@ -17,12 +17,13 @@
 
 **Assets:**
 - OpenStreetUSD - USD map tiles and road assets.
-  - Files: `openStreetUSD/no_graph_sim_final.usd`.
+  - Files: `openStreetUSD/no_graph_sim.usd`.
   - Client: `UsdFileCfg` in `isaaclab.sim`.
 
 **Robot Asset:**
-- **F1Tenth_Metric.usd**: 0.5x scale metric robot.
+- **F1Tenth_Metric.usd**: 1.0x metric robot asset.
   - Location: `arcproLab/assets/robot/`.
+  - Config: `arcproLab/arcpro_robot_cfg.py`.
 
 **Models:**
 - PyTorch Weights - Saved as `.pth` files.
@@ -51,7 +52,7 @@
 - GitHub Actions - Defined in `.github/workflows/ci.yml`.
 
 **Deployment Target:**
-- F1Tenth Hardware - Physical robot using **Front-Wheel Drive (FWD)**.
+- F1Tenth Hardware - Physical robot using **4WD (Four-Wheel Drive)** and **20kg** mass.
 
 ## Environment Configuration
 
@@ -71,4 +72,4 @@
 
 ---
 
-*Integration audit: 2024-10-24*
+*Integration audit: 2025-04-04*

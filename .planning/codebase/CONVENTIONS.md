@@ -1,6 +1,6 @@
 # Coding Conventions
 
-**Analysis Date:** 2024-10-24
+**Analysis Date:** 2025-04-04
 
 ## Naming Patterns
 
@@ -41,10 +41,13 @@ All observation vectors returned by `get_telemetry_vector()` in `arcproLab/mdp/o
 ## Physical Conventions
 
 **Robot Scale:**
-- Use **0.5x scale** for all F1Tenth robot assets to match the metric environment.
+- Use **1.0x metric scale** for all F1Tenth robot assets to match the metric environment.
 
 **Drive Configuration:**
-- **Front-Wheel Drive (FWD)**: Only `Joint_Drive_FL` and `Joint_Drive_FR` should be used for acceleration.
+- **4WD (Four-Wheel Drive)**: All wheels (`Joint_Drive_.*`) are used for acceleration to maintain traction for the 20kg chassis.
+
+**Mass:**
+- Standardized at **20.0kg** for the F1Tenth_Metric robot to ensure realistic inertia and suspension behavior.
 
 **Waypoint Alignment:**
 - Use **Absolute Waypoint Alignment**. Do not shift waypoints to origin; track them relative to world coordinates for multi-agent and large-map compatibility.
@@ -82,4 +85,4 @@ All observation vectors returned by `get_telemetry_vector()` in `arcproLab/mdp/o
 
 ---
 
-*Convention analysis: 2024-10-24*
+*Convention analysis: 2025-04-04*

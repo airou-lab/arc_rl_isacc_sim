@@ -1,6 +1,6 @@
 # Codebase Structure
 
-**Analysis Date:** 2024-10-24
+**Analysis Date:** 2025-04-04
 
 ## Directory Layout
 
@@ -41,7 +41,7 @@
 
 **trash/tools/:**
 - Purpose: Infrastructure and asset preparation scripts.
-- Contains: USD scaling (0.5x), centering, and auditing tools.
+- Contains: USD scaling (1.0x), centering, and auditing tools.
 - Key files: `finalize_track_gsd.py`, `check_map_scale.py`.
 
 ## Key File Locations
@@ -51,8 +51,8 @@
 - `arcproLab/scripts/verify_policy.py`: Inference and verification entry point.
 
 **Configuration:**
-- `arcproLab/arcpro_env_cfg.py`: Environment and scene configuration (0.5x scale).
-- `arcproLab/arcpro_robot_cfg.py`: Robot physical property configuration (FWD).
+- `arcproLab/arcpro_env_cfg.py`: Environment and scene configuration (1.0x metric scale).
+- `arcproLab/arcpro_robot_cfg.py`: Robot physical property configuration (4WD, 20kg mass).
 
 **Core Logic:**
 - `arcproLab/mdp/track_manager.py`: Critical **absolute waypoint** navigation logic.
@@ -94,4 +94,4 @@
 
 ---
 
-*Structure analysis: 2024-10-24*
+*Structure analysis: 2025-04-04*

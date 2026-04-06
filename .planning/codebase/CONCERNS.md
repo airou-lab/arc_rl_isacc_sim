@@ -1,20 +1,20 @@
 # Codebase Concerns
 
-**Analysis Date:** 2024-10-24
+**Analysis Date:** 2025-04-04
 
 ## Tech Debt
 
-**[Scale Discrepancy]:**
-- Issue: Documentation reflects **0.5x robot scale** and **Front-Wheel Drive (FWD)**, but `arcpro_env_cfg.py` and `arcpro_robot_cfg.py` may still contain `scale=(1.0, 1.0, 1.0)` and `Joint_Drive_.*` (4WD) references.
-- Files: `arcproLab/arcpro_env_cfg.py`, `arcproLab/arcpro_robot_cfg.py`.
-- Impact: Potential confusion during implementation or if assets are swapped without updating the config classes.
-- Fix approach: Update config classes to explicitly use 0.5x scale and restrict throttle to `Joint_Drive_FL/FR`.
+**[Scale Discrepancy (Visual vs Physics)]:**
+- Issue: While physics and assets are configured for **1.0x metric scale**, `arcpro_env_cfg.py` uses an **8.0x scale override** for the robot to match the visual scale of the current track USD.
+- Files: `arcproLab/arcpro_env_cfg.py`.
+- Impact: Inconsistency between "True Metric" intent and actual simulation parameters. Telemetry might require scaling factors if world units don't match meters.
+- Fix approach: Re-export track USD at true 1.0x metric scale and revert robot scale to 1.0x in environment config.
 
-**[Track Origin Shift]:**
-- Issue: `TrackManager` currently contains logic to shift waypoints to the origin.
-- Files: `arcproLab/mdp/track_manager.py`.
-- Impact: Incompatible with **Absolute Waypoint Alignment** required for multi-map/large-scale simulation.
-- Fix approach: Remove the coordinate shift in `sample_waypoints_from_usd()` and ensure `track_centerline.npy` contains absolute world coordinates.
+**[Actuator Effort Limits]:**
+- Issue: `effort_limit_sim` for 4WD throttle is set to 2000.0, which might be extremely high even for a 20kg robot.
+- Files: `arcproLab/arcpro_robot_cfg.py`.
+- Impact: Over-powered motors can lead to unrealistic acceleration or physics instability if not properly tuned.
+- Fix approach: Calibrate effort limits based on real F1Tenth motor specifications adjusted for the 20kg mass.
 
 ## Known Bugs
 
@@ -22,7 +22,7 @@
 - Issue: Tile junctions in OSM-generated tracks sometimes have "invisible barriers" or collisions.
 - Files: `openStreetUSD/` assets.
 - Trigger: Robot crossing a tile boundary.
-- Workaround: Using `no_graph_sim_final.usd` which is flattened and cleaned.
+- Workaround: Use of "hardened" or "cleaned" USD variants.
 
 ## Security Considerations
 
@@ -31,11 +31,11 @@
 
 ## Performance Bottlenecks
 
-**[Solvers]:**
-- Problem: High precision solvers (32 pos, 16 vel iterations) are enabled for the robot.
-- Files: `arcproLab/arcpro_robot_cfg.py`.
-- Cause: Required for stable physics at 0.5x scale.
-- Improvement path: Optimize collision geometry (using primitive hulls) to reduce simulation load.
+**[PhysX Solver Overhead]:**
+- Problem: The use of TGS (Task Graph Scheduler) and 8/4 iterations is balanced but might be slow for large numbers of environments.
+- Files: `arcproLab/arcpro_env_cfg.py`.
+- Cause: Required for stable 20kg dynamics at high frequency.
+- Improvement path: Experiment with reduced iterations or simplified collision hulls.
 
 ## Fragile Areas
 
@@ -48,7 +48,7 @@
 
 **[Hierarchical Bottleneck]:**
 - Current capacity: Efficient path planning at 0.5m spacing.
-- Limit: Very high-speed cornering where waypoint density may be insufficient.
+- Limit: Very high-speed cornering where waypoint density may be insufficient for a 20kg vehicle.
 - Scaling path: Dynamically adjust `num_waypoints` or `waypoint_horizon` based on vehicle speed.
 
 ## Missing Critical Features
@@ -60,12 +60,12 @@
 
 ## Test Coverage Gaps
 
-**[12-Float Protocol]:**
-- What's not tested: The observation mapping is complex and prone to index-off-by-one errors.
-- Files: `arcproLab/mdp/observations.py`.
-- Risk: Incorrect telemetry leads to policy instability.
-- Priority: High.
+**[4WD Telemetry Sync]:**
+- What's not tested: Verification that all 4 wheels are contributing correctly to the `SPEED` observation.
+- Files: `arcproLab/mdp/observations.py`, `arcproLab/mdp/rewards.py`.
+- Risk: Incorrect speed calculation if only front/rear wheels are sampled.
+- Priority: Medium.
 
 ---
 
-*Concerns audit: 2024-10-24*
+*Concerns audit: 2025-04-04*

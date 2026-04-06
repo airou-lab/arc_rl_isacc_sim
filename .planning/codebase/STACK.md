@@ -1,6 +1,6 @@
 # Technology Stack
 
-**Analysis Date:** 2024-10-24
+**Analysis Date:** 2025-04-04
 
 ## Languages
 
@@ -29,7 +29,7 @@
 
 **Build/Dev:**
 - USD (Universal Scene Description) - Asset format for scenes and robots.
-- **Robot Scale**: 0.5x metric scale for F1Tenth assets.
+- **Robot Scale**: 1.0x metric scale (canonical) for F1Tenth assets. Note: `arcpro_env_cfg.py` currently uses an 8.0x override for scene matching.
 
 ## Key Dependencies
 
@@ -60,9 +60,10 @@
 - NVIDIA Driver 535+ (Recommended).
 
 **Production:**
-- Deployment to F1Tenth hardware (sim-to-real) at 0.5x scale.
-- Front-Wheel Drive (FWD) actuator configuration.
+- Deployment to F1Tenth hardware (sim-to-real) at 1.0x metric scale.
+- **4WD (Four-Wheel Drive)** actuator configuration.
+- **20kg Mass** constant for realistic vehicle dynamics.
 
 ---
 
-*Stack analysis: 2024-10-24*
+*Stack analysis: 2025-04-04*

@@ -29,11 +29,12 @@ import mdp.observations as mdp_obs, mdp.rewards as mdp_rew, mdp.terminations as 
 class EventCfg:
     """Configuration for events."""
 
-    reset_robot_to_lane = EventTermCfg(
-        func=mdp_events.reset_robot_to_lane,
-        mode="reset",
-        params={"asset_cfg": SceneEntityCfg("robot")},
-    )
+    # reset_robot_to_lane = EventTermCfg(
+    #     func=mdp_events.reset_robot_to_lane,
+    #     mode="reset",
+    #     params={"asset_cfg": SceneEntityCfg("robot")},
+    # )
+    pass
 
 @configclass
 class ARCProSceneCfg(InteractiveSceneCfg):
@@ -57,13 +58,9 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/Track",
         spawn=sim_utils.UsdFileCfg(
             usd_path=os.path.join(USD_DIR, "no_graph_sim.usd"),
-            collision_props=sim_utils.CollisionPropertiesCfg(
-                collision_enabled=True,
-                contact_offset=0.05, 
-            ),
             scale=(1.0, 1.0, 1.0), 
         ),
-        # Shift track to align with manual spawn point and waypoints
+        # Use origin position to match USD world coordinates
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
     )
 
@@ -73,9 +70,13 @@ class ARCProSceneCfg(InteractiveSceneCfg):
     robot = ARCPRO_ROBOT_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=ARCPRO_ROBOT_CFG.spawn.replace(
+            usd_path=os.path.join(ARCPRO_LAB_DIR, "assets", "robot", "F1Tenth_Metric.usd"),
             scale=(8.0, 8.0, 8.0),
         ),
-        init_state=ARCPRO_ROBOT_CFG.init_state.replace(pos=(-129.465, 46.927, 2.0)), 
+        init_state=ARCPRO_ROBOT_CFG.init_state.replace(
+            pos=(-129.465, 46.927, 2.0),
+            rot=(0.7071, 0.0, 0.0, -0.7071) # -90 degrees Z-up
+        ), 
     )
     
     # Camera (Scaled offset for 8x robot)
@@ -97,7 +98,8 @@ class ObservationCfg:
     @configclass
     class VisualCfg(ObservationGroupCfg):
         tiled_camera = ObsTerm(func=mdp.image, params={"sensor_cfg": SceneEntityCfg("tiled_camera"), "normalize": False})
-    visual: VisualCfg = VisualCfg()
+    
+    visual: VisualCfg | None = VisualCfg()
 
 @configclass
 class ActionCfg:
@@ -118,7 +120,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     # Adjust viewer to see the robot at its new world position
     viewer: ViewerCfg = ViewerCfg(eye=(-120.0, 55.0, 10.0), lookat=(-129.0, 46.0, 0.0))
     
-    enable_cameras: bool = True
+    enable_cameras: bool = False
     scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=1, env_spacing=1000.0)
     observations: ObservationCfg = ObservationCfg()
     actions: ActionCfg = ActionCfg()

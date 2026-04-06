@@ -1,20 +1,20 @@
 # Architecture
 
-**Analysis Date:** 2024-10-24
+**Analysis Date:** 2025-04-04
 
 ## Pattern Overview
 
 **Overall:** Manager-Based Reinforcement Learning Environment (IsaacLab pattern) with Hierarchical Planning.
 
 **Key Characteristics:**
-- **Hierarchical Policy Architecture**: A two-stage policy that separates path planning (waypoint prediction) from low-level Ackermann control.
-- **True Physics Integration**: Robot operates at 0.5x metric scale with realistic mass (3.5kg) and front-wheel drive (FWD) dynamics.
+- **Hierarchical Policy Architecture**: A two-stage policy that separates path planning (waypoint prediction) from low-level Ackermann/4WD control.
+- **True Physics Integration**: Robot operates at **1.0x metric scale** with realistic **20kg mass** and **4WD (Four-Wheel Drive)** dynamics.
 - **Vectorized Telemetry**: A standardized 12-float protocol for vehicle state and navigation intent.
 
 ## Layers
 
 **Configuration Layer:**
-- Purpose: Defines the scene, robot properties (0.5x scale), and training hyperparameters.
+- Purpose: Defines the scene, robot properties (1.0x metric), and training hyperparameters.
 - Location: `arcproLab/arcpro_env_cfg.py`, `arcproLab/arcpro_robot_cfg.py`.
 - Contains: IsaacLab configuration classes.
 - Depends on: `isaaclab.utils.configclass`.
@@ -34,16 +34,16 @@
 **Asset Layer:**
 - Purpose: Stores USD assets and pre-computed track data.
 - Location: `arcproLab/assets/`, `openStreetUSD/`.
-- Contains: `F1Tenth_Metric.usd` (0.5x scale), `no_graph_sim_final.usd` (stable track), `track_centerline.npy` (absolute waypoints).
+- Contains: `F1Tenth_Metric.usd` (1.0x metric), `no_graph_sim.usd` (primary track), `track_centerline.npy` (absolute waypoints).
 
 ## Data Flow
 
 **Training Loop:**
 
-1. **Environment Initialization**: `arcpro_env_cfg.py` loads the track and robot (0.5x scale).
+1. **Environment Initialization**: `arcpro_env_cfg.py` loads the track and robot (1.0x metric).
 2. **Observation Gathering**: `mdp/observations.py` computes the **12-float telemetry vector** and vision input.
 3. **Policy Inference**: `policy_stack/policies/hierarchical_policy.py` predicts waypoint deviations from kinematic anchors and converts them to Ackermann commands.
-4. **Action Application**: Commands (steer, throttle) are sent to the **Front-Wheel Drive** actuators (`Joint_Drive_FL`, `Joint_Drive_FR`).
+4. **Action Application**: Commands (steer, throttle) are sent to the **4WD** actuators (`Joint_Drive_.*`).
 5. **Reward & Termination**: `mdp/rewards.py` evaluates performance using Gaussian-weighted lateral error rewards.
 
 **State Management:**
@@ -83,8 +83,9 @@
 
 **Logging:** Local TensorBoard logging via SB3.
 **Validation:** `track_manager.py` performs absolute waypoint validation.
-**Metric Scaling:** Consistent **0.5x robot scale** enforcement across assets and configuration.
+**Metric Scaling:** Consistent **1.0x metric scale** enforcement across assets and configuration (with 8x visual override in scene if necessary).
+**4WD Dynamics:** All four wheels are actuated for throttle, improving traction and stability for the **20kg** chassis.
 
 ---
 
-*Architecture analysis: 2024-10-24*
+*Architecture analysis: 2025-04-04*
