@@ -95,6 +95,7 @@ def main():
     # simulation loop
     count = 0
     max_steps = args_cli.max_steps
+    actions = torch.zeros((env.num_envs, 6), device=env.device)
     print(f"Starting simulation loop for {max_steps} steps...")
     while simulation_app.is_running() and count < max_steps:
         # Mandatory GUI update for real-time visibility
@@ -114,59 +115,60 @@ def main():
             if images is not None:
                 # Action shape is 6 (2 steering + 4 throttle)
                 actions = torch.zeros((env.num_envs, 6), device=env.device)
-                
+
                 for i in range(env.num_envs):
                     img = images[i]
                     prediction = policy.predict(img)
                     steering, throttle = policy.get_action(prediction)
-                    
+
                     # Target velocity (rad/s)
                     target_rad_s = 40.0 # ~2.0 m/s
-                    
+
                     # Steering (Indices 0, 1) -> Joint_Steer_L, Joint_Steer_R
                     actions[i, 0] = steering
                     actions[i, 1] = steering
-                    
+
                     # Throttle (Indices 2, 3, 4, 5) -> Joint_Drive_FL, FR, RL, RR
+                    # FWD: Only drive FL and FR
                     actions[i, 2] = -target_rad_s # FL
                     actions[i, 3] = -target_rad_s # FR
-                    actions[i, 4] = -target_rad_s # RL
-                    actions[i, 5] = -target_rad_s # RR
-                    
-                    # Telemetry for env 0
-                    if i == 0:
-                         pos = env.scene["robot"].data.root_pos_w
-                         vel = env.scene["robot"].data.root_lin_vel_w
-                         v_norm = torch.linalg.norm(vel[0]).item()
-                         
-                         lat_err_val = "N/A"
-                         if tm is not None:
-                             q = env.scene["robot"].data.root_quat_w
-                             yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
-                             lat_err, head_err = tm.compute_errors(pos, yaw)
-                             lat_err_val = f"{lat_err[0].item():.3f}m"
-                         
-                         # Audit joint velocities
-                         jv = env.scene["robot"].data.joint_vel[0, drive_indices]
-                         jv_drive = jv.cpu().numpy().tolist()
-                         
-                         if count % 20 == 0:
-                             print(f"Step {count:4d} | Pos: ({pos[0,0]:.2f}, {pos[0,1]:.2f}, {pos[0,2]:.3f}) | Vel: {v_norm:.2f}m/s | LatErr: {lat_err_val}")
-                             print(f"          | Steer: {steering:.3f} | JV_Drive: {jv_drive}")
-                         
-                         if telemetry is not None:
-                             telemetry.update(count, v_norm, steering, lat_err_val, jv_drive)
-                
-                # step environment
-                obs, _, _, _, _ = env.step(actions)
+                    actions[i, 4] = 0.0 # RL (Idle)
+                    actions[i, 5] = 0.0 # RR (Idle)
             else:
-                # Fallback: Just drive forward if no camera
+                # FALLBACK: Constant forward if camera failed
                 actions = torch.zeros((env.num_envs, 6), device=env.device)
-                actions[:, 2:] = -40.0
-                obs, _, _, _, _ = env.step(actions)
-                
-                if count % 20 == 0:
-                    print(f"Step {count:4d} | Driving Blind (No visual obs)")
+                actions[:, 2:4] = -40.0 # Drive FL and FR at constant speed
+
+            # step environment
+            obs, _, _, _, _ = env.step(actions)
+            # Telemetry for env 0 (Outside of image block for visibility)
+            if count % 20 == 0:
+                 pos = env.scene["robot"].data.root_pos_w
+                 vel = env.scene["robot"].data.root_lin_vel_w
+                 v_norm = torch.linalg.norm(vel[0]).item()
+                 
+                 lat_err_val = "N/A"
+                 if tm is not None:
+                     q = env.scene["robot"].data.root_quat_w
+                     yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
+                     lat_err, head_err = tm.compute_errors(pos, yaw)
+                     lat_err_val = f"{lat_err[0].item():.3f}m"
+                 
+                 # Audit joint velocities
+                 jv = env.scene["robot"].data.joint_vel[0, drive_indices]
+                 jv_drive = jv.cpu().numpy().tolist()
+                 
+                 # Steering value (from last action)
+                 steer_val = actions[0, 0].item()
+                 
+                 print(f"Step {count:4d} | Pos: ({pos[0,0]:.2f}, {pos[0,1]:.2f}, {pos[0,2]:.3f}) | Vel: {v_norm:.2f}m/s | LatErr: {lat_err_val}")
+                 print(f"          | Steer: {steer_val:.3f} | JV_Drive: {jv_drive}")
+                 
+                 if telemetry is not None:
+                     telemetry.update(count, v_norm, steer_val, lat_err_val, jv_drive)
+            
+            if images is None and count % 20 == 0:
+                print(f"  [!] Note: Driving Blind (No visual obs)")
         
         count += 1
 

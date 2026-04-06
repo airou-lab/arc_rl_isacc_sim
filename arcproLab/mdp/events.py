@@ -33,33 +33,36 @@ def reset_robot_to_lane(env: ManagerBasedRLEnv, env_ids: torch.Tensor, asset_cfg
     
     for i, env_id in enumerate(env_ids):
         found_road = False
-        max_retries = 20
+        max_retries = 50 # Even more retries
         
         for attempt in range(max_retries):
             wp_idx = torch.randint(0, len(tm.waypoints), (1,), device=env.device).item()
             wp = tm.waypoints[wp_idx]
             x, y = float(wp[0]), float(wp[1])
             
-            # Raycast from high up
-            start = (x, y, 100.0) # Start higher
-            direction = (0.0, 0.0, -1.0)
-            hit = query.raycast_closest(start, direction, 200.0)
+            # Use direct query
+            hit = query.raycast_closest((x, y, 100.0), (0.0, 0.0, -1.0), 200.0)
             
             if hit["hit"]:
-                hit_path = hit.get("rigid_body") or hit.get("collision_path") or ""
-                # Broader keywords to catch road meshes
-                is_road = any(k in hit_path.lower() for k in ["road", "pavement", "drivable", "mesh"])
+                # PhysX 5.1 standard uses camelCase for these keys in script
+                hit_path = str(hit.get("rigidBody") or hit.get("collisionPath") or "")
+                # DEBUG: Always print what we hit to find the keyword
+                if i == 0: print(f"  [Raycast] Hit: {hit_path}")
+                
+                # Extremely broad check: just find ANYTHING that isn't the robot itself
+                is_road = any(k in hit_path.lower() for k in ["road", "piece", "pavement", "drivable", "grass", "terrain", "tile"])
                 
                 if is_road:
                     final_pos[i, 0] = hit["position"][0]
                     final_pos[i, 1] = hit["position"][1]
-                    final_pos[i, 2] = hit["position"][2] + 2.0 # Land from 2m
+                    final_pos[i, 2] = hit["position"][2] + 1.0 # Land from 1m
                     
                     # Update quat for this waypoint
+                    import math
                     yaw = float(wp[2])
                     half_yaw = yaw / 2.0
-                    quats[i, 0] = torch.cos(torch.tensor(half_yaw))
-                    quats[i, 3] = torch.sin(torch.tensor(half_yaw))
+                    quats[i, 0] = math.cos(half_yaw)
+                    quats[i, 3] = math.sin(half_yaw)
                     
                     if i == 0: print(f"[Event] Reset Env 0: Snapped to road at Z={final_pos[i, 2]:.2f} (Path: {hit_path})")
                     found_road = True
