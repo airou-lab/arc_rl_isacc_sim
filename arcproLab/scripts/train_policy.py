@@ -3,6 +3,10 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import warnings
+# Silence the 'Gym unmaintained' warning (MUST BE BEFORE ANY OTHER IMPORTS)
+warnings.filterwarnings("ignore", category=UserWarning, message=".*Gym has been unmaintained since 2022.*")
+
 import argparse
 from isaaclab.app import AppLauncher
 

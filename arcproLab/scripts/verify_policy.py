@@ -104,6 +104,9 @@ def main():
 
         with torch.no_grad():
             # Get camera observations
+            if count == 0:
+                print(f"[DEBUG] Observation keys: {list(obs.keys())}")
+
             images = None
             if "visual" in obs:
                 v_data = obs["visual"]
@@ -113,6 +116,10 @@ def main():
                     images = v_data 
                 
             if images is not None:
+                # DEBUG: Check if camera has data
+                if count % 50 == 0:
+                    print(f"  [DEBUG] Camera data: shape={images.shape} | mean_pixel={torch.mean(images.float()).item():.2f}")
+                
                 # Action shape is 6 (2 steering + 4 throttle)
                 actions = torch.zeros((env.num_envs, 6), device=env.device)
 
@@ -120,6 +127,10 @@ def main():
                     img = images[i]
                     prediction = policy.predict(img)
                     steering, throttle = policy.get_action(prediction)
+
+                    # DEBUG: Check policy output
+                    if i == 0 and count % 20 == 0:
+                        print(f"  [DEBUG] Policy Output: prediction={prediction} | steering={steering:.4f} | throttle={throttle:.4f}")
 
                     # Target velocity (rad/s)
                     target_rad_s = 40.0 # ~2.0 m/s
@@ -129,15 +140,12 @@ def main():
                     actions[i, 1] = steering
 
                     # Throttle (Indices 2, 3, 4, 5) -> Joint_Drive_FL, FR, RL, RR
-                    # FWD: Only drive FL and FR
-                    actions[i, 2] = -target_rad_s # FL
-                    actions[i, 3] = -target_rad_s # FR
-                    actions[i, 4] = 0.0 # RL (Idle)
-                    actions[i, 5] = 0.0 # RR (Idle)
+                    # AWD: Drive all wheels
+                    actions[i, 2:6] = -target_rad_s
             else:
                 # FALLBACK: Constant forward if camera failed
                 actions = torch.zeros((env.num_envs, 6), device=env.device)
-                actions[:, 2:4] = -40.0 # Drive FL and FR at constant speed
+                actions[:, 2:6] = -40.0 # Drive all wheels at constant speed
 
             # step environment
             obs, _, _, _, _ = env.step(actions)

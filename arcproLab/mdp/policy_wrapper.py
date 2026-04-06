@@ -130,15 +130,13 @@ class PolicyWrapper:
         dot_prod = torch.dot(unit_traj, unit_forward)
         dot_prod = torch.clamp(dot_prod, -1.0, 1.0)
         
-        # steering_angle = arccos(dot) / 2.0 - deg2rad(15.0)
-        # Note: arccos returns positive value in [0, pi].
-        # We need to know the sign (left/right).
+        # Calculate magnitude
         angle = torch.acos(dot_prod) / 2.0
-        if prediction_x > 0:
-            angle = -angle 
         
-        # Bias from original code
-        steering_angle = angle - torch.deg2rad(torch.tensor(15.0))
+        # No bias - allow model to drive centered
+        steering_angle = angle
+        if prediction_x > 0:
+            steering_angle = -steering_angle 
         
         # Throttle logic: constant speed as in model_evaluate.py
         # speed = 2.0 m/s

@@ -16,6 +16,7 @@ class ArcProRobotCfg(ArticulationCfg):
     spawn: sim_utils.UsdFileCfg = sim_utils.UsdFileCfg(
         usd_path=os.path.join(os.path.dirname(__file__), "assets", "robot", "F1Tenth_Metric.usd"),
         scale=(1.0, 1.0, 1.0), 
+        activate_contact_sensors=True,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
             retain_accelerations=False,
@@ -49,7 +50,7 @@ class ArcProRobotCfg(ArticulationCfg):
             damping=10.0,
         ),
         "throttle": ImplicitActuatorCfg(
-            joint_names_expr=["Joint_Drive_.*"], # 4WD: Actuate all wheels
+            joint_names_expr=["Joint_Drive_.*"], # AWD: Actuate all wheels
             effort_limit_sim=2000.0,
             velocity_limit_sim=100.0,
             stiffness=0.0,

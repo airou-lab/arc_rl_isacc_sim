@@ -16,7 +16,7 @@ from isaaclab.utils import configclass
 from isaaclab.envs import ManagerBasedRLEnvCfg, ViewerCfg
 from isaaclab.managers import ObservationGroupCfg, ObservationTermCfg as ObsTerm, ActionTermCfg as ActionTerm, RewardTermCfg as RewTerm, TerminationTermCfg as DoneTerm, SceneEntityCfg, EventTermCfg
 from isaaclab.assets import AssetBaseCfg
-from isaaclab.sensors import TiledCameraCfg
+from isaaclab.sensors import TiledCameraCfg, ContactSensorCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
 import isaaclab.sim as sim_utils
@@ -29,12 +29,11 @@ import mdp.observations as mdp_obs, mdp.rewards as mdp_rew, mdp.terminations as 
 class EventCfg:
     """Configuration for events."""
 
-    # reset_robot_to_lane = EventTermCfg(
-    #     func=mdp_events.reset_robot_to_lane,
-    #     mode="reset",
-    #     params={"asset_cfg": SceneEntityCfg("robot")},
-    # )
-    pass
+    reset_robot_to_lane = EventTermCfg(
+        func=mdp_events.reset_robot_to_lane,
+        mode="reset",
+        params={"asset_cfg": SceneEntityCfg("robot")},
+    )
 
 @configclass
 class ARCProSceneCfg(InteractiveSceneCfg):
@@ -85,7 +84,17 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         update_period=0.0,
         spawn=sim_utils.PinholeCameraCfg(),
         offset=TiledCameraCfg.OffsetCfg(pos=(2.24, 0.0, 1.28), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
-        data_types=["rgb"], width=160, height=90,
+        data_types=["rgb"], width=224, height=224,
+    )
+
+    # Contact Sensor for Lane Boundaries
+    contact_forces = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/.*", 
+        update_period=0.0, 
+        history_length=3, 
+        debug_vis=True,
+        # Filter for anything that isn't the ground or self
+        filter_prim_paths_expr=["{ENV_REGEX_NS}/Track/.*"]
     )
 
 @configclass
@@ -109,18 +118,20 @@ class ActionCfg:
 @configclass
 class RewardCfg:
     speed = RewTerm(func=mdp_rew.speed_reward, weight=1.0)
+    lateral = RewTerm(func=mdp_rew.lateral_error_reward, weight=2.0)
+    hit_wall = RewTerm(func=mdp_rew.line_penalty, weight=1.0)
 
 @configclass
 class TerminationCfg:
-    # height = DoneTerm(func=mdp_done.height_termination)
-    pass
+    height = DoneTerm(func=mdp_done.height_termination)
+    white_line_contact = DoneTerm(func=mdp_done.white_line_contact)
 
 @configclass
 class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     # Adjust viewer to see the robot at its new world position
     viewer: ViewerCfg = ViewerCfg(eye=(-120.0, 55.0, 10.0), lookat=(-129.0, 46.0, 0.0))
     
-    enable_cameras: bool = False
+    enable_cameras: bool = True
     scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=1, env_spacing=1000.0)
     observations: ObservationCfg = ObservationCfg()
     actions: ActionCfg = ActionCfg()
@@ -134,15 +145,11 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
         device="cuda:0",
         physx=sim_utils.PhysxCfg(
             solver_type=1, # TGS
-            max_position_iteration_count=8, # From main branch
-            max_velocity_iteration_count=4, # From main branch
+            max_position_iteration_count=8,
+            max_velocity_iteration_count=4,
             bounce_threshold_velocity=0.5, 
-            enable_ccd=True, 
-            enable_stabilization=True,
-            gpu_max_rigid_contact_count=2**20, # 1M contacts
-            gpu_max_rigid_patch_count=2**17,
-            gpu_heap_capacity=2**26, # 64MB heap
-            gpu_found_lost_pairs_capacity=2**20,
+            enable_ccd=False, # Not supported on GPU, causes startup warnings
+            enable_external_forces_every_iteration=True, # Smoother AWD motion for 20kg mass
         ),
     )
 
