@@ -1,25 +1,25 @@
 # Project State: ARCPro RL v1.2-dev
 
 ## Current Milestone
-**Milestone 2: Multi-Agent & Navigation Architecture**
+**Milestone 1: Physical Fidelity & Policy Foundation** (Modernization Phase)
 
 ## Current Phase
-**Phase 06: Intersection Navigation** (Planned)
+**Phase 07: Gymnasium & Warning Resolution** (Research)
 
 ## Summary
-Phase 05-02 (Policy Integration) and Phase 08 (Physics Restoration) are **COMPLETE**. The software stack—including the 12-float telemetry protocol and Hierarchical Policy Wrapper—is fully operational. The robot is fully mobile at 1.0x metric scale with calibrated physics constants (20kg mass, 5.0 damping). Ready for Milestone 2 development.
+Completed core physics restoration and policy integration. Rolling back experimental navigation features to focus on codebase modernization, including a full Gymnasium migration and resolution of simulation warnings (PhysX, Fabric, USD).
 
 ## Recent Activity
-- **Phase 08 (Physics Restoration)**: **COMPLETED**. Resolved immobility by restoring high-fidelity articulation parameters.
-- **Phase 05-02 (Telemetry & Scaling)**: **COMPLETED**. Task 4 (Continuous Motion) verified.
-- **Diagnostic Success**: Verified robot motion with linear velocity ~0.63 m/s using verified physics constants.
+- **Physics Restored**: Verified 20kg mass and 5.0 damping constants.
+- **Merge Complete**: Synchronized `main` with all Phase 05/06 completions.
+- **Rollback**: Removed experimental RoadGraph logic to clear the path for modernization.
 
 ## Key Achievements
-- **Physics Calibration**: Fixed mass at 20kg and damping at 5.0 to ensure responsive 4WD movement.
-- **12-Float Protocol**: All indices [0-11] implemented and verified via telemetry logs.
-- **Hierarchical Policy**: Worker-bypassed HPPO stack active and providing inference.
+- **Robust Spawning**: Raycast-based lane snapping is active and stable.
+- **AWD Baseline**: Established reliable 4-wheel drive power for the 1.0x metric scale.
 
 ## Planned Tasks
-- [ ] **Phase 06: Intersection Navigation** - Implement graph-based route planning.
-- [x] **Phase 08: F1Tenth Physics Fidelity Restoration** - COMPLETE.
-- [x] **Phase 05-02: Policy Integration** - COMPLETE.
+- [ ] **Phase 07: Gymnasium & Warning Resolution** - Modernize stack and clean terminal output.
+  - [ ] **Todo**: Fix Isaac Lab RL Import Error (`fix-isaaclab-rl-import.md`)
+- [ ] **Phase 08: Training Loop Stabilization** - Finalize reset logic and torque verification.
+- [ ] **Phase 09: Intersection Navigation** - Implement graph-based routing.
