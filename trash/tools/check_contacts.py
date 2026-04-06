@@ -1,66 +1,56 @@
-import os
-import sys
-import argparse
 from isaaclab.app import AppLauncher
+import argparse
+import sys
+import os
 
-# add argparse arguments
-parser = argparse.ArgumentParser(description="Check robot contacts.")
+parser = argparse.ArgumentParser()
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
-
-# launch omniverse app
 app_launcher = AppLauncher(args_cli)
-simulation_app = app_launcher.app
+
+# Add arcproLab to path
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+ARCPRO_LAB_DIR = os.path.join(ROOT_DIR, "arcproLab")
+sys.path.append(ROOT_DIR)
+sys.path.append(ARCPRO_LAB_DIR)
 
 import torch
-# Setup paths
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-if ROOT_DIR not in sys.path:
-    sys.path.append(ROOT_DIR)
-
-from isaaclab.envs import ManagerBasedEnv
 from arcpro_env_cfg import ARCProEnvCfg
+from isaaclab.envs import ManagerBasedEnv
 
 def main():
-    # setup configuration
     env_cfg = ARCProEnvCfg()
     env_cfg.scene.num_envs = 1
-    env_cfg.__post_init__() 
-    
-    # setup environment
+    # We need to ensure physics is initialized to check contacts
     env = ManagerBasedEnv(cfg=env_cfg)
+    
     robot = env.scene["robot"]
+    print("\n--- STUCK STATE VERIFICATION ---")
     
-    # reset environment to initialize data
+    # 1. Check Mass Properties in the actual simulation backend
+    print("\n[Simulation Backend Mass Properties]")
+    # Get properties from the PhysX view
+    masses = robot.root_physx_view.get_masses()[0]
+    coms = robot.root_physx_view.get_coms()[0]
+    inertias = robot.root_physx_view.get_inertias()[0]
+    
+    for i, body_name in enumerate(robot.body_names):
+        print(f"Body: {body_name}")
+        print(f"  Sim Mass: {masses[i].item():.3f} kg")
+        print(f"  Sim CoM: {coms[i].cpu().numpy()}")
+        # Check if CoM is valid (not NaN or Inf)
+        if torch.isinf(coms[i]).any() or torch.isnan(coms[i]).any():
+            print("  [!] CRITICAL: CoM is INVALID (Inf/NaN). Physics will explode.")
+    # 2. Check for Movement (Root velocity check)
+    print("\n[Movement Audit - 10 Steps]")
     env.reset()
-    
-    print("\nRunning 100 steps to observe settling...")
-    for s in range(100):
-        env.step(torch.zeros((1, 6), device=env.device))
-        if s % 20 == 0:
-            root_z = robot.data.root_pos_w[0, 2].item()
-            print(f"Step {s:3d} | Root Z: {root_z:.4f} m")
-    
-    # Check body heights
-    body_pos_w = robot.data.body_pos_w[0]
-    body_names = robot.data.body_names
-    
-    print("\n--- Final Body Heights (Z) ---")
-    for i, name in enumerate(body_names):
-        print(f"{name:30s}: {body_pos_w[i, 2].item():.4f} m")
-
-    # Check contact forces
-    forces = robot.data.net_contact_forces[0]
-    print("\n--- Net Contact Forces (N) ---")
-    found_contact = False
-    for i, name in enumerate(body_names):
-        f_norm = torch.norm(forces[i]).item()
-        if f_norm > 0.1:
-            print(f"{name:30s}: {f_norm:.2f} N")
-            found_contact = True
-    if not found_contact:
-        print("No significant contact forces detected.")
+    for step in range(10):
+        # We must step simulation to populate data buffers
+        env.step(torch.zeros_like(env.action_manager.action))
+        
+        z_pos = robot.data.root_pos_w[0, 2].item()
+        vel = torch.norm(robot.data.root_lin_vel_w[0]).item()
+        print(f"Step {step} | Z-Pos: {z_pos:.3f} | Vel: {vel:.2f} m/s")
 
     app_launcher.app.close()
 

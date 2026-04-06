@@ -68,6 +68,28 @@ def harden_usd(input_path, output_path=None):
         stage.GetRootLayer().Save()
         print(f"Hardened {count} meshes in-place: {input_path}")
 
+def harden_robot(robot_path):
+    print(f"Opening Robot: {robot_path}")
+    stage = Usd.Stage.Open(robot_path)
+    if not stage: return
+
+    for prim in stage.TraverseAll():
+        if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            # Apply MassAPI if missing
+            mass_api = UsdPhysics.MassAPI.Apply(prim)
+            # For 8x robot, we need real mass and inertia
+            # 400kg is a balanced mass for an 8m long car in this sim
+            mass_api.GetMassAttr().Set(400.0)
+            mass_api.GetCenterOfMassAttr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
+            # Set a generic solid-box inertia for stability
+            mass_api.GetDiagonalInertiaAttr().Set(Gf.Vec3f(10.0, 10.0, 10.0))
+            print(f"Baked mass properties (400kg) into: {prim.GetPath()}")
+
+    stage.GetRootLayer().Save()
+
 if __name__ == "__main__":
-    harden_usd(args_cli.input, args_cli.output)
+    if "F1Tenth" in args_cli.input:
+        harden_robot(args_cli.input)
+    else:
+        harden_usd(args_cli.input, args_cli.output)
     simulation_app.close()
