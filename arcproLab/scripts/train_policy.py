@@ -23,7 +23,11 @@ simulation_app = app_launcher.app
 import os
 import sys
 import torch
+import warnings
 from datetime import datetime
+
+# Silence gym warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Add both root and arcproLab to sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -41,7 +45,7 @@ from stable_baselines3.common.vec_env import VecNormalize
 
 from isaaclab.envs import ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
-from isaaclab_tasks.utils.wrappers.sb3 import Sb3VecEnvWrapper
+from isaaclab_rl.sb3 import Sb3VecEnvWrapper
 
 def main():
     # 1. Setup Environment Configuration

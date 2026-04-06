@@ -20,6 +20,6 @@ Completed core physics restoration and policy integration. Rolling back experime
 
 ## Planned Tasks
 - [ ] **Phase 07: Gymnasium & Warning Resolution** - Modernize stack and clean terminal output.
-  - [ ] **Todo**: Fix Isaac Lab RL Import Error (`fix-isaaclab-rl-import.md`)
+  - [x] **Todo**: Fix Isaac Lab RL Import Error (`fix-isaaclab-rl-import.md`)
 - [ ] **Phase 08: Training Loop Stabilization** - Finalize reset logic and torque verification.
 - [ ] **Phase 09: Intersection Navigation** - Implement graph-based routing.

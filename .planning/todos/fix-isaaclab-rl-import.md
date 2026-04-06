@@ -2,9 +2,10 @@
 area: training
 milestone: 1
 phase: 07
-status: open
+status: completed
 priority: high
 created_at: 2026-04-05
+completed_at: 2026-04-05
 ---
 
 # Todo: Fix Isaac Lab RL Import Error
@@ -19,6 +20,7 @@ Running `train_policy.py` fails with:
 - Likely cause: The SB3 wrapper path has changed or the `isaaclab_rl` extension is not enabled/installed in the current Isaac Lab environment.
 
 ## Action
-- Verify the correct import path for `Sb3VecEnvWrapper` in the current Isaac Lab installation.
-- Update `train_policy.py` with the correct path.
-- Verify that `isaaclab_rl` extension is active.
+- [x] Verify the correct import path for `Sb3VecEnvWrapper` in the current Isaac Lab installation. (Found in `isaaclab_rl.sb3`)
+- [x] Update `train_policy.py` with the correct path.
+- [x] Verify that `isaaclab_rl` extension is active.
+- [x] Silence legacy gym warnings in `train_policy.py`.
