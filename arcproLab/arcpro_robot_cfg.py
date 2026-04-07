@@ -50,11 +50,18 @@ class ArcProRobotCfg(ArticulationCfg):
             damping=10.0,
         ),
         "throttle": ImplicitActuatorCfg(
-            joint_names_expr=["Joint_Drive_.*"], # AWD: Actuate all wheels
-            effort_limit_sim=2000.0,
+            joint_names_expr=["Joint_Drive_F.*"], # FWD Transition
+            effort_limit_sim=4000.0, # Increased from 2000 to handle 20kg mass with only 2 drive wheels
             velocity_limit_sim=100.0,
             stiffness=0.0,
             damping=5.0, 
+        ),
+        "passive_rear_wheels": ImplicitActuatorCfg(
+            joint_names_expr=["Joint_Drive_R.*"], # Keep rear wheels passive
+            effort_limit_sim=0.0,
+            velocity_limit_sim=0.0,
+            stiffness=0.0,
+            damping=1.0, # Low damping to allow rolling
         ),
     }
 

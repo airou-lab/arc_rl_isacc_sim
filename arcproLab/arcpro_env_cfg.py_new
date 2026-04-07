@@ -1,0 +1,15 @@
+    sim: SimulationCfg = SimulationCfg(
+        dt=0.005, # 200Hz for balanced performance
+        render_interval=8, # Maintain 25Hz visual (200 / 8)
+        device="cuda:0",
+        physx=sim_utils.PhysxCfg(
+            solver_type=1, # TGS
+            max_position_iteration_count=8,
+            max_velocity_iteration_count=4,
+            bounce_threshold_velocity=0.5, 
+            enable_ccd=False, # Not supported on GPU, causes startup warnings
+            enable_external_forces_every_iteration=True, # Smoother AWD motion for 20kg mass
+        ),
+    )
+
+    def __post_init__(self):

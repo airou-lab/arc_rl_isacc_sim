@@ -56,7 +56,7 @@ class ARCProSceneCfg(InteractiveSceneCfg):
     track = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Track",
         spawn=sim_utils.UsdFileCfg(
-            usd_path=os.path.join(USD_DIR, "no_graph_sim.usd"),
+            usd_path=os.path.join(USD_DIR, "no_graph_sim_hardened.usd"),
             scale=(1.0, 1.0, 1.0), 
         ),
         # Use origin position to match USD world coordinates
@@ -112,8 +112,8 @@ class ObservationCfg:
 
 @configclass
 class ActionCfg:
-    steering = mdp.JointPositionActionCfg(asset_name="robot", joint_names=["Joint_Steer_L", "Joint_Steer_R"], scale=1.0, preserve_order=True)
-    throttle = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["Joint_Drive_.*"], scale=1.0, preserve_order=True)
+    steering = mdp.JointPositionActionCfg(asset_name="robot", joint_names=["Joint_Steer_.*"], scale=1.0, preserve_order=True)
+    throttle = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["Joint_Drive_F.*"], scale=1.0, preserve_order=True)
 
 @configclass
 class RewardCfg:

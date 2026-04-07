@@ -15,6 +15,7 @@ parser = argparse.ArgumentParser(description="Train an SB3 policy for ARCPro Lan
 parser.add_argument("--num_envs", type=int, default=16, help="Number of parallel simulation environments.")
 parser.add_argument("--seed", type=int, default=42, help="Seed for the environment.")
 parser.add_argument("--total_timesteps", type=int, default=1000000, help="Total timesteps to train.")
+parser.add_argument("--enable_cameras", action="store_true", default=False, help="Enable camera rendering for vision training.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -56,8 +57,8 @@ def main():
     env_cfg = ARCProEnvCfg()
     env_cfg.scene.num_envs = args_cli.num_envs
     # Enable cameras if you want to train with vision, otherwise state-based
-    # For now, we train on the 12-element telemetry vector
-    env_cfg.enable_cameras = False 
+    # Use CLI arg if possible, or fallback to config default
+    env_cfg.enable_cameras = args_cli.enable_cameras if hasattr(args_cli, 'enable_cameras') else env_cfg.enable_cameras
     env_cfg.__post_init__() 
 
     # 2. Create Environment

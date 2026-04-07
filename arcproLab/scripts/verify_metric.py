@@ -69,7 +69,7 @@ def main():
     
     # setup track manager for error tracking
     try:
-        tm = get_track_manager(device=env.device)
+        tm = get_track_manager(device=env.device, num_envs=env.num_envs)
         print("TrackManager initialized.")
     except Exception as e:
         tm = None
@@ -87,12 +87,14 @@ def main():
         telemetry = TelemetryWindow()
     
     # Find joint indices for telemetry audit
-    drive_names = ["Joint_Drive_FL", "Joint_Drive_FR", "Joint_Drive_RL", "Joint_Drive_RR"]
+    drive_names = ["Joint_Drive_FL", "Joint_Drive_FR"]
     drive_indices, _ = env.scene["robot"].find_joints(drive_names)
 
     # simulation loop
     count = 0
     max_steps = 20000 
+    # Action shape is 4 (2 steering + 2 throttle)
+    actions = torch.zeros((env.num_envs, 4), device=env.device)
     print(f"Starting simulation loop for {max_steps} steps...")
     while simulation_app.is_running() and count < max_steps:
         # Mandatory GUI update for real-time visibility
@@ -110,8 +112,8 @@ def main():
                     images = v_data 
                 
             if images is not None:
-                # Action shape is 6 (2 steering + 4 throttle)
-                actions = torch.zeros((env.num_envs, 6), device=env.device)
+                # Action shape is 4 (2 steering + 2 throttle)
+                actions = torch.zeros((env.num_envs, 4), device=env.device)
                 
                 for i in range(env.num_envs):
                     img = images[i]
@@ -125,11 +127,10 @@ def main():
                     actions[i, 0] = steering
                     actions[i, 1] = steering
                     
-                    # Throttle (Indices 2, 3, 4, 5) -> Joint_Drive_FL, FR, RL, RR
+                    # Throttle (Indices 2, 3) -> Joint_Drive_FL, FR
+                    # FWD: Drive front wheels only
                     actions[i, 2] = -target_rad_s # FL
                     actions[i, 3] = -target_rad_s # FR
-                    actions[i, 4] = -target_rad_s # RL
-                    actions[i, 5] = -target_rad_s # RR
                     
                     # Telemetry for env 0
                     if i == 0:
@@ -159,7 +160,7 @@ def main():
                 obs, _, _, _, _ = env.step(actions)
             else:
                 # Fallback: Just drive forward if no camera
-                actions = torch.zeros((env.num_envs, 6), device=env.device)
+                actions = torch.zeros((env.num_envs, 4), device=env.device)
                 actions[:, 2:] = -40.0
                 obs, _, _, _, _ = env.step(actions)
                 

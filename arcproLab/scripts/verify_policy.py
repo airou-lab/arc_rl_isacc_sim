@@ -71,7 +71,7 @@ def main():
     
     # setup track manager for error tracking
     try:
-        tm = get_track_manager(device=env.device)
+        tm = get_track_manager(device=env.device, num_envs=env.num_envs)
         print("TrackManager initialized.")
     except Exception as e:
         tm = None
@@ -89,13 +89,14 @@ def main():
         telemetry = TelemetryWindow()
     
     # Find joint indices for telemetry audit
-    drive_names = ["Joint_Drive_FL", "Joint_Drive_FR", "Joint_Drive_RL", "Joint_Drive_RR"]
+    drive_names = ["Joint_Drive_FL", "Joint_Drive_FR"]
     drive_indices, _ = env.scene["robot"].find_joints(drive_names)
 
     # simulation loop
     count = 0
     max_steps = args_cli.max_steps
-    actions = torch.zeros((env.num_envs, 6), device=env.device)
+    # Action shape is 4 (2 steering + 2 throttle)
+    actions = torch.zeros((env.num_envs, 4), device=env.device)
     print(f"Starting simulation loop for {max_steps} steps...")
     while simulation_app.is_running() and count < max_steps:
         # Mandatory GUI update for real-time visibility
@@ -120,8 +121,8 @@ def main():
                 if count % 50 == 0:
                     print(f"  [DEBUG] Camera data: shape={images.shape} | mean_pixel={torch.mean(images.float()).item():.2f}")
                 
-                # Action shape is 6 (2 steering + 4 throttle)
-                actions = torch.zeros((env.num_envs, 6), device=env.device)
+                # Action shape is 4 (2 steering + 2 throttle)
+                actions = torch.zeros((env.num_envs, 4), device=env.device)
 
                 for i in range(env.num_envs):
                     img = images[i]
@@ -139,13 +140,13 @@ def main():
                     actions[i, 0] = steering
                     actions[i, 1] = steering
 
-                    # Throttle (Indices 2, 3, 4, 5) -> Joint_Drive_FL, FR, RL, RR
-                    # AWD: Drive all wheels
-                    actions[i, 2:6] = -target_rad_s
+                    # Throttle (Indices 2, 3) -> Joint_Drive_FL, FR
+                    # FWD: Drive front wheels only
+                    actions[i, 2:4] = -target_rad_s
             else:
                 # FALLBACK: Constant forward if camera failed
-                actions = torch.zeros((env.num_envs, 6), device=env.device)
-                actions[:, 2:6] = -40.0 # Drive all wheels at constant speed
+                actions = torch.zeros((env.num_envs, 4), device=env.device)
+                actions[:, 2:4] = -40.0 # Drive front wheels at constant speed
 
             # step environment
             obs, _, _, _, _ = env.step(actions)

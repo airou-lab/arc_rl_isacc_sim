@@ -43,8 +43,7 @@ def harden_usd(input_path, output_path=None):
             # Apply MeshCollisionAPI
             if not prim.HasAPI(UsdPhysics.MeshCollisionAPI):
                 mesh_coll = UsdPhysics.MeshCollisionAPI.Apply(prim)
-                mesh_coll.GetApproximationAttr().Set("convexHull")
-
+                mesh_coll.GetApproximationAttr().Set("none") # Triangle Mesh for better accuracy on track
             # Ensure Double Sided
             mesh = UsdGeom.Mesh(prim)
             mesh.GetDoubleSidedAttr().Set(True)

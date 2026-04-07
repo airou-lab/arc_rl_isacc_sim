@@ -1,19 +1,19 @@
 # Project Roadmap: ARCPro RL Isaac Lab
 
-## Milestone 1: Physical Fidelity (Current)
+## Milestone 1: Physical Fidelity (DONE)
 *   **Phase 07: Modernization** [DONE]
     *   Standardize Gymnasium 1.0+.
     *   Repair USD references (Signposts/F1Tenth).
-*   **Phase 08: Training Stabilization** [ACTIVE]
-    *   Fix road detection raycasts (resolve Z=10.0 fallback).
-    *   Verify torque vs. 20kg mass.
-*   **Phase 09: Drive Configuration (FWD Transition)** [NEW]
-    *   Modify `ActionCfg` to isolate Front-Wheel Drive.
-    *   Verify 20kg mass handling under FWD acceleration.
-    *   Re-tune reward signals for FWD dynamics.
+*   **Phase 08: Training Stabilization** [DONE]
+    *   Fixed road detection raycasts (implemented robust direct snapping).
+    *   Hardened Track USD with Triangle Meshes.
+*   **Phase 09: Drive Configuration (FWD Transition)** [DONE]
+    *   Modified `ActionCfg` to isolate Front-Wheel Drive.
+    *   Increased effort limits to 4000.0 for 20kg mass handling.
+    *   Standardized 4-joint action mapping.
 
-## Milestone 2: Navigation & Routing
-*   **Phase 10: Intersection Navigation** [PLANNED]
+## Milestone 2: Navigation & Routing (Current)
+*   **Phase 10: Intersection Navigation** [ACTIVE]
     *   Restore RoadGraph logic.
     *   Implement graph-based waypoint routing.
 *   **Phase 11: Multi-Agent Stability** [PLANNED]
