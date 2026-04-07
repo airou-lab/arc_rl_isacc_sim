@@ -33,8 +33,8 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     
     # Index 8 & 9: Lateral and Heading Error
     # Use TrackManager for high-fidelity errors (not axis-aligned)
-    from mdp.track_manager import get_track_manager
-    tm = get_track_manager(device=env.device)
+    from .track_manager import get_track_manager
+    tm = get_track_manager(device=env.device, num_envs=env.num_envs)
     
     # extract yaw from quaternion
     q = asset.data.root_quat_w
