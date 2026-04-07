@@ -1,6 +1,6 @@
 # Testing Patterns
 
-**Analysis Date:** 2025-04-04
+**Analysis Date:** 2025-04-18
 
 ## Test Framework
 
@@ -16,7 +16,7 @@
 pytest                  # Run unit tests in tests/
 ./run_gui_verify.sh     # Run visual verification in Isaac Sim
 ./verify_sim.sh         # Run headless simulation verification
-python3 arcproLab/scripts/verify_policy.py --checkpoint models/road_following_model.pth
+python3 arcproLab/scripts/verify_policy.py --checkpoint arcproLab/models/road_following_model.pth
 ```
 
 ## Test File Organization
@@ -37,64 +37,59 @@ tests/
 
 ## Test Structure
 
-**Suite Organization (12-Float Telemetry Verification):**
+**Suite Organization (Telemetry Vector Verification):**
 ```python
-def test_get_telemetry_vector(env):
-    obs = get_telemetry_vector(env)
-    assert obs.shape[1] == 12
-    assert obs[:, 3] > 0 # Speed should be positive when moving
+def test_telemetry_normalization():
+    # Test that 8.0x speed is normalized to 1.0x metric speed
+    sim_speed = 8.0
+    normalized_speed = sim_speed * 0.125
+    assert normalized_speed == 1.0
 ```
 
 **Patterns:**
-- **Unit Testing**: Standard pytest for logic without the full simulator.
-- **Metric Verification**: Use of dedicated scripts like `verify_metric.py` to check physics (e.g., **1.0x metric scale**, **20kg mass**, **4WD configuration**) within a live simulation.
+- **Unit Testing**: Testing the math in `TrackManager` and `observations.py` logic without needing the simulator.
+- **Metric Verification**: Live verification in Isaac Sim using `verify_metric.py` to check real-world scale and physics parameters (mass, friction, 4WD).
 
 ## Mocking
 
-**Framework:** `unittest.mock` (standard) or simple NumPy-based mocking of data.
+**Framework:** `unittest.mock` (standard).
 
 **What to Mock:**
-- **Absolute Waypoint data** for `TrackManager`.
-- Robot state vectors for observation logic tests.
+- **USD Stage**: When testing `TrackManager.sample_waypoints_from_usd` logic.
+- **Robot Data**: Mocking `asset.data` from IsaacLab to test observation calculations.
 
 **What NOT to Mock:**
-- Isaac Sim engine (use live verification instead).
+- Physics interactions (use live verification instead).
 
 ## Fixtures and Factories
 
 **Test Data:**
-- `track_centerline.npy` used as the primary source for navigation tests.
-
-**Location:**
-- `arcproLab/mdp/track_centerline.npy`.
+- `arcproLab/mdp/track_centerline.npy`: The source of truth for navigation tests.
 
 ## Coverage
 
 **Requirements:** None enforced.
 
-**View Coverage:**
-```bash
-pytest --cov=arcproLab
-```
-
 ## Test Types
 
 **Unit Tests:**
-- Tests for navigation math and track tracking logic in `tests/`.
+- Waypoint lookup and error calculation math in `TrackManager`.
 
 **Integration Tests:**
-- Verification scripts that launch Isaac Sim to check asset loading and physical interactions at **1.0x metric scale**.
+- Asset loading and reference resolution in `openStreetUSD/`.
+- Training initialization via `train_policy.py`.
 
 **E2E Tests (Visual):**
-- Scripts like `verify_policy.py` that allow a human to observe the robot's performance using the **12-float protocol UI**.
+- Full inference lap testing with `verify_policy.py`.
+- Physics stability check under 4WD acceleration.
 
 ## Common Patterns
 
-**Async Testing:** Not used (standard for synchronous simulation steps).
+**Async Testing:** Not used (standard synchronous simulation).
 
 **Error Testing:**
-- Use of `pytest.raises()` for expected errors.
+- Use of `pytest.raises()` for expected failures in waypoint loading.
 
 ---
 
-*Testing analysis: 2025-04-04*
+*Testing analysis: 2025-04-18*

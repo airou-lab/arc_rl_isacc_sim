@@ -1,32 +1,28 @@
 # Codebase Concerns
 
-**Analysis Date:** 2025-04-05
+**Analysis Date:** 2025-04-18
 
 ## Tech Debt
 
-**[Scale Discrepancy (Visual vs Physics)]:**
-- Issue: While physics and assets are configured for **1.0x metric scale**, `arcpro_env_cfg.py` uses an **8.0x scale override** for the robot to match the visual scale of the current track USD.
-- Files: `arcproLab/arcpro_env_cfg.py`.
-- Impact: Inconsistency between "True Metric" intent and actual simulation parameters. Telemetry might require scaling factors if world units don't match meters.
-- Fix approach: Re-export track USD at true 1.0x metric scale and revert robot scale to 1.0x in environment config.
+**[Hybrid Scale Complexity]:**
+- Issue: The simulation operates at **8.0x robot scale** but the policy expects **1.0x metric scale**. This requires manual normalization (`* 0.125`) in `observations.py`.
+- Files: `arcproLab/arcpro_env_cfg.py`, `arcproLab/mdp/observations.py`.
+- Impact: Increased cognitive load for developers and potential for scaling bugs if new telemetry fields are added without normalization.
+- Fix approach: Re-export the track at true 1.0x scale to allow the robot to return to its canonical 1.0x scale.
 
-**[Actuator Effort Limits]:**
-- Issue: `effort_limit_sim` for 4WD throttle is set to 2000.0, which might be extremely high even for a 20kg robot.
-- Files: `arcproLab/arcpro_robot_cfg.py`.
-- Impact: Over-powered motors can lead to unrealistic acceleration or physics instability if not properly tuned.
-- Fix approach: Calibrate effort limits based on real F1Tenth motor specifications adjusted for the 20kg mass.
+**[Hardcoded Initial State]:**
+- Issue: The robot's spawn position is hardcoded in `arcpro_env_cfg.py`.
+- Files: `arcproLab/arcpro_env_cfg.py`.
+- Impact: Training always starts from the same point, reducing exploration diversity.
+- Fix approach: Implement a robust `reset_robot_to_lane` event in `mdp/events.py` that samples random waypoints.
 
 ## Known Bugs
 
-**[OSM Invisible Barriers]:**
-- Issue: Tile junctions in OSM-generated tracks sometimes have "invisible barriers" or collisions.
-- Files: `openStreetUSD/` assets.
-- Trigger: Robot crossing a tile boundary.
-- Workaround: Phase 07 "Hardening" process applied via `repair_usd_references.py`.
-- Status: Partially mitigated, still present in some legacy OSM assets.
-
-**[Dead F1Tenth Folder Reference]:**
-- Status: **Resolved in Phase 07** via `repair_usd_references.py` which removes the missing `/World/F1Tenth` prim.
+**[USD Sampling Jitter]:**
+- Issue: `TrackManager.sample_waypoints_from_usd` uses a nearest-neighbor approach that can fail on complex intersection geometry.
+- Files: `arcproLab/mdp/track_manager.py`.
+- Trigger: Multiple overlapping road meshes in USD.
+- Workaround: Use pre-computed `track_centerline.npy` instead of live sampling.
 
 ## Security Considerations
 
@@ -35,46 +31,40 @@
 
 ## Performance Bottlenecks
 
-**[PhysX Solver Overhead]:**
-- Problem: The use of TGS (Task Graph Scheduler) and 8/4 iterations is balanced but might be slow for large numbers of environments.
-- Files: `arcproLab/arcpro_env_cfg.py`.
-- Cause: Required for stable 20kg dynamics at high frequency (200Hz).
-- Improvement path: Experiment with reduced iterations or simplified collision hulls.
+**[GPU Memory Usage]:**
+- Problem: Isaac Sim 4.0 with large USD files can consume significant VRAM.
+- Files: `openStreetUSD/no_graph_sim.usd`.
+- Cause: High-detail road meshes.
+- Improvement path: Optimize collision geometry and use lower-poly visual models where appropriate.
 
 ## Fragile Areas
 
-**[Waypoint Precision]:**
+**[Waypoint-Track Alignment]:**
 - Files: `arcproLab/mdp/track_centerline.npy`.
-- Why fragile: If the track USD is updated but the centerline is not re-generated, navigation will fail.
-- Test coverage: `tests/test_track_manager.py` checks logic but not data validity.
-
-**[USD External References]:**
-- Files: `openStreetUSD/no_graph_sim.usd`.
-- Why fragile: Historically pointed to absolute paths or missing assets (signposts).
-- Mitigation: `repair_usd_references.py` redirects these to local placeholders.
+- Why fragile: If the track is moved in the USD stage, the waypoints will no longer align.
+- Test coverage: Low.
+- Safe modification: Always run `verify_metric.py` after updating track assets.
 
 ## Scaling Limits
 
-**[Hierarchical Bottleneck]:**
-- Current capacity: Efficient path planning at 0.5m spacing.
-- Limit: Very high-speed cornering where waypoint density may be insufficient for a 20kg vehicle.
-- Scaling path: Dynamically adjust `num_waypoints` or `waypoint_horizon` based on vehicle speed.
+**[Multi-Agent Support]:**
+- Current capacity: Single robot.
+- Limit: `TrackManager` is a singleton, which may need refactoring if multiple robots need to track different segments simultaneously (though the logic is vectorized).
 
 ## Missing Critical Features
 
-**[Lane-Aligned Spawning]:**
-- Problem: Jitter spawning with lateral and heading noise relative to waypoints is not yet implemented.
-- Files: `arcproLab/mdp/events.py`.
-- Blocks: Domain randomization for more robust policies.
+**[Domain Randomization]:**
+- Problem: Friction, mass, and lighting randomization are not yet implemented.
+- Blocks: Robust sim-to-real transfer.
 
 ## Test Coverage Gaps
 
-**[4WD Telemetry Sync]:**
-- What's not tested: Verification that all 4 wheels are contributing correctly to the `SPEED` observation.
-- Files: `arcproLab/mdp/observations.py`, `arcproLab/mdp/rewards.py`.
-- Risk: Incorrect speed calculation if only front/rear wheels are sampled.
+**[4WD Force Verification]:**
+- What's not tested: Whether all 4 wheels are actually applying the correct torque.
+- Files: `arcproLab/arcpro_robot_cfg.py`, `arcproLab/mdp/observations.py`.
+- Risk: Robot might be operating as 2WD due to misconfiguration, reducing its performance under high load.
 - Priority: Medium.
 
 ---
 
-*Concerns audit: 2025-04-05*
+*Concerns audit: 2025-04-18*

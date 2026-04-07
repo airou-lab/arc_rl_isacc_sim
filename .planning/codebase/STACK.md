@@ -1,6 +1,6 @@
 # Technology Stack
 
-**Analysis Date:** 2025-04-05
+**Analysis Date:** 2025-04-18
 
 ## Languages
 
@@ -12,11 +12,12 @@
 **Environment:**
 - NVIDIA Isaac Sim 4.0.0+ - Primary simulation engine.
 - NVIDIA IsaacLab 1.0.0+ - Framework for manager-based RL environments.
-- Gymnasium 1.0.0+ (1.2.3 detected) - Standard RL interface.
+- Gymnasium 1.0.0+ - Standard RL interface.
 
 **Package Manager:**
 - pip - Managed via `requirements.txt`.
 - Virtual Environment: `venv/` (Python 3.11/3.12) observed.
+- Lockfile: missing
 
 ## Frameworks
 
@@ -30,7 +31,8 @@
 
 **Build/Dev:**
 - USD (Universal Scene Description) - Asset format for scenes and robots.
-- **Robot Scale**: 1.0x metric scale (canonical) for F1Tenth assets. Note: `arcpro_env_cfg.py` uses an 8.0x override for scene matching in GUI Mode.
+- **Robot Scale**: 8.0x metric scale override in `arcproLab/arcpro_env_cfg.py` for visual/physics stability matching.
+- **Track Scale**: 1.0x metric scale (original) in `openStreetUSD/no_graph_sim.usd`.
 
 ## Key Dependencies
 
@@ -48,15 +50,15 @@
 
 **Environment:**
 - Configured via Python classes using `@configclass` decorator from `isaaclab.utils`.
-- **Telemetry Protocol**: Standardized 12-float vector mapping in `mdp/observations.py`.
+- **Telemetry Protocol**: Standardized 12-float vector mapping in `arcproLab/mdp/observations.py`.
 - Key configs: `arcproLab/arcpro_env_cfg.py` (Scene/MDP) and `arcproLab/arcpro_robot_cfg.py` (Robot).
 
-**Physics Optimizations (Phase 07):**
+**Physics Optimizations (Phase 08 - Baseline):**
 - **Simulation Frequency**: 200Hz (`dt=0.005`).
 - **Render Frequency**: 25Hz (`render_interval=8`, `decimation=8`).
 - **Solver**: PhysX TGS (`solver_type=1`).
 - **Accuracy**: 8 position / 4 velocity iterations.
-- **Stability**: `enable_external_forces_every_iteration=True` for smoother AWD (Four-Wheel Drive) motion.
+- **Stability**: `enable_ccd=True`, `enable_stabilization=True` for high-speed AWD (Four-Wheel Drive) motion.
 
 ## Platform Requirements
 
@@ -72,4 +74,4 @@
 
 ---
 
-*Stack analysis: 2025-04-05*
+*Stack analysis: 2025-04-18*

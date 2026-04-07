@@ -1,6 +1,6 @@
 # External Integrations
 
-**Analysis Date:** 2025-04-04
+**Analysis Date:** 2025-04-18
 
 ## APIs & External Services
 
@@ -11,17 +11,17 @@
 
 **RL Framework:**
 - stable-baselines3 / sb3-contrib - Used for RecurrentPPO training.
-  - **Telemetry Protocol**: Custom 12-float vector integration.
+  - **Telemetry Protocol**: Custom 12-float vector integration in `arcproLab/mdp/observations.py`.
 
 ## Data Storage
 
 **Assets:**
 - OpenStreetUSD - USD map tiles and road assets.
-  - Files: `openStreetUSD/no_graph_sim.usd`.
-  - Client: `UsdFileCfg` in `isaaclab.sim`.
+  - Files: `openStreetUSD/no_graph_sim.usd` (Original scale 1.0x).
+  - Client: `UsdFileCfg` in `isaaclab.sim` (referenced in `arcproLab/arcpro_env_cfg.py`).
 
 **Robot Asset:**
-- **F1Tenth_Metric.usd**: 1.0x metric robot asset.
+- **F1Tenth_Metric.usd**: Metric robot asset, scaled 8.0x for the environment.
   - Location: `arcproLab/assets/robot/`.
   - Config: `arcproLab/arcpro_robot_cfg.py`.
 
@@ -34,6 +34,7 @@
 - Waypoint Arrays - NumPy arrays containing **absolute** track centerlines.
   - Files: `arcproLab/mdp/track_centerline.npy`.
   - Format: 3D coordinates (altitude-aware).
+  - Managed by: `arcproLab/mdp/track_manager.py`.
 
 ## Authentication & Identity
 
@@ -72,4 +73,4 @@
 
 ---
 
-*Integration audit: 2025-04-04*
+*Integration audit: 2025-04-18*

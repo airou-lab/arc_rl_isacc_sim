@@ -1,6 +1,6 @@
 # Coding Conventions
 
-**Analysis Date:** 2025-04-04
+**Analysis Date:** 2025-04-18
 
 ## Naming Patterns
 
@@ -17,7 +17,7 @@
 - PascalCase: `ArcProRobotCfg`, `HierarchicalPathPlanningPolicy`, `TrackManager`.
 
 **Constants:**
-- UPPER_CASE: `ARCPRO_ROBOT_CFG`, `WAYPOINT_NORM_SCALE`.
+- UPPER_CASE: `ARCPRO_LAB_DIR`, `USD_DIR`.
 
 ## Telemetry Protocol (12-Float)
 
@@ -40,8 +40,9 @@ All observation vectors returned by `get_telemetry_vector()` in `arcproLab/mdp/o
 
 ## Physical Conventions
 
-**Robot Scale:**
-- Use **1.0x metric scale** for all F1Tenth robot assets to match the metric environment.
+**Baseline Robot Scale (v1.2-dev):**
+- **8.0x metric scale override** in `arcpro_env_cfg.py`. This is the current stable baseline for simulation stability and visual alignment.
+- **0.125 Normalization**: All telemetry inputs (Speed, Lateral Error) are scaled by `0.125` in `observations.py` to keep the policy metric-aligned.
 
 **Drive Configuration:**
 - **4WD (Four-Wheel Drive)**: All wheels (`Joint_Drive_.*`) are used for acceleration to maintain traction for the 20kg chassis.
@@ -72,8 +73,8 @@ All observation vectors returned by `get_telemetry_vector()` in `arcproLab/mdp/o
 ## Error Handling
 
 **Patterns:**
-- Use of `warnings.warn` for sim-related warnings that shouldn't crash training.
-- `try-except` blocks around complex SB3-contrib logic (e.g., RNN state handling).
+- NaN handling in observation tensors to prevent model collapse.
+- Default fallback waypoints in `TrackManager` if USD sampling fails.
 
 ## Logging
 
@@ -81,8 +82,8 @@ All observation vectors returned by `get_telemetry_vector()` in `arcproLab/mdp/o
 
 ## Module Design
 
-**Exports:** Explicitly defining `ARCPRO_ROBOT_CFG` in config files.
+**Exports:** Explicitly defining `ARCPRO_ROBOT_CFG` in config files for external consumption.
 
 ---
 
-*Convention analysis: 2025-04-04*
+*Convention analysis: 2025-04-18*
