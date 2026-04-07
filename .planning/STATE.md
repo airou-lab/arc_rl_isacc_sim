@@ -1,23 +1,25 @@
 # Project State: ARCPro RL v1.2-dev
 
 ## Current Milestone
-**Milestone 1: Physical Fidelity & Policy Foundation** (Training Stabilization)
+**Milestone 1: Physical Fidelity & Policy Foundation** (Restored Baseline)
 
 ## Current Phase
-**Phase 08: Training Loop Stabilization** (Research)
+**Phase 07: True Physics & Baseline Restoration** (Verified)
 
 ## Summary
-Successfully modernized the Gymnasium stack and resolved critical USD reference noise. The simulation environment is now "hygienic," with AWD motion verified. The current focus is resolving "teleportation" issues during resets by fixing the raycast-to-road mesh detection in the event manager.
+The project has been reset to the **Ultimate Source of Truth** (Commit `519167d`). This baseline features the manually adjusted **8.0x metric robot scale**, which is the **intended and correct sizing** for the project to ensure proper interaction with the environment and physics stability. The world coordinates are fixed at `(-129.465, 46.927, 2.0)`. All subsequent work will be branched from this stable point on the new `dev` branch.
 
 ## Recent Activity
-- **Sub-Phase 07-01 Complete**: Cleaned `no_graph_sim.usd`, fixed signposts, and updated `SimulationCfg`.
-- **API Modernization**: Standardized all imports to `gymnasium` and added legacy noise filters.
-- **Verification**: Confirmed clean startup logs (no unresolved references).
+- **Source of Truth Restoration**: Hard reset `main` to `519167d`.
+- **Branch Management**: Recreated `dev` branch from the new `main` and pushed all branches to origin.
+- **Scale Confirmation**: Formally adopted 8.0x as the target robot scale.
+- **Verification**: Confirmed 8.0x scale robot and fixed spawn coordinates in `arcpro_env_cfg.py`.
 
 ## Key Achievements
-- **Hygienic USDs**: Production stages are free of broken F1Tenth and Signpost links.
-- **Standardized API**: Codebase is compliant with Gymnasium 1.0+ standards.
-- **Stable PhysX**: Disabled CCD and enabled external force iterations for smoother heavy-robot motion.
+- **Stable Baseline**: Restored the "Monolith" state where the robot spawns and drives correctly in the `no_graph_sim.usd` scene.
+- **Sizing Finalized**: Confirmed 8.0x scale is the project standard (Mandatory).
+- **Manual Alignment**: Verified specific world coordinates for the robot spawn.
+- **Documentation**: Updated planning docs to reflect the new baseline.
 
 ## Planned Tasks
 - [ ] **Phase 08: Training Loop Stabilization** - Finalize reset logic and torque verification.
