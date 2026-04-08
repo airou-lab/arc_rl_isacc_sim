@@ -25,6 +25,7 @@ import isaaclab.envs.mdp as mdp
 
 from arcpro_robot_cfg import ARCPRO_ROBOT_CFG
 import mdp.observations as mdp_obs, mdp.rewards as mdp_rew, mdp.terminations as mdp_done, mdp.events as mdp_events
+from mdp.debug_terminations import debug_termination
 
 @configclass
 class EventCfg:
@@ -75,7 +76,7 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         ),
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
             # Fixed Spawn Point on Waypoint Centerline
-            pos=(-129.30, 49.48, 0.5), 
+            pos=(-129.30, 49.48, 0.1), 
             rot=(0.7071, 0.0, 0.0, 0.7071) # +90 degrees Z-up (Flipped 180)
         ), 
     )
@@ -126,6 +127,7 @@ class TerminationCfg:
     # height termination: Catch flying robots
     height = DoneTerm(func=mdp_done.height_termination)
     # Contact termination: Reset if hitting roadmarks (white lines)
+    # Balanced at 2.2m (0.275 normalized) for 8x robot clearance
     roadmark_contact = DoneTerm(func=mdp_done.white_line_contact)
 
 @configclass

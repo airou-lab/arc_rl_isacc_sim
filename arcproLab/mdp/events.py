@@ -43,7 +43,7 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
         if hit["hit"]:
             hit_path = str(hit.get("rigidBody") or hit.get("collisionPath") or "")
             if "robot" not in hit_path.lower():
-                final_pos[i, 2] = hit["position"][2] + 0.5 # Drop from 0.5m above mesh
+                final_pos[i, 2] = hit["position"][2] + 0.1 # Drop from 0.1m above mesh
                 # if i == 0: print(f"[Event] Reset Snapped Env 0 to Z={final_pos[i, 2]:.2f}")
     
     # Teleport
