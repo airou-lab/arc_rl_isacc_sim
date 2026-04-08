@@ -1,89 +1,68 @@
 # Coding Conventions
 
-**Analysis Date:** 2025-04-18
+**Analysis Date:** 2025-04-28
 
 ## Naming Patterns
 
 **Files:**
-- snake_case: `arcpro_env_cfg.py`, `track_manager.py`.
+- Snake case for all scripts and modules: `arcpro_env_cfg.py`, `train_policy.py`.
+- Lowercase for asset directories: `assets/`, `openStreetUSD/`.
 
 **Functions:**
-- snake_case: `compute_reward()`, `get_telemetry_vector()`.
+- Snake case: `reset_robot_to_lane()`.
 
-**Variables:**
-- snake_case: `joint_pos`, `throttle_limit`.
+**Classes:**
+- CamelCase for configuration classes: `ARCProEnvCfg`, `ARCProSceneCfg`.
 
-**Types / Classes:**
-- PascalCase: `ArcProRobotCfg`, `HierarchicalPathPlanningPolicy`, `TrackManager`.
-
-**Constants:**
-- UPPER_CASE: `ARCPRO_LAB_DIR`, `USD_DIR`.
-
-## Telemetry Protocol (12-Float)
-
-All observation vectors returned by `get_telemetry_vector()` in `arcproLab/mdp/observations.py` must follow this mapping:
-
-| Index | Name | Units | Description |
-|-------|------|-------|-------------|
-| 0 | TURN_TOKEN | {-1, 0, 1} | Navigation intent from high-level worker |
-| 1 | GO_SIGNAL | {0.0, 1.0} | Scheduler-controlled stop/go |
-| 2 | GOAL_DIST | meters | Distance to target (often masked) |
-| 3 | SPEED | m/s | Forward vehicle speed |
-| 4 | YAW_RATE | rad/s | Angular velocity around Z-axis |
-| 5 | LAST_STEER | [-1, 1] | Previous steering action |
-| 6 | LAST_THR | [-1, 1] | Previous throttle action |
-| 7 | LAST_BRK | [0, 1] | Previous brake action |
-| 8 | LAT_ERR | meters | Lateral deviation from absolute waypoint |
-| 9 | HDG_ERR | radians | Heading deviation from absolute waypoint |
-| 10 | KAPPA | 1/m | Local path curvature |
-| 11 | DS | meters | Cumulative odometry |
-
-## Physical Conventions
-
-**Baseline Robot Scale (v1.2-dev):**
-- **8.0x metric scale override** in `arcpro_env_cfg.py`. This is the current stable baseline for simulation stability and visual alignment.
-- **0.125 Normalization**: All telemetry inputs (Speed, Lateral Error) are scaled by `0.125` in `observations.py` to keep the policy metric-aligned.
-
-**Drive Configuration:**
-- **4WD (Four-Wheel Drive)**: All wheels (`Joint_Drive_.*`) are used for acceleration to maintain traction for the 20kg chassis.
-
-**Mass:**
-- Standardized at **20.0kg** for the F1Tenth_Metric robot to ensure realistic inertia and suspension behavior.
-
-**Waypoint Alignment:**
-- Use **Absolute Waypoint Alignment**. Do not shift waypoints to origin; track them relative to world coordinates for multi-agent and large-map compatibility.
+**Types:**
+- Use `torch.Tensor` for vectorized RL state; use standard Python types for configuration flags.
 
 ## Code Style
 
 **Formatting:**
-- flake8 (implied by `requirements.txt`).
-- Standard Python (PEP 8) with emphasis on `@configclass` usage for Isaac Sim.
+- Flake8 for linting (implied by `requirements.txt`).
+- Standard Python style following Isaac Lab developer guidelines (PEP8).
 
 **Linting:**
-- flake8 for syntax and style checking.
+- `flake8` for syntax and style checking.
 
 ## Import Organization
 
 **Order:**
-1. Standard library (`os`, `sys`, `math`).
-2. Major third-party libraries (`torch`, `numpy`).
-3. Isaac Sim / IsaacLab imports (`isaaclab.sim`, `isaaclab.envs`).
-4. Local project imports (`arcpro_robot_cfg`, `mdp.observations`).
+1. Standard library imports.
+2. Third-party library imports (e.g., `torch`, `omni`).
+3. Local application imports (e.g., `arcpro_env_cfg`).
+
+**Path Aliases:**
+- `sys.path.append(os.path.join(os.path.dirname(__file__), ".."))` is used in scripts to access `arcproLab` modules.
 
 ## Error Handling
 
 **Patterns:**
-- NaN handling in observation tensors to prevent model collapse.
-- Default fallback waypoints in `TrackManager` if USD sampling fails.
+- Extensive retry loops for stochastic simulation operations (e.g., `reset_robot_to_lane`).
+- Fallback positions and warning logs when critical simulation geometry cannot be detected.
 
 ## Logging
 
-**Framework:** TensorBoard (integrated with SB3) and standard Python `logging` / `print`.
+**Framework:**
+- `print()` for local script output.
+- `TensorBoard` for training progress via Stable Baselines3.
+
+## Workflow Conventions
+
+**Stabilization Tasks:**
+- Use `.planning/todos/` for tracking discrete stabilization tasks.
+- Each todo should have a clear Goal and a list of actionable Tasks.
+- Phase 09 specifically uses `verify_spawn.py` as a mandatory sanity check before code promotion.
 
 ## Module Design
 
-**Exports:** Explicitly defining `ARCPRO_ROBOT_CFG` in config files for external consumption.
+**Exports:**
+- Use `__init__.py` to expose key logic in `arcproLab/mdp/`.
+
+**Config Classes:**
+- Use `@configclass` decorator from `isaaclab.utils.configclass` for all environment and robot configurations.
 
 ---
 
-*Convention analysis: 2025-04-18*
+*Convention analysis: 2025-04-28*

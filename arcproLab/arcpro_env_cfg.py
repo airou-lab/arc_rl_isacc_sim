@@ -5,6 +5,7 @@
 
 import os
 import sys
+import torch
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -28,13 +29,12 @@ import mdp.observations as mdp_obs, mdp.rewards as mdp_rew, mdp.terminations as 
 @configclass
 class EventCfg:
     """Configuration for events."""
-
-    # reset_robot_to_lane = EventTermCfg(
-    #     func=mdp_events.reset_robot_to_lane,
-    #     mode="reset",
-    #     params={"asset_cfg": SceneEntityCfg("robot")},
-    # )
-    pass
+    # Snapped spawn: Uses raycasting to find the road height
+    reset_robot_to_fixed_spawn = EventTermCfg(
+        func=mdp_events.reset_robot_to_fixed_spawn,
+        mode="reset",
+        params={"asset_cfg": SceneEntityCfg("robot")},
+    )
 
 @configclass
 class ARCProSceneCfg(InteractiveSceneCfg):
@@ -74,8 +74,9 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             scale=(8.0, 8.0, 8.0),
         ),
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
-            pos=(-129.465, 46.927, 2.0),
-            rot=(0.7071, 0.0, 0.0, -0.7071) # -90 degrees Z-up
+            # Fixed Spawn Point on Waypoint Centerline
+            pos=(-129.30, 49.48, 0.5), 
+            rot=(0.7071, 0.0, 0.0, 0.7071) # +90 degrees Z-up (Flipped 180)
         ), 
     )
     
@@ -97,7 +98,7 @@ class ObservationCfg:
     
     @configclass
     class VisualCfg(ObservationGroupCfg):
-        tiled_camera = ObsTerm(func=mdp.image, params={"sensor_cfg": SceneEntityCfg("tiled_camera"), "normalize": False})
+        tiled_camera = ObsTerm(func=mdp.image, params={"sensor_cfg": SceneEntityCfg("tiled_camera"), "normalize": True})
     
     visual: VisualCfg | None = VisualCfg()
 
@@ -109,18 +110,24 @@ class ActionCfg:
 @configclass
 class RewardCfg:
     speed = RewTerm(func=mdp_rew.speed_reward, weight=1.0)
+    # Strong lateral error penalty (Off-track penalty > Speed reward)
+    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=5.0)
 
 @configclass
 class TerminationCfg:
-    # height = DoneTerm(func=mdp_done.height_termination)
-    pass
+    # height termination: Catch flying robots
+    height = DoneTerm(func=mdp_done.height_termination)
+    # Terminate if too far from centerline (1.5m world = 0.1875 normalized)
+    track_limit = DoneTerm(
+        func=lambda env: torch.abs(env.observation_manager.compute()["policy"][:, 8]) > 0.1875
+    )
 
 @configclass
 class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     # Adjust viewer to see the robot at its new world position
     viewer: ViewerCfg = ViewerCfg(eye=(-120.0, 55.0, 10.0), lookat=(-129.0, 46.0, 0.0))
     
-    enable_cameras: bool = False
+    enable_cameras: bool = True
     scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=1, env_spacing=1000.0)
     observations: ObservationCfg = ObservationCfg()
     actions: ActionCfg = ActionCfg()

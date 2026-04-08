@@ -1,95 +1,75 @@
 # Testing Patterns
 
-**Analysis Date:** 2025-04-18
+**Analysis Date:** 2025-04-28
 
 ## Test Framework
 
 **Runner:**
-- pytest (Version 7.0+)
-- Config: None (standard discovery)
-
-**Assertion Library:**
-- Standard `assert` in Python.
+- `pytest` for unit testing logic.
+- Bash scripts for simulation-based verification (`verify_sim.sh`).
 
 **Run Commands:**
 ```bash
-pytest                  # Run unit tests in tests/
-./run_gui_verify.sh     # Run visual verification in Isaac Sim
-./verify_sim.sh         # Run headless simulation verification
-python3 arcproLab/scripts/verify_policy.py --checkpoint arcproLab/models/road_following_model.pth
+pytest tests/           # Run logic tests
+./verify_sim.sh         # Headless simulation performance audit
+python arcproLab/scripts/verify_spawn.py --num_envs 16 # Spawn and camera verification
 ```
 
 ## Test File Organization
 
 **Location:**
-- Logic tests: `tests/` directory.
-- Environment verification: `arcproLab/scripts/` (e.g., `verify_metric.py`).
+- Logic tests are separate in `tests/`.
+- Simulation verification scripts are in `arcproLab/scripts/`.
 
 **Naming:**
 - `test_*.py` for unit tests.
-- `verify_*.py` for simulation-based verification.
+- `verify_*.py` for simulation sanity checks.
 
-**Structure:**
-```
-tests/
-  └── test_track_manager.py
-```
+## Unit Testing Structure
 
-## Test Structure
+**Logic Testing:**
+- Focus on `TrackManager` and vectorized math in `mdp/`.
+- Uses `pytest` to verify waypoint generation and distance calculations.
 
-**Suite Organization (Telemetry Vector Verification):**
-```python
-def test_telemetry_normalization():
-    # Test that 8.0x speed is normalized to 1.0x metric speed
-    sim_speed = 8.0
-    normalized_speed = sim_speed * 0.125
-    assert normalized_speed == 1.0
-```
+## Simulation Verification Patterns
 
-**Patterns:**
-- **Unit Testing**: Testing the math in `TrackManager` and `observations.py` logic without needing the simulator.
-- **Metric Verification**: Live verification in Isaac Sim using `verify_metric.py` to check real-world scale and physics parameters (mass, friction, 4WD).
+**Phase 09 Stabilization Loop:**
+- **Sanity Check**: Run `verify_spawn.py` to ensure the robot starts on the road and cameras are correctly positioned.
+- **Performance Audit**: Run `verify_sim.sh` to monitor FPS and physics stability at 8.0x scale.
+- **Regression Check**: Run `verify_policy.py` with a known good model (e.g., `road_following_model.pth`) to ensure environment changes haven't broken the telemetry logic.
 
 ## Mocking
 
-**Framework:** `unittest.mock` (standard).
-
-**What to Mock:**
-- **USD Stage**: When testing `TrackManager.sample_waypoints_from_usd` logic.
-- **Robot Data**: Mocking `asset.data` from IsaacLab to test observation calculations.
-
-**What NOT to Mock:**
-- Physics interactions (use live verification instead).
-
-## Fixtures and Factories
-
-**Test Data:**
-- `arcproLab/mdp/track_centerline.npy`: The source of truth for navigation tests.
+**Framework:**
+- Not extensively used; simulation verification relies on running the actual Isaac Sim instance.
 
 ## Coverage
 
-**Requirements:** None enforced.
+**Requirements:**
+- Logic tests for critical math in `TrackManager` are expected.
+- Coverage metrics are not strictly enforced.
 
 ## Test Types
 
 **Unit Tests:**
-- Waypoint lookup and error calculation math in `TrackManager`.
+- Waypoint error calculations.
+- Tensor shape verification in `observations.py`.
 
 **Integration Tests:**
-- Asset loading and reference resolution in `openStreetUSD/`.
-- Training initialization via `train_policy.py`.
+- Robot-track alignment during reset events (`verify_spawn.py`).
+- Full RL training loop convergence checks (`train.sh`).
 
-**E2E Tests (Visual):**
-- Full inference lap testing with `verify_policy.py`.
-- Physics stability check under 4WD acceleration.
+**E2E Tests:**
+- `run_gui_verify.sh` provides a manual end-to-end check of the trained policy in the simulation.
 
 ## Common Patterns
 
-**Async Testing:** Not used (standard synchronous simulation).
+**Async Testing:**
+- Simulation steps are blocking; tests iterate through fixed numbers of steps and verify state.
 
 **Error Testing:**
-- Use of `pytest.raises()` for expected failures in waypoint loading.
+- Testing fallback behavior in `events.py` when the robot is spawned far from the track.
 
 ---
 
-*Testing analysis: 2025-04-18*
+*Testing analysis: 2025-04-28*

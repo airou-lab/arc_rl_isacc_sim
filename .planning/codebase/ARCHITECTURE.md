@@ -1,96 +1,95 @@
 # Architecture
 
-**Analysis Date:** 2025-04-18
+**Analysis Date:** 2025-04-28
 
 ## Pattern Overview
 
-**Overall:** Manager-Based Reinforcement Learning Environment (IsaacLab 1.0+ pattern) with Gymnasium 1.0+ standards.
+**Overall:** Manager-Based RL with **Phase-Driven Stabilization** workflow. This architecture focuses on iterative verification of the hybrid 8.0x metric scale environment before large-scale training.
 
 **Key Characteristics:**
-- **Manager-Based RL**: Decoupled scene, observation, action, reward, and termination management using IsaacLab's `ManagerBasedRLEnv`.
-- **Hybrid Scale Baseline (8.0x)**: The robot is scaled to 8.0x in the scene (`arcproLab/arcpro_env_cfg.py`) for visual and physical stability, while observations are normalized to 1.0x metric scale for policy compatibility.
-- **4WD True Physics**: All-Wheel Drive dynamics with **20kg mass** and optimized PhysX TGS solver.
-- **Vectorized Telemetry**: A standardized 12-float protocol for vehicle state and navigation intent.
+- **Manager-Based RL**: Strict decoupling of Scene, Observation, Action, Reward, and Termination logic using Isaac Lab's `ManagerBasedRLEnv`.
+- **Hybrid Scale (8.0x)**: The robot and world are scaled to 8.0x to avoid precision issues in Isaac Sim physics, while observation and reward logic normalize to 1.0x metric units.
+- **Phase 09 Stabilization Workflow**: A task-oriented approach integrating automated verification (`verify_spawn.py`, `verify_metric.py`) with manual "sanity" checks (visual/camera offset, torque audit).
+- **True-Physics Simulation**: High-fidelity vehicle dynamics with 200Hz control loop and TGS solver.
 
 ## Layers
 
 **Configuration Layer:**
-- Purpose: Defines the scene, robot properties, and training hyperparameters.
+- Purpose: Defines simulation parameters, assets, and robot properties.
 - Location: `arcproLab/arcpro_env_cfg.py`, `arcproLab/arcpro_robot_cfg.py`.
-- Contains: `ARCProEnvCfg`, `ARCProSceneCfg`, `ArcProRobotCfg`.
-- Depends on: `isaaclab.utils.configclass`, `isaaclab.assets`, `isaaclab.sim`.
+- Features: Configurable camera status (`enable_cameras`), 20kg chassis mass, and 4WD actuator settings.
 
 **MDP Layer (Markov Decision Process):**
-- Purpose: Implements RL logic (Observations, Rewards, Events, Terminations).
+- Purpose: Bridges simulation state to RL policy.
 - Location: `arcproLab/mdp/`.
-- Contains: `observations.py` (12-float protocol with 0.125 scale normalization), `rewards.py` (speed and lateral error), `track_manager.py` (waypoint navigation).
-- Used by: `arcpro_env_cfg.py`.
+- Key Logic:
+  - `observations.py`: Implements the 12-float telemetry protocol with 0.125 scale normalization.
+  - `events.py`: Implements `reset_robot_to_lane` with robust raycast snapping to the road surface.
+  - `track_manager.py`: Centralized waypoint management and error calculation.
+
+**Verification & Audit Layer:**
+- Purpose: New layer introduced for Phase 09 stabilization.
+- Location: `arcproLab/scripts/`.
+- Tools: `verify_spawn.py` (spawning/alignment), `audit_assets.py` (USD integrity), `verify_metric.py` (physical performance).
 
 **Policy Layer:**
-- Purpose: Neural network architectures and RL algorithms.
-- Location: `arcproLab/policy_stack/`, `arcproLab/mdp/policy_wrapper.py`.
-- Contains: `policies/fusion_policy.py`, `policies/hierarchical_policy.py`.
-- Depends on: `stable_baselines3`, `torch`.
-
-**Asset Layer:**
-- Purpose: Storage for USD assets and navigation data.
-- Location: `arcproLab/assets/`, `openStreetUSD/`.
-- Contains: `F1Tenth_Metric.usd`, `no_graph_sim.usd`, `track_centerline.npy`.
+- Purpose: SB3-based PPO training and evaluation.
+- Location: `arcproLab/scripts/train_policy.py`, `arcproLab/scripts/verify_policy.py`.
+- Integration: Uses `isaaclab_rl.sb3.Sb3VecEnvWrapper` for environment adaptation.
 
 ## Data Flow
 
-**Simulation Cycle:**
+**Phase 09 Stabilization Loop:**
 
-1. **Reset/Event**: `mdp/events.py` (not yet fully implemented for spawning) or standard IsaacLab reset.
-2. **Observation Gathering**: `mdp/observations.py` calculates the 12-float telemetry vector. Note: `SPEED` and `LAT_ERR` are multiplied by `0.125` to convert from 8x sim units to 1x metric units.
-3. **Policy Step**: SB3 policy computes actions based on observations.
-4. **Action Application**: `ActionCfg` in `arcpro_env_cfg.py` maps actions to wheel steering and drive velocities.
-5. **Physics Step**: PhysX simulates 200Hz dynamics with TGS solver.
-6. **Reward Calculation**: `mdp/rewards.py` computes rewards based on current state.
+1. **Configuration**: Set flags (e.g., `enable_cameras`) in `arcpro_env_cfg.py`.
+2. **Local Verification**: Run `verify_spawn.py` with GUI to check camera offsets and robot initialization.
+3. **Physical Audit**: Execute `verify_sim.sh` to perform a "Torque Audit" (acceleration and hill-climbing checks).
+4. **Integration**: Commit stabilized configs to the dev branch.
+5. **Training**: Launch `train.sh` for converged model generation.
 
-**State Management:**
-- Physics state managed by Isaac Sim.
-- Waypoint/Navigation state managed by `TrackManager` (`arcproLab/mdp/track_manager.py`).
+**Simulation Step:**
+
+1. **Event Reset**: `mdp/events.py` snaps robot to road at Z=0.05m (target) or 1.0m (current) with orientation.
+2. **Observation**: Raw simulation values → Normalized 1.0x metric vector.
+3. **Policy**: Model output → Wheel steering and drive efforts.
+4. **Physics**: PhysX 5.1 step at 200Hz.
+5. **Reward/Termination**: Calculation based on lateral error and track progress.
 
 ## Key Abstractions
 
-**TrackManager:**
-- Purpose: Vectorized waypoint tracking. Can sample waypoints directly from USD road meshes.
-- Location: `arcproLab/mdp/track_manager.py`.
-- Pattern: Singleton/Utility.
-
 **12-Float Telemetry Protocol:**
-- Purpose: Standardized input for the road-following policy.
-- Location: `arcproLab/mdp/observations.py`.
+- Standardized observation vector for the navigation policy.
+- Contains: Velocity, heading error, lateral error, and look-ahead waypoints.
+
+**TrackManager (Singleton):**
+- Vectorized waypoint management.
+- Handles distance-to-curve calculations and point-in-lane verification.
 
 ## Entry Points
 
-**Training Script:**
-- Location: `arcproLab/scripts/train_policy.py`.
-- Invoked via: `train.sh`.
+**Verification:**
+- `arcproLab/scripts/verify_spawn.py`: Primary tool for checking robot/track alignment and camera setup.
 
-**Verification Script:**
-- Location: `arcproLab/scripts/verify_policy.py`.
-- Responsibilities: Model inference and metric visualization.
+**Training:**
+- `arcproLab/scripts/train_policy.py`: Main entry for SB3 PPO training.
 
-**Asset Audit:**
-- Location: `arcproLab/scripts/audit_assets.py`.
-- Responsibilities: Checks USD file integrity.
+**Evaluation:**
+- `arcproLab/scripts/verify_policy.py`: Used for checking trained model performance in the environment.
 
 ## Error Handling
 
-**Strategy:** Python exceptions for configuration errors; warning filters for simulation noise.
+**Strategy:** Fail-fast on configuration/asset mismatches; robust fallback in simulation events.
 
 **Patterns:**
-- NaN handling in `observations.py` and `rewards.py`.
-- Fallback navigation logic in `track_manager.py` if USD sampling fails.
+- `reset_robot_to_lane` includes a 50-retry raycast loop with broad road mesh detection.
+- Fallback to Z=10.0 and hardcoded waypoints if road snapping fails.
 
 ## Cross-Cutting Concerns
 
-**Logging:** TensorBoard (SB3).
-**Scale Normalization:** Observations are normalized from 8x to 1x in `observations.py`.
-**Physics Fidelity:** 200Hz frequency with TGS solver for 20kg chassis stability.
+**Logging:** Standard TensorBoard logs for RL training; stdout for verification tools.
+**Scale Normalization:** Centralized in `mdp/observations.py` to prevent "8x leak" into the policy.
+**Torque/Power:** Actuators calibrated for 20kg mass at 8x scale (stiffness/damping tuning).
 
 ---
 
-*Architecture analysis: 2025-04-18*
+*Architecture analysis: 2025-04-28*

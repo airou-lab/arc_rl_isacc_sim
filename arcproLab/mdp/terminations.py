@@ -16,7 +16,7 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     return torch.any(torch.norm(contact_forces, dim=-1) > 1.0, dim=1)
 
 def height_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Terminates if the robot flips or falls (chassis height < 0.02m or > 0.3m)."""
+    """Terminates if the robot flips or falls (chassis height < 0.1m or > 2.0m for 8x scale)."""
     asset = env.scene[asset_cfg.name]
     height = asset.data.root_pos_w[:, 2]
-    return (height < 0.02) | (height > 0.3)
+    return (height < 0.1) | (height > 2.0)

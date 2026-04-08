@@ -1,67 +1,70 @@
 # External Integrations
 
-**Analysis Date:** 2025-04-18
+**Analysis Date:** 2025-04-28
 
 ## APIs & External Services
 
 **Simulation:**
-- NVIDIA Isaac Sim - Real-time physics engine and renderer.
+- NVIDIA Isaac Sim 4.0+ - Real-time physics engine and renderer.
   - SDK: `omni`, `isaacsim`.
   - Auth: Local license / NVIDIA NGC.
 
 **RL Framework:**
-- stable-baselines3 / sb3-contrib - Used for RecurrentPPO training.
-  - **Telemetry Protocol**: Custom 12-float vector integration in `arcproLab/mdp/observations.py`.
+- Isaac Lab 1.0+ - Environment manager and RL interface.
+  - SDK: `isaaclab`.
+- Stable Baselines3 (SB3) - Specifically PPO for policy training.
+  - SDK: `isaaclab_rl.sb3`.
 
 ## Data Storage
 
 **Assets:**
 - OpenStreetUSD - USD map tiles and road assets.
-  - Files: `openStreetUSD/no_graph_sim.usd` (Original scale 1.0x).
-  - Client: `UsdFileCfg` in `isaaclab.sim` (referenced in `arcproLab/arcpro_env_cfg.py`).
+  - Primary: `openStreetUSD/no_graph_sim.usd`.
+  - Asset Management: Integrated via `UsdFileCfg` in `arcpro_env_cfg.py`.
 
 **Robot Asset:**
-- **F1Tenth_Metric.usd**: Metric robot asset, scaled 8.0x for the environment.
+- **F1Tenth_Metric.usd**: Metric-calibrated robot asset, scaled 8.0x for simulation stability.
   - Location: `arcproLab/assets/robot/`.
   - Config: `arcproLab/arcpro_robot_cfg.py`.
 
 **Models:**
-- PyTorch Weights - Saved as `.pth` files.
+- PyTorch Weights - Saved as `.pth` or `.zip` files for SB3.
   - Files: `arcproLab/models/road_following_model.pth`.
-  - Library: `torch.load()`.
+  - Managed by: SB3 and `verify_policy.py`.
 
 **Navigation Data:**
-- Waypoint Arrays - NumPy arrays containing **absolute** track centerlines.
+- Waypoint Arrays - NumPy arrays containing absolute track centerlines.
   - Files: `arcproLab/mdp/track_centerline.npy`.
-  - Format: 3D coordinates (altitude-aware).
+  - Format: [X, Y, Yaw, Velocity] (Altitude-aware).
   - Managed by: `arcproLab/mdp/track_manager.py`.
 
 ## Authentication & Identity
 
 **Auth Provider:**
-- None - Local execution.
+- None - Local or containerized execution.
 
 ## Monitoring & Observability
 
 **Logs:**
-- Local TensorBoard - Standard for SB3 training.
+- TensorBoard - Real-time training monitoring.
   - Location: `logs/ppo/`.
+- Stdout - Used for Phase 09 stabilization verification tools (`verify_spawn.py`, `verify_metric.py`).
 
 ## CI/CD & Deployment
 
 **CI Pipeline:**
-- GitHub Actions - Defined in `.github/workflows/ci.yml`.
+- GitHub Actions - Automated testing defined in `.github/workflows/ci.yml`.
 
 **Deployment Target:**
-- F1Tenth Hardware - Physical robot using **4WD (Four-Wheel Drive)** and **20kg** mass.
+- Physical F1Tenth Hardware - Simulation target mimics 20kg mass and 4WD drive.
 
 ## Environment Configuration
 
 **Required env vars:**
-- No explicit env vars in current code; configuration is strictly through Python `configclass`.
+- None detected; configuration is strictly managed through `@configclass` Python objects.
 
 **Secrets location:**
-- Not detected / None.
+- Not detected.
 
 ## Webhooks & Callbacks
 
@@ -73,4 +76,4 @@
 
 ---
 
-*Integration audit: 2025-04-18*
+*Integration audit: 2025-04-28*

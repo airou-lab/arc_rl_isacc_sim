@@ -51,9 +51,8 @@ def main():
     # 1. Setup Environment Configuration
     env_cfg = ARCProEnvCfg()
     env_cfg.scene.num_envs = args_cli.num_envs
-    # Enable cameras if you want to train with vision, otherwise state-based
-    # For now, we train on the 12-element telemetry vector
-    env_cfg.enable_cameras = False 
+    # Enable cameras for vision-based training
+    env_cfg.enable_cameras = True 
     env_cfg.__post_init__() 
 
     # 2. Create Environment
@@ -70,10 +69,9 @@ def main():
     os.makedirs(log_dir, exist_ok=True)
 
     # 6. Define Policy & Model
-    policy_kwargs = dict(activation_fn=torch.nn.Tanh, net_arch=dict(pi=[64, 64], qf=[64, 64]))
-    
+    # Use MultiInputPolicy for combined vision + telemetry
     model = PPO(
-        "MlpPolicy",
+        "MultiInputPolicy",
         env,
         verbose=1,
         learning_rate=3e-4,

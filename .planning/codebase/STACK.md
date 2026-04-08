@@ -1,77 +1,69 @@
 # Technology Stack
 
-**Analysis Date:** 2025-04-18
+**Analysis Date:** 2025-04-28
 
 ## Languages
 
 **Primary:**
-- Python 3.11/3.12 - Core logic, simulation configuration, and training scripts.
+- Python 3.10+ - Used for all RL environment logic, training scripts, and asset management.
+
+**Secondary:**
+- Bash - Used for orchestration scripts (`train.sh`, `verify_sim.sh`, `run_gui_verify.sh`).
 
 ## Runtime
 
 **Environment:**
-- NVIDIA Isaac Sim 4.0.0+ - Primary simulation engine.
-- NVIDIA IsaacLab 1.0.0+ - Framework for manager-based RL environments.
-- Gymnasium 1.0.0+ - Standard RL interface.
+- Isaac Sim 4.0+ (Omniverse)
+- Isaac Lab 1.0+ (formerly Orbit)
 
 **Package Manager:**
-- pip - Managed via `requirements.txt`.
-- Virtual Environment: `venv/` (Python 3.11/3.12) observed.
-- Lockfile: missing
+- Conda/Mamba (Implicitly managed by Isaac Lab environment)
+- pip - For secondary dependencies in `requirements.txt`.
+- Lockfile: missing (relies on Isaac Lab base container/installation)
 
 ## Frameworks
 
 **Core:**
-- IsaacLab - Environment and scene management (`isaaclab.envs`, `isaaclab.managers`).
-- Stable Baselines3 (SB3) - RL algorithms and policy structures.
-- SB3-contrib - Recurrent PPO support for hierarchical policies.
+- Isaac Lab 1.0+ - Manager-based environment orchestration.
+- Gymnasium 1.0+ - Standard interface for RL environments.
 
-**Testing:**
-- pytest - Unit and integration testing.
+**RL Algorithm:**
+- Stable Baselines3 (SB3) - Specifically `PPO` for navigation policy training.
+- isaaclab_rl - Isaac Lab wrapper for SB3.
 
 **Build/Dev:**
-- USD (Universal Scene Description) - Asset format for scenes and robots.
-- **Robot Scale**: 8.0x metric scale override in `arcproLab/arcpro_env_cfg.py` for visual/physics stability matching.
-- **Track Scale**: 1.0x metric scale (original) in `openStreetUSD/no_graph_sim.usd`.
+- PhysX 5.1 - High-fidelity physics solver.
+- USD (Universal Scene Description) - Industry-standard asset and scene management.
 
 ## Key Dependencies
 
 **Critical:**
-- `torch` (PyTorch) - Neural network backend for policies.
-- `numpy` (<2.0) - Numerical computations and absolute waypoint handling.
-- `sb3_contrib` - Required for `RecurrentPPO` and `RecurrentActorCriticPolicy`.
-- `isaaclab_rl.sb3` - Fixed import path for `Sb3VecEnvWrapper`.
+- `isaaclab.envs.ManagerBasedRLEnv` - Base class for the environment.
+- `torch` - Backend for neural networks and vectorized physics operations.
 
 **Infrastructure:**
-- `matplotlib` - Used for visual analytics and metric verification.
-- `isaaclab` - Provides the `ManagerBasedRLEnv` abstraction.
+- `omni.physx` - Direct interaction with the physics solver for raycasting/snapping logic.
+- `numpy` (< 2.0) - Numerical processing for waypoint management.
 
 ## Configuration
 
 **Environment:**
-- Configured via Python classes using `@configclass` decorator from `isaaclab.utils`.
-- **Telemetry Protocol**: Standardized 12-float vector mapping in `arcproLab/mdp/observations.py`.
-- Key configs: `arcproLab/arcpro_env_cfg.py` (Scene/MDP) and `arcproLab/arcpro_robot_cfg.py` (Robot).
+- `arcproLab/arcpro_env_cfg.py` - Main simulation and RL configuration.
+- `arcproLab/arcpro_robot_cfg.py` - Robot physical properties (Mass: 20kg, Scale: 8.0x).
 
-**Physics Optimizations (Phase 08 - Baseline):**
-- **Simulation Frequency**: 200Hz (`dt=0.005`).
-- **Render Frequency**: 25Hz (`render_interval=8`, `decimation=8`).
-- **Solver**: PhysX TGS (`solver_type=1`).
-- **Accuracy**: 8 position / 4 velocity iterations.
-- **Stability**: `enable_ccd=True`, `enable_stabilization=True` for high-speed AWD (Four-Wheel Drive) motion.
+**Build:**
+- `train.sh` - Standardizes training parameters.
+- `.github/workflows/ci.yml` - CI configuration.
 
 ## Platform Requirements
 
 **Development:**
-- Ubuntu 22.04+ (Standard for Isaac Sim).
-- NVIDIA GPU with RTX support (Required for Isaac Sim).
-- NVIDIA Driver 535+ (Recommended).
+- NVIDIA GPU with 8GB+ VRAM (12GB+ recommended for cameras).
+- Ubuntu 22.04+ with Isaac Lab installed.
 
 **Production:**
-- Deployment to F1Tenth hardware (sim-to-real) at 1.0x metric scale.
-- **4WD (Four-Wheel Drive)** actuator configuration.
-- **20kg Mass** constant for realistic vehicle dynamics.
+- Headless simulation support via `verify_sim.sh` and `train.sh`.
 
 ---
 
-*Stack analysis: 2025-04-18*
+*Stack analysis: 2025-04-28*

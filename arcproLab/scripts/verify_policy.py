@@ -140,7 +140,13 @@ def main():
                 actions[:, 2:4] = -40.0 # Drive FL and FR at constant speed
 
             # step environment
-            obs, _, _, _, _ = env.step(actions)
+            obs, rewards, terminated, truncated, info = env.step(actions)
+            
+            # Note: Isaac Lab automatically resets terminated envs during step()
+            if terminated.any() or truncated.any():
+                if count % 20 == 0:
+                    print(f"  [!] Reset triggered (Terminated: {terminated.any()}, Truncated: {truncated.any()})")
+
             # Telemetry for env 0 (Outside of image block for visibility)
             if count % 20 == 0:
                  pos = env.scene["robot"].data.root_pos_w

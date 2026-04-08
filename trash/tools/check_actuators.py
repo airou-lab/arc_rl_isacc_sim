@@ -7,7 +7,11 @@ import argparse
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Find which joints move when commanded.")
+# Add AppLauncher args FIRST
 AppLauncher.add_app_launcher_args(parser)
+# Add custom args AFTER
+parser.add_argument("--num_envs", type=int, default=1, help="Number of parallel simulation environments.")
+# Parse ALL args
 args_cli = parser.parse_args()
 
 app_launcher = AppLauncher(args_cli)
@@ -18,9 +22,13 @@ import os
 import sys
 
 # Add arcproLab to sys.path
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ARCPRO_LAB_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "arcproLab"))
 
-from isaaclab.envs import ManagerBasedEnv
+if ARCPRO_LAB_DIR not in sys.path:
+    sys.path.append(ARCPRO_LAB_DIR)
+
+from isaaclab.envs import ManagerBasedEnv, ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
 
 def main():

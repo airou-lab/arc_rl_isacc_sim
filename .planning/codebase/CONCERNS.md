@@ -1,70 +1,82 @@
 # Codebase Concerns
 
-**Analysis Date:** 2025-04-18
+**Analysis Date:** 2025-04-28
 
 ## Tech Debt
 
 **[Hybrid Scale Complexity]:**
-- Issue: The simulation operates at **8.0x robot scale** but the policy expects **1.0x metric scale**. This requires manual normalization (`* 0.125`) in `observations.py`.
+- Issue: Simulation operates at **8.0x robot scale**, policy at **1.0x metric scale**. Manual normalization (`* 0.125`) is required in `observations.py`.
 - Files: `arcproLab/arcpro_env_cfg.py`, `arcproLab/mdp/observations.py`.
-- Impact: Increased cognitive load for developers and potential for scaling bugs if new telemetry fields are added without normalization.
-- Fix approach: Re-export the track at true 1.0x scale to allow the robot to return to its canonical 1.0x scale.
+- Impact: Increased cognitive load and risk of scaling errors in telemetry.
+- Mitigation: Centralized normalization logic in `observations.py`.
 
-**[Hardcoded Initial State]:**
-- Issue: The robot's spawn position is hardcoded in `arcpro_env_cfg.py`.
-- Files: `arcproLab/arcpro_env_cfg.py`.
-- Impact: Training always starts from the same point, reducing exploration diversity.
-- Fix approach: Implement a robust `reset_robot_to_lane` event in `mdp/events.py` that samples random waypoints.
+**[Incomplete Reset Logic]:**
+- Issue: `reset_robot_to_lane` currently lands the robot from 1.0m above the hit point, which can cause bouncing and instability during training resets.
+- Files: `arcproLab/mdp/events.py`.
+- Impact: Physics instability at the start of episodes.
+- Fix: Implement direct Z=0.05m snapping (Phase 09 Task).
 
 ## Known Bugs
 
-**[USD Sampling Jitter]:**
-- Issue: `TrackManager.sample_waypoints_from_usd` uses a nearest-neighbor approach that can fail on complex intersection geometry.
-- Files: `arcproLab/mdp/track_manager.py`.
-- Trigger: Multiple overlapping road meshes in USD.
-- Workaround: Use pre-computed `track_centerline.npy` instead of live sampling.
+**[Raycast Failure Fallback]:**
+- Issue: When the raycast fails to find a "road" mesh, the robot falls back to a hardcoded Z=10.0 position.
+- Files: `arcproLab/mdp/events.py`.
+- Trigger: Gaps in road geometry or collision mesh issues in `no_graph_sim.usd`.
+- Workaround: Increased retry count and broader mesh detection; needs final stabilization in Phase 09.
+
+**[SB3 Import Compatibility]:**
+- Issue: Isaac Lab updates changed the SB3 wrapper import paths.
+- Files: `arcproLab/scripts/train_policy.py`.
+- Status: Fixed (Now using `isaaclab_rl.sb3`).
 
 ## Security Considerations
 
 **[Local Simulation]:**
-- Risk: None identified; simulation runs locally with standard dependencies.
+- Risk: Low. All operations are local within the Isaac Sim container/environment.
 
 ## Performance Bottlenecks
 
-**[GPU Memory Usage]:**
-- Problem: Isaac Sim 4.0 with large USD files can consume significant VRAM.
-- Files: `openStreetUSD/no_graph_sim.usd`.
-- Cause: High-detail road meshes.
-- Improvement path: Optimize collision geometry and use lower-poly visual models where appropriate.
+**[Camera VRAM Overhead]:**
+- Problem: Enabling cameras (`enable_cameras=True`) significantly increases VRAM usage.
+- Files: `arcproLab/arcpro_env_cfg.py`.
+- Cause: Rendering overhead for tiled cameras in Isaac Sim.
+- Improvement path: Only enable cameras for visual verification or during specific vision-based training phases.
 
 ## Fragile Areas
 
-**[Waypoint-Track Alignment]:**
-- Files: `arcproLab/mdp/track_centerline.npy`.
-- Why fragile: If the track is moved in the USD stage, the waypoints will no longer align.
-- Test coverage: Low.
-- Safe modification: Always run `verify_metric.py` after updating track assets.
+**[Waypoint Alignment]:**
+- Files: `arcproLab/mdp/track_centerline.npy`, `openStreetUSD/no_graph_sim.usd`.
+- Why fragile: If the road mesh is translated or scaled in USD without regenerating waypoints, navigation will fail.
+- Safety measure: Run `verify_spawn.py` after any USD modification.
+
+**[Torque Calibration]:**
+- Files: `arcproLab/arcpro_robot_cfg.py`.
+- Why fragile: 20kg mass at 8x scale requires precise `effort_limit_sim` and `stiffness/damping` tuning to prevent oscillation or sluggishness.
 
 ## Scaling Limits
 
 **[Multi-Agent Support]:**
 - Current capacity: Single robot.
-- Limit: `TrackManager` is a singleton, which may need refactoring if multiple robots need to track different segments simultaneously (though the logic is vectorized).
+- Limit: Vectorized logic is mostly in place, but `TrackManager` and `events.py` need verification for large-scale multi-robot training (e.g., > 1024 environments).
 
 ## Missing Critical Features
 
 **[Domain Randomization]:**
-- Problem: Friction, mass, and lighting randomization are not yet implemented.
-- Blocks: Robust sim-to-real transfer.
+- Problem: Randomization of friction, mass, and actuator noise is missing.
+- Blocks: Robust sim-to-real transfer and generalization.
 
 ## Test Coverage Gaps
 
-**[4WD Force Verification]:**
-- What's not tested: Whether all 4 wheels are actually applying the correct torque.
-- Files: `arcproLab/arcpro_robot_cfg.py`, `arcproLab/mdp/observations.py`.
-- Risk: Robot might be operating as 2WD due to misconfiguration, reducing its performance under high load.
-- Priority: Medium.
+**[Phase 09 Verification Loop]:**
+- What's not tested: Automated verification of torque/acceleration performance.
+- Files: `arcproLab/scripts/verify_metric.py`.
+- Priority: High (Part of stabilization workflow).
+
+**[Camera Blocking Checks]:**
+- What's not tested: Whether the `tiled_camera` view is obstructed by the chassis at 8x scale.
+- Files: `arcproLab/arcpro_env_cfg.py`.
+- Priority: Medium (Phase 09 Task).
 
 ---
 
-*Concerns audit: 2025-04-18*
+*Concerns audit: 2025-04-28*

@@ -106,9 +106,14 @@ class TrackManager:
 
         # 2. Simple ordering (Nearest Neighbor)
         ordered_pts = []
-        curr_idx = 0
-        visited = set([0])
-        ordered_pts.append(pts[0])
+        
+        # START NEAR ROBOT SPAWN: (-129, 46)
+        spawn_target = np.array([-129.46, 46.92])
+        start_dists = np.sum((pts - spawn_target)**2, axis=1)
+        curr_idx = np.argmin(start_dists)
+        
+        visited = set([curr_idx])
+        ordered_pts.append(pts[curr_idx])
         
         while len(visited) < len(pts):
             last_pt = ordered_pts[-1]
@@ -118,7 +123,9 @@ class TrackManager:
                 dists[v] = np.inf
             
             next_idx = np.argmin(dists)
-            if dists[next_idx] > 5.0: # Break if gap is too large (likely separate track segments)
+            # INCREASE GAP THRESHOLD: 50.0m for giant scale tiles
+            if dists[next_idx] > 50.0**2: 
+                print(f"[TrackManager] Large gap detected ({np.sqrt(dists[next_idx]):.2f}m). Stopping segment.")
                 break
             
             ordered_pts.append(pts[next_idx])
