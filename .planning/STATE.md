@@ -7,19 +7,16 @@
 **Phase 09: Training Loop Stabilization** (ACTIVE)
 
 ## Summary
-The project is on the `dev` branch, stabilized at the 8.0x metric robot scale baseline. We are now following a systematic checklist to enable visuals, verify physics, and initiate training.
+The project is on the `dev` branch. Phase 09-01 (Stabilization) is complete, with vision enabled and physics calibrated for the 8.0x robot scale. We are now in Phase 09-02, focusing on physical contact-based termination.
 
 ## Recent Activity
-- **Todo Initialization**: Scaffolded 5 specific stabilization tasks.
-- **Plan Integration**: Formally loaded todos into Phase 09-01 Plan.
-- **Baseline Confirmed**: 8.0x scale adopted as project standard.
+- **Phase 09-01 Complete**: Enabled visuals, calibrated 8x physics, implemented raycast-snapped spawn, and aligned waypoints.
+- **Merge to Main**: Integrated Phase 09-01 into main branch.
+- **Phase 09-02 Initialized**: Implemented Roadmark Contact Termination using `ContactSensorCfg` and `white_line_contact`.
 
 ## Active Todos (Queue)
-1. [ ] **01-enable-visuals**: Enable cameras and check for CUDA stability.
-2. [ ] **02-verify-camera-offset**: Ensure front view is clear for 8x chassis.
-3. [ ] **03-integrate-reset-logic**: Apply Z=0.05m waypoint snapping.
-4. [ ] **04-torque-audit**: Confirm 20kg mass power requirements.
-5. [ ] **05-initiate-training**: Launch SB3 training loop.
+1. [x] **09-01-stabilize-loop**: Enable visuals, verify 8x scale, and initiate dry run.
+2. [ ] **09-02-contact-termination**: Migrate from distance-based to physical contact-based lane resets.
 
 ## Blockers
 None.

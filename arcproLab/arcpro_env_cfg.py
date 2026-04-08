@@ -17,7 +17,7 @@ from isaaclab.utils import configclass
 from isaaclab.envs import ManagerBasedRLEnvCfg, ViewerCfg
 from isaaclab.managers import ObservationGroupCfg, ObservationTermCfg as ObsTerm, ActionTermCfg as ActionTerm, RewardTermCfg as RewTerm, TerminationTermCfg as DoneTerm, SceneEntityCfg, EventTermCfg
 from isaaclab.assets import AssetBaseCfg
-from isaaclab.sensors import TiledCameraCfg
+from isaaclab.sensors import TiledCameraCfg, ContactSensorCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
 import isaaclab.sim as sim_utils
@@ -89,6 +89,14 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         data_types=["rgb"], width=160, height=90,
     )
 
+    # Contact Sensor: Detect chassis collisions (crashes)
+    contact_forces = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/Chassis",
+        update_period=0.0,
+        history_length=3,
+        debug_vis=True,
+    )
+
 @configclass
 class ObservationCfg:
     @configclass
@@ -117,10 +125,8 @@ class RewardCfg:
 class TerminationCfg:
     # height termination: Catch flying robots
     height = DoneTerm(func=mdp_done.height_termination)
-    # Terminate if too far from centerline (1.5m world = 0.1875 normalized)
-    track_limit = DoneTerm(
-        func=lambda env: torch.abs(env.observation_manager.compute()["policy"][:, 8]) > 0.1875
-    )
+    # Contact termination: Reset if hitting roadmarks (white lines)
+    roadmark_contact = DoneTerm(func=mdp_done.white_line_contact)
 
 @configclass
 class ARCProEnvCfg(ManagerBasedRLEnvCfg):
