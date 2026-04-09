@@ -20,6 +20,8 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 *Focus: Graph-based routing, intersection logic, and multi-agent coordination.*
 
 - [ ] **Phase 10: Intersection Navigation** - Implement graph-based route planning.
+- [ ] **Phase 11: Hierarchical Policy Migration** - Port the `Worker-Driver` architecture from the sibling folder and refactor for the 1500kg physics.
+- [ ] **Phase 12: Environment Scale Alignment** - Scale USD road assets by 8.0x to match the robot scale, allowing removal of observation normalization (0.125).
 
 ## Progress
 
@@ -30,6 +32,8 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 | 6, 7, 8. Physics & Hygiene | M1 | COMPLETE | 2026-04-05 |
 | 9. Training Stability | M1 | COMPLETE | 2026-04-09 |
 | 10. Intersection Nav | M2 | Planned | - |
+| 11. Hierarchical Refactor| M2 | Planned | - |
+| 12. Environment Scaling  | M2 | Planned | - |
 
 ---
 *Roadmap updated: 2026-04-09*
