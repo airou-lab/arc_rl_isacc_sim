@@ -14,4 +14,5 @@ echo "--------------------------------------------------"
 # Run training
 # --headless: Faster training without GUI
 # --num_envs: Number of parallel simulation environments
-$ISAACLAB_PATH -p "$PROJECT_DIR/arcproLab/scripts/train_policy.py" --num_envs 32 --headless --total_timesteps 1000000
+# --enable_cameras: Required for vision-based policies
+$ISAACLAB_PATH -p "$PROJECT_DIR/arcproLab/scripts/train_policy.py" --num_envs 2 --headless --total_timesteps 1000000 --enable_cameras

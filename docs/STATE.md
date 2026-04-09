@@ -1,33 +1,31 @@
 # Project State: ARCPro RL v1.2-dev
 
 ## Current Phase
-**Phase 5: Policy Integration**
+**Phase 9: Training Stabilization (8x Giant Scale)**
 
 ## Summary
-The project has successfully transitioned to "True Physics" mode (Phase 7). We are now resuming Phase 5 to integrate the Hierarchical Policy architecture, the 12-float telemetry protocol, and Gaussian-weighted rewards in the 1.0x metric environment.
+The project is currently optimized for **8x Giant Scale** physics to ensure simulation stability. We have successfully implemented robust termination logic that detects "any wheel" contact with road boundaries (White/Yellow lines) and high-force chassis crashes. Rewards have been aligned with these strict boundaries to provide a clear training signal.
 
 ## Recent Activity
-- **Phase 7 Completion**: Reverted the simulation to 1.0x metric scaling for both the robot and the track. The road surface is grounded at Z=0 using a -1.25m offset.
-- **Metric Grounding**: Applied `0.0825` scale to the track and `-1.25m` Z-offset to ground the surface at Z=0.
-- **Telemetry Alignment**: Scaled `track_centerline.npy` by `0.0825` to align waypoint errors with the new metric environment.
-- **Hierarchical Planning**: Created `05-02-PLAN.md` to integrate the full hierarchical policy stack and 12-float protocol.
+- **8x Giant Scale Transition**: Shifted simulation to 8.0x robot scale to resolve small-scale PhysX jitter issues.
+- **Any Wheel Termination**: Implemented strict 0.3m (0.0375 normalized) lateral error threshold to trigger reset when any part of the 2.4m wide robot touches lane boundaries.
+- **Robust Physics Masking**: Added a 5-step settling grace period and 5000N force threshold to ignore spawn jitter while catching actual crashes.
+- **Reward Alignment**: Updated `lateral_error_reward` to match the 0.3m termination boundary, replacing the lenient 4.0m (0.5 normalized) legacy threshold.
+- **Joint Mapping Correction**: Identified and fixed a mapping issue in `verify_policy.py` where drive commands were being sent to steering joints.
 
 ## Key Achievements
-- **True Physics Grounded**: Simulation operates at a realistic 1.0x metric scale with standard PhysX settings.
-- **Metric Telemetry**: Confirmed that lateral/heading errors and speeds are correctly calculated in meters/seconds.
-- **Main Merge**: Successfully merged all "True Physics" changes into the `main` branch.
+- **Stable 8x Simulation**: Physics operates reliably at giant scale without ragdolling or high-frequency jitter.
+- **Precise Lane Boundaries**: Confirmed through visual verification that resets trigger accurately at the lane edges.
+- **AWD Control Integration**: Successfully actuating all 4 wheels (Indices 2-5) for improved traction.
 
-## Active Tasks (Phase 5)
-- [ ] Implement 12-Float Telemetry Protocol in `observations.py`.
-- [ ] Implement 'Hybrid Racer' Gaussian rewards in `rewards.py`.
-- [ ] Implement 'lane-aligned' spawning logic in `events.py`.
-- [ ] Integrate Hierarchical Path Planning Policy components from `arc_rl_isacc_policy`.
-- [ ] Verify full stack at 1.0x metric scale using `verify_policy.py`.
+## Active Tasks (Phase 9)
+- [ ] Monitor PPO training progress with the new strict rewards and termination.
+- [ ] Evaluate 'Learning' performance: Check if the agent's mean episode length increases.
+- [ ] Fine-tune AWD throttle coefficients if the 8x robot remains sluggish.
 
-## Completed (Phase 7 - True Physics Mode)
-- [x] Configure Environment Physics, Scaling, and Camera Offset in `arcpro_env_cfg.py`.
-- [x] Configure Robot Asset in `arcpro_robot_cfg.py`.
-- [x] Remove Robot Stability Event in `mdp/events.py`.
-- [x] Correct and scale Track Centerline waypoints to Metric (0.0825 scale).
-- [x] Update Observation/Telemetry protocol for Metric.
-- [x] Verify True Physics Environment Setup (Human Verification).
+## Completed (Phase 09-02 - Robust Terminations)
+- [x] Implement High-Force Chassis Crash Detection (5000N).
+- [x] Implement Strict Lane Departure Termination (0.3m physical).
+- [x] Synchronize Reward Thresholds with Termination logic.
+- [x] Fix Spawning Height (0.5m) and Raycast Snapping.
+- [x] Verify "Any Wheel" termination behavior visually.

@@ -69,9 +69,9 @@ def main():
     os.makedirs(log_dir, exist_ok=True)
 
     # 6. Define Policy & Model
-    # Use MultiInputPolicy for combined vision + telemetry
+    # Note: Using MlpPolicy as Sb3VecEnvWrapper currently flattens observations.
     model = PPO(
-        "MultiInputPolicy",
+        "MlpPolicy",
         env,
         verbose=1,
         learning_rate=3e-4,
