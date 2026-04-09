@@ -28,5 +28,26 @@
     - Enabled `enable_external_forces_every_iteration=True` in `PhysxCfg`.
     - Verified all 4 drive joints (`Joint_Drive_.*`) are correctly mapped in `ActionCfg`.
 
-## Remaining Blockers (Phase 08)
-- **Road Detection**: The raycast in `events.py` is failing to find the `drivable_surfaces` meshes due to a vertical range issue or offset.
+## Phase 09: Training Loop Stabilization
+
+### 1. 1500kg Physics Stabilization
+- **Issue**: The 8.0x scale robot (3.6m wide) was behaving like a "balloon" with a 20kg mass, jittering and flipping during resets.
+- **Solution**: 
+    - Increased mass to 1500kg in `arcpro_robot_cfg.py`.
+    - Boosted actuator stiffness to 50,000 and damping to 1,000 to handle the high inertia.
+    - Result: Stable, heavy chassis behavior with realistic tire friction.
+
+### 2. AWD Joint Mapping & Inversion
+- **Issue**: Actuator commands were only affecting the rear wheels, and wheel directions were inconsistent (negative rad/s caused spin-outs).
+- **Solution**: 
+    - Updated `ActionCfg` to use regex `Joint_Drive_.*` to capture all 4 motors.
+    - Verified joint indices: 0,1 (Steer), 2,3 (Rear), 4,5 (Front).
+    - Fixed direction signs: +40.0 rad/s now drives all wheels forward.
+
+### 3. Reset Logic & Multi-Env Bug
+- **Issue**: Hardcoded world coordinates in `events.py` caused robots in `Env 1` to spawn in empty space when training with `num_envs > 1`.
+- **Solution**: 
+    - Temporarily reduced training to 1 environment to ensure math alignment.
+    - Implemented a 0.6m lateral drift limit from the mathematical centerline (X=-130.03).
+    - Added a 20-step "settling" grace period to prevent reset-loops during physics initialization.
+
