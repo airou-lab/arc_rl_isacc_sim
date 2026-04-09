@@ -26,7 +26,7 @@ class ArcProRobotCfg(ArticulationCfg):
             max_angular_velocity=1000.0,
             max_depenetration_velocity=100.0,
         ),
-        mass_props=sim_utils.MassPropertiesCfg(mass=20.0), # Realistic 20kg for this scale
+        mass_props=sim_utils.MassPropertiesCfg(mass=1500.0), # More realistic for 8x volume scaling
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=False,
             solver_position_iteration_count=8, 
@@ -44,17 +44,17 @@ class ArcProRobotCfg(ArticulationCfg):
     actuators: dict = {
         "steering": ImplicitActuatorCfg(
             joint_names_expr=["Joint_Steer_.*"],
-            effort_limit_sim=1000.0,
+            effort_limit_sim=50000.0, 
             velocity_limit_sim=10.0,
-            stiffness=400.0, 
-            damping=10.0,
+            stiffness=50000.0, # Increased for 1500kg
+            damping=1000.0, # Increased for 1500kg
         ),
         "throttle": ImplicitActuatorCfg(
-            joint_names_expr=["Joint_Drive_.*"], # 4WD: Actuate all wheels
-            effort_limit_sim=2000.0,
+            joint_names_expr=["Joint_Drive_.*"], 
+            effort_limit_sim=100000.0, 
             velocity_limit_sim=100.0,
             stiffness=0.0,
-            damping=5.0, 
+            damping=500.0, # Increased for 1500kg
         ),
     }
 

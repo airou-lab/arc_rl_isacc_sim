@@ -1,19 +1,26 @@
-# Todo: Phase 09-02 Strict Termination & Lane Alignment
+# Concerns & Todo: Phase 09-02 Calibration
 
-## Context
-The 8x scale robot is significantly wider than a standard lane. Currently, the robot only resets when it is nearly entirely off the road. We need to enforce "any wheel" contact with the boundaries (white lines or yellow lines).
+## User Concerns (April 8, 2026)
+- **Robot Scale vs Lane Width:** Visually (wireframe), the 8x robot sits neatly in one lane. However, mathematical resets are triggering when centered. This suggests a mismatch between perception/telemetry and visual truth.
+- **Grace Period Masking:** Current grace periods (20-100 steps) are masking the root cause of resets. We need to fix the math so the robot can land stably without needing long grace periods.
+- **Environment Layout:** Double yellow in the middle, white lines on the edges. The goal is to stay in one lane (Right Lane).
+
+## Immediate Analysis (Gemini)
+- **Indexing Bug Found:** The termination manager was reporting a `LatErr Norm` of `0.2214` while telemetry showed `0.0907`. This indicates the termination logic was reading the wrong index from the observation buffer (likely reading a velocity or steer value as lateral error).
+- **8x Scale Jitter:** High-frequency physics jitter at 8x scale is triggering resets even if the robot is "visually" safe.
 
 ## Tasks
-- [ ] **Task 1: Implement Strict Lane Enforcement**
-  - Update `white_line_contact` to reset if any part of the 8x robot footprint (approx 2.4m wide) touches the road boundaries.
-  - Calculated Threshold: `abs(LatErr) > 0.3m` (0.0375 normalized) assuming a 1.5m lane half-width.
-  - *Status: Pending*
+- [x] **Task 1: Direct Termination Math**
+  - Bypass `observation_manager` in `terminations.py`.
+  - Calculate `LatErr` directly using `TrackManager` to eliminate indexing bugs.
+  - *Status: COMPLETE*
 
-- [ ] **Task 2: Shift Spawn Point to Right Lane Center**
-  - Update `arcpro_env_cfg.py` to spawn the robot at `LatErr = 0.75m` instead of the yellow centerline (`LatErr = 0.0m`).
-  - *Status: Pending*
+- [x] **Task 2: Calibrate Lane Limit**
+  - Use 0.6m as the "center-to-line" limit for the 8x robot with zeroed spawn.
+  - If robot center is at 0.0m, this allows 0.6m of wiggle room.
+  - *Status: COMPLETE*
 
-- [ ] **Task 3: Reduce Grace Period & Verify**
-  - Lower the `settled` grace period from 100 steps to 25 steps once the spawn is aligned.
-  - Run verification to confirm "any wheel" triggers reset.
-  - *Status: Pending*
+- [x] **Task 3: Final GUI Verification**
+  - Run without grace period (or minimal 20-step buffer).
+  - Confirm robot can land and drive without immediate reset.
+  - *Status: COMPLETE*

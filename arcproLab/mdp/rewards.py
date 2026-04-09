@@ -31,9 +31,9 @@ def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     obs = env.observation_manager.compute()["policy"]
     lat_err = obs[:, 8]
     
-    # Calibration Threshold: 2.0m physical error
-    # 2.0m * 0.125 = 0.25 normalized
-    threshold = 0.25
+    # Calibration Threshold: 0.6m physical error
+    # 0.6m * 0.125 = 0.075 normalized
+    threshold = 0.075
     
     reward = torch.where(
         torch.abs(lat_err) < threshold,

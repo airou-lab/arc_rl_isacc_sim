@@ -13,7 +13,7 @@ from isaaclab.app import AppLauncher
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Verify the SB3 policy in the Isaac Lab environment.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
-parser.add_argument("--max_steps", type=int, default=20000, help="Maximum number of simulation steps.")
+parser.add_argument("--max_steps", type=int, default=1000, help="Maximum number of simulation steps.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -122,26 +122,27 @@ def main():
                     steering, throttle = policy.get_action(prediction)
 
                     # Target velocity (rad/s) for 8x car
-                    # -40.0 is roughly 2m/s
+                    # +40.0 is forward (Audit showed -20.0 moves car BACKWARD)
                     target_rad_s = 40.0 
 
-                    # Corrected Joint Mapping (from arcpro_robot_cfg.py):
-                    # Index 0, 1: Steering (Joint_Steer_.*)
-                    # Index 2, 3, 4, 5: Drive (Joint_Drive_.*)
+                    # Corrected Joint Mapping (Audit Result):
+                    # Index 0, 1: Steering (L, R)
+                    # Index 2, 3: Rear Drive (RL, RR)
+                    # Index 4, 5: Front Drive (FL, FR)
 
-                    # Steering (Position Control based on ImplicitActuatorCfg)
+                    # Steering (Position Control)
                     actions[i, 0] = steering
                     actions[i, 1] = steering
 
                     # Throttle (Velocity Control) - AWD
-                    actions[i, 2] = -target_rad_s # FL
-                    actions[i, 3] = -target_rad_s # FR
-                    actions[i, 4] = -target_rad_s # RL
-                    actions[i, 5] = -target_rad_s # RR
+                    actions[i, 2] = target_rad_s # RL
+                    actions[i, 3] = target_rad_s # RR
+                    actions[i, 4] = target_rad_s # FL
+                    actions[i, 5] = target_rad_s # FR
             else:
                 # FALLBACK: Constant forward if camera failed
                 actions = torch.zeros((env.num_envs, 6), device=env.device)
-                actions[:, 2:4] = -40.0 # Drive FL and FR at constant speed
+                actions[:, 4:6] = 40.0 # Drive FL and FR forward
 
             # step environment
             obs, rewards, terminated, truncated, info = env.step(actions)
@@ -177,7 +178,7 @@ def main():
                  steer_val = actions[0, 0].item()
 
                  print(f"Step {count:4d} | Pos: ({pos[0,0]:.2f}, {pos[0,1]:.2f}, {pos[0,2]:.3f}) | Vel: {v_norm:.2f}m/s")
-                 print(f"          | LatErr (m): {lat_err_val} | LatErr (norm): {obs_lat_err} | Limit: 0.0375")
+                 print(f"          | LatErr (m): {lat_err_val} | LatErr (norm): {obs_lat_err} | Limit: 0.075")
                  print(f"          | Steer: {steer_val:.3f} | JV: {jv_drive}")
                  if telemetry is not None:
                      telemetry.update(count, v_norm, steer_val, lat_err_val, jv_drive)

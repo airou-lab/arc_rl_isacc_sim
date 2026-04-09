@@ -75,8 +75,8 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             scale=(8.0, 8.0, 8.0),
         ),
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
-            # Fixed Spawn Point: Centerline (Shifted 5m forward)
-            pos=(-129.30, 44.48, 0.42), 
+            # Fixed Spawn Point: Centerline (Shifted to align with Waypoints)
+            pos=(-130.03, 44.48, 0.42), 
             rot=(0.7071, 0.0, 0.0, 0.7071) # +90 degrees Z-up (Flipped 180)
         ), 
     )

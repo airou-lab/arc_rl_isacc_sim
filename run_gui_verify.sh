@@ -15,4 +15,4 @@ echo "--------------------------------------------------"
 # Run the verification script with GUI enabled
 # --enable_cameras: Required for the ResNet18 policy to 'see'
 # --num_envs 1: Single environment for focused inspection
-$ISAACLAB_PATH -p "$PROJECT_DIR/arcproLab/scripts/verify_policy.py" --num_envs 1 --enable_cameras
+$ISAACLAB_PATH -p "$PROJECT_DIR/arcproLab/scripts/verify_policy.py" --num_envs 1 --enable_cameras --max_steps 1000

@@ -28,8 +28,8 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 | 1, 2, 3, 4 | M1 | COMPLETE | 2026-03-30 |
 | 5. Policy Integration | M1 | COMPLETE | 2026-04-02 |
 | 6, 7, 8. Physics & Hygiene | M1 | COMPLETE | 2026-04-05 |
-| 9. Training Stability | M1 | ACTIVE | - |
+| 9. Training Stability | M1 | COMPLETE | 2026-04-09 |
 | 10. Intersection Nav | M2 | Planned | - |
 
 ---
-*Roadmap updated: 2026-04-05*
+*Roadmap updated: 2026-04-09*

@@ -9,37 +9,44 @@ from isaaclab.envs import ManagerBasedRLEnv
 
 def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """
-    Terminates if the robot 'contacts' the roadmarks (2D proximity) or physically crashes.
+    Terminates if any wheel hits the boundaries. 
+    Calibrated for 8x robot (3.6m wide) and 0.73m mathematical offset.
     """
-    # 1. Physical Crash (Chassis hitting signs/walls/curbs)
+    asset = env.scene[asset_cfg.name]
+    
+    # 1. Physical Crash (High-force impact)
     sensor = env.scene.sensors["contact_forces"]
-    
-    # Use 5000.0 N for 8x scale to ignore minor physics noise.
     forces = torch.norm(sensor.data.net_forces_w, dim=-1)
-    contact_mask = forces > 5000.0
-    chassis_crash = torch.any(contact_mask, dim=1)
+    chassis_crash = torch.any(forces > 5000.0, dim=1)
     
-    # 2. Virtual Roadmark Contact (2D Distance)
-    # RELAXED FOR CALIBRATION: 2.0m physical distance
-    # 2.0m * 0.125 (normalization) = 0.25
-    obs = env.observation_manager.compute()["policy"]
-    lat_err_normalized = torch.abs(obs[:, 8])
-    marker_hit = lat_err_normalized > 0.25
+    # 2. Precision Lane Contact
+    from mdp.track_manager import get_track_manager
+    tm = get_track_manager(device=env.device)
+    
+    q = asset.data.root_quat_w
+    yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
+    
+    # Get direct math error in meters
+    lat_err, _ = tm.compute_errors(asset.data.root_pos_w, yaw)
+    
+    # CALIBRATION (Step 0 Center = 0.0m)
+    # If robot is 3.6m wide, it has only ~0.5m of wiggle room in a 4.5m lane.
+    # Reset if it drifts more than 0.6m from its starting lane center.
+    drift = torch.abs(lat_err)
+    marker_hit = drift > 0.6
 
-    # Combine with debug logging
-    if chassis_crash[0].item():
-        print(f"[TERMINATION] Physical Crash! Force: {torch.max(forces[0]):.1f}N")
-    if marker_hit[0].item():
-        print(f"[TERMINATION] Lane Departure! LatErr Norm: {lat_err_normalized[0]:.4f} (Limit 0.25)")
+    # Apply 20-step settling buffer for the physics to 'link' (8x scale is heavy)
+    settled = env.episode_length_buf > 20
 
-    return chassis_crash | marker_hit
+    # Debug logging (env 0)
+    if settled[0].item() and marker_hit[0].item():
+        print(f"[TERMINATION] Lane Departure! Drift: {drift[0].item():.3f}m (Limit 0.6m) | Raw LatErr: {lat_err[0].item():.3f}m")
+
+    return settled & (chassis_crash | marker_hit)
 
 def height_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Terminates if the robot flips or falls (chassis height < 0.1m or > 2.0m for 8x scale)."""
+    """Terminates if the robot flips or falls."""
     asset = env.scene[asset_cfg.name]
     height = asset.data.root_pos_w[:, 2]
-    
-    # Use 5-step settling for height to allow landing, but otherwise strict.
     settled = env.episode_length_buf > 5
-    
     return settled & ((height < 0.1) | (height > 2.0))
