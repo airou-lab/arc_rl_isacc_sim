@@ -23,6 +23,7 @@
 - Purpose: Bridges simulation state to RL policy.
 - Location: `arcproLab/mdp/`.
 - Key Logic:
+  - `actions.py`: Implements `GroupedJointAction` classes to collapse individual joints (6D) into a stable 2nd-order action space (1 Steering, 1 Throttle) for the vehicle.
   - `observations.py`: Implements the 12-float telemetry protocol with 0.125 scale normalization.
   - `events.py`: Implements `reset_robot_to_lane` with robust raycast snapping to the road surface.
   - `track_manager.py`: Centralized waypoint management and error calculation.

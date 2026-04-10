@@ -14,7 +14,7 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 - [x] **Phase 6: Physics Restoration** - Reverted to 1.0x metric scaling with 20kg mass.
 - [x] **Phase 7: Gymnasium & Environment Hygiene** - Modernized API and cleaned up terminal noise.
 - [x] **Phase 8: Physics Fidelity Restoration** - High-fidelity physics parameters (damping, stiffness).
-- [ ] **Phase 9: Training Loop Stabilization** - (ACTIVE) Finalize reset logic and torque verification.
+- [ ] **Phase 9: Training Loop Stabilization** - (ACTIVE) Finalize reset logic, torque verification, and action space refactoring.
 
 ## Milestone 2: Autonomous Urban Navigation (v2.0)
 *Focus: Graph-based routing, intersection logic, and multi-agent coordination.*
@@ -30,10 +30,10 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 | 1, 2, 3, 4 | M1 | COMPLETE | 2026-03-30 |
 | 5. Policy Integration | M1 | COMPLETE | 2026-04-02 |
 | 6, 7, 8. Physics & Hygiene | M1 | COMPLETE | 2026-04-05 |
-| 9. Training Stability | M1 | COMPLETE | 2026-04-09 |
+| 9. Training Stability | M1 | ACTIVE | - |
 | 10. Intersection Nav | M2 | Planned | - |
 | 11. Hierarchical Refactor| M2 | Planned | - |
 | 12. Environment Scaling  | M2 | Planned | - |
 
 ---
-*Roadmap updated: 2026-04-09*
+*Roadmap updated: 2026-04-10*

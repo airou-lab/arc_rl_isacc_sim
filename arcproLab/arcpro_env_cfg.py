@@ -111,10 +111,12 @@ class ObservationCfg:
     
     visual: VisualCfg | None = VisualCfg()
 
+import mdp.actions as arcpro_actions
+
 @configclass
 class ActionCfg:
-    steering = mdp.JointPositionActionCfg(asset_name="robot", joint_names=["Joint_Steer_L", "Joint_Steer_R"], scale=1.0, preserve_order=True)
-    throttle = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["Joint_Drive_.*"], scale=40.0, preserve_order=True)
+    steering = arcpro_actions.GroupedJointPositionActionCfg(asset_name="robot", joint_names=["Joint_Steer_L", "Joint_Steer_R"], scale=1.0)
+    throttle = arcpro_actions.GroupedJointVelocityActionCfg(asset_name="robot", joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], scale=40.0)
 
 @configclass
 class RewardCfg:
