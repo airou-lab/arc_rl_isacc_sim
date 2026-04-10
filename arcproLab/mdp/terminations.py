@@ -35,8 +35,8 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     drift = torch.abs(lat_err)
     marker_hit = drift > 0.6
 
-    # Apply 20-step settling buffer for the physics to 'link' (8x scale is heavy)
-    settled = env.episode_length_buf > 20
+    # Apply 50-step settling buffer for the physics to 'link' (8x scale is heavy)
+    settled = env.episode_length_buf > 50
 
     # Debug logging (env 0)
     if settled[0].item() and marker_hit[0].item():

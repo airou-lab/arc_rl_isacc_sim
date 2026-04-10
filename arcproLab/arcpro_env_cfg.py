@@ -114,13 +114,18 @@ class ObservationCfg:
 @configclass
 class ActionCfg:
     steering = mdp.JointPositionActionCfg(asset_name="robot", joint_names=["Joint_Steer_L", "Joint_Steer_R"], scale=1.0, preserve_order=True)
-    throttle = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["Joint_Drive_.*"], scale=1.0, preserve_order=True)
+    throttle = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["Joint_Drive_.*"], scale=40.0, preserve_order=True)
 
 @configclass
 class RewardCfg:
     speed = RewTerm(func=mdp_rew.speed_reward, weight=1.0)
     # Strong lateral error penalty (Off-track penalty > Speed reward)
     lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=5.0)
+    # Discourage staying still
+    stationary = RewTerm(
+        func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.1, -1.0, 0.0),
+        weight=1.0
+    )
 
 @configclass
 class TerminationCfg:
@@ -145,7 +150,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
 
     sim: SimulationCfg = SimulationCfg(
         dt=0.005, # 200Hz for balanced performance
-        render_interval=8, # Maintain 25Hz visual (200 / 8)
+        render_interval=10, # Maintain 20Hz visual (200 / 10)
         device="cuda:0",
         physx=sim_utils.PhysxCfg(
             solver_type=1, # TGS
@@ -162,7 +167,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     )
 
     def __post_init__(self):
-        self.decimation = 8 # Sync with render_interval
+        self.decimation = 10 # Sync with render_interval
         self.episode_length_s = 120.0 
         self.viewer.camera_follow_prim_path = None
         
