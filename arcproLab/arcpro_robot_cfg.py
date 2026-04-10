@@ -9,11 +9,23 @@ from isaaclab.assets import ArticulationCfg
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.utils import configclass
 
+import mdp.spawner as arcpro_spawner
+
+def spawn_f1tenth_preset(prim_path, cfg, translation=None, orientation=None):
+    """Preset spawner that includes mass overrides for F1Tenth."""
+    mass_overrides = {
+        "Chassis": 1200.0,
+        "Wheel_.*": 75.0,
+        "Knuckle_.*": 10.0,
+    }
+    return arcpro_spawner.spawn_f1tenth(prim_path, cfg, translation, orientation, mass_overrides=mass_overrides)
+
 @configclass
 class ArcProRobotCfg(ArticulationCfg):
     """Configuration for the F1Tenth robot using the GENERATED primitive-based asset."""
     
     spawn: sim_utils.UsdFileCfg = sim_utils.UsdFileCfg(
+        func=spawn_f1tenth_preset,
         usd_path=os.path.join(os.path.dirname(__file__), "assets", "robot", "F1Tenth_Metric.usd"),
         scale=(1.0, 1.0, 1.0), 
         activate_contact_sensors=True,
@@ -26,7 +38,6 @@ class ArcProRobotCfg(ArticulationCfg):
             max_angular_velocity=1000.0,
             max_depenetration_velocity=100.0,
         ),
-        mass_props=sim_utils.MassPropertiesCfg(mass=200.0), # Applied to every body (7 bodies = ~1400kg total)
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=False,
             solver_position_iteration_count=8, 
@@ -36,7 +47,7 @@ class ArcProRobotCfg(ArticulationCfg):
     )
 
     init_state: ArticulationCfg.InitialStateCfg = ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 0.0), 
+        pos=(0.0, 0.0, 1.0), 
         rot=(1.0, 0.0, 0.0, 0.0),
         joint_pos={".*": 0.0},
     )
@@ -44,19 +55,20 @@ class ArcProRobotCfg(ArticulationCfg):
     actuators: dict = {
         "steering": ImplicitActuatorCfg(
             joint_names_expr=["Joint_Steer_.*"],
-            effort_limit_sim=100000.0, # Doubled
+            effort_limit_sim=500000.0, # Increased from 100k
             velocity_limit_sim=10.0,
-            stiffness=100000.0, # Doubled
-            damping=2000.0, # Doubled
+            stiffness=500000.0, # Increased from 100k
+            damping=10000.0, # Increased from 2k
         ),
         "throttle": ImplicitActuatorCfg(
             joint_names_expr=["Joint_Drive_.*"], 
-            effort_limit_sim=200000.0, # Doubled
+            effort_limit_sim=500000.0, # Increased from 200k
             velocity_limit_sim=100.0,
             stiffness=0.0,
-            damping=1000.0, # Doubled
+            damping=5000.0, # Increased from 1k
         ),
     }
+
 
 ##
 # Configuration

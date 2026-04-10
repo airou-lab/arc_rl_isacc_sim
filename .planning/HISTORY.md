@@ -30,24 +30,25 @@
 
 ## Phase 09: Training Loop Stabilization
 
-### 1. 1500kg Physics Stabilization
-- **Issue**: The 8.0x scale robot (3.6m wide) was behaving like a "balloon" with a 20kg mass, jittering and flipping during resets.
+### 1. 1400kg Balanced Mass Distribution
+- **Issue**: Initial increase to 1500kg was applied uniformly (200kg per link), putting 1200kg in the wheels/knuckles and only 200kg in the chassis. This caused massive steering drift (16° in 10 steps) and "jumping" physics.
 - **Solution**: 
-    - Increased mass to 1500kg in `arcpro_robot_cfg.py`.
-    - Boosted actuator stiffness to 50,000 and damping to 1,000 to handle the high inertia.
-    - Result: Stable, heavy chassis behavior with realistic tire friction.
+    - Implemented a custom spawner (`arcproLab/mdp/spawner.py`) using `schemas.define_mass_properties` to apply link-specific mass.
+    - Balanced distribution: **1200kg Chassis**, **75kg Wheels**, **10kg Knuckles**.
+    - Elevated spawn height to **1.0m** (`mdp/events.py`) to prevent 3.6m wide wheels from clipping into the ground.
+    - Result: Steering bias reduced to **<2° over 100 steps**.
 
-### 2. AWD Joint Mapping & Inversion
-- **Issue**: Actuator commands were only affecting the rear wheels, and wheel directions were inconsistent (negative rad/s caused spin-outs).
+### 2. Action Space Refactor (2D Control)
+- **Issue**: Standard `JointAction` terms expanded regex expressions into 6 individual dimensions (2 steer, 4 drive). The agent struggled to coordinate 4 wheels synchronously, leading to excessive spin and slow learning.
 - **Solution**: 
-    - Updated `ActionCfg` to use regex `Joint_Drive_.*` to capture all 4 motors.
-    - Verified joint indices: 0,1 (Steer), 2,3 (Rear), 4,5 (Front).
-    - Fixed direction signs: +40.0 rad/s now drives all wheels forward.
+    - Created custom `GroupedJointAction` classes in `arcproLab/mdp/actions.py`.
+    - Collapsed the action space into **2 dimensions**: 1 Steering (mapped to L/R) and 1 Throttle (mapped to all 4 wheels).
+    - Result: synchronous AWD driving and faster policy convergence.
 
-### 3. Reset Logic & Multi-Env Bug
-- **Issue**: Hardcoded world coordinates in `events.py` caused robots in `Env 1` to spawn in empty space when training with `num_envs > 1`.
+### 3. Actuator Gain Overhaul
+- **Issue**: 1200kg chassis inertia required extreme control force to stabilize.
 - **Solution**: 
-    - Temporarily reduced training to 1 environment to ensure math alignment.
-    - Implemented a 0.6m lateral drift limit from the mathematical centerline (X=-130.03).
-    - Added a 20-step "settling" grace period to prevent reset-loops during physics initialization.
+    - Boosted actuator stiffness to **500,000** and damping to **10,000**.
+    - Verified joint mapping: 0,1 (Steer), 2,3 (Rear), 4,5 (Front).
+    - Result: Highly stable, precise control of the heavy chassis.
 

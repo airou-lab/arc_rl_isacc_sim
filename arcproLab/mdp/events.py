@@ -26,7 +26,7 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     final_pos = torch.zeros((len(env_ids), 3), device=env.device)
     final_pos[:, 0] = spawn_x
     final_pos[:, 1] = spawn_y
-    final_pos[:, 2] = 0.42 # Perfect height for 8x wheels (radius=0.4m)
+    final_pos[:, 2] = 1.0 # Safe initial height
     
     quats = torch.zeros((len(env_ids), 4), device=env.device)
     import math
@@ -44,7 +44,7 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
         if hit["hit"]:
             hit_path = str(hit.get("rigidBody") or hit.get("collisionPath") or "")
             if "robot" not in hit_path.lower():
-                final_pos[i, 2] = hit["position"][2] + 0.42 # Snap exactly to surface
+                final_pos[i, 2] = hit["position"][2] + 1.0 # Elevated height
                 # if i == 0: print(f"[Event] Reset Snapped Env 0 to Z={final_pos[i, 2]:.2f}")
     
     # Teleport

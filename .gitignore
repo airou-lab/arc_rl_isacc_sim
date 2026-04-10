@@ -8,15 +8,14 @@ ENV/
 env/
 .pytest_cache/
 
-# Isaac Sim / Omniverse
-*.log
-exts/omni.*
-data/
-logs/
+# Binary Data
+*.usd
+*.npy
 
-# Binary Data (Should ideally use LFS)
-# *.usd
-# *.npy
+# Logs and Transient Output
+*.log
+*.txt
+exts/omni.*
 
 # OS
 .DS_Store
