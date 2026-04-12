@@ -10,6 +10,7 @@ from isaaclab.app import AppLauncher
 parser = argparse.ArgumentParser(description="Verify the SB3 policy in the Isaac Lab environment.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
 parser.add_argument("--checkpoint", type=str, required=True, help="Path to the model checkpoint.")
+parser.add_argument("--waypoint_index", type=int, default=None, help="Start at a specific waypoint index (0-999).")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -25,6 +26,7 @@ import os
 import sys
 import numpy as np
 from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import VecNormalize
 
 # Add both root and arcproLab to sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -52,28 +54,64 @@ def main():
     # Wrap for SB3
     env = Sb3VecEnvWrapper(env)
     
-    # 3. Load model
+    # 3. Load Normalization
+    checkpoint_dir = os.path.dirname(args_cli.checkpoint)
+    stats_path = os.path.join(checkpoint_dir, "vec_normalize.pkl")
+    
+    if os.path.exists(stats_path):
+        print(f"Loading normalization stats from: {stats_path}")
+        env = VecNormalize.load(stats_path, env)
+        env.training = False
+        env.norm_reward = False
+    
+    # 4. Load model
     print(f"Loading checkpoint: {args_cli.checkpoint}")
-    # Note: Loading without VecNormalize might result in slightly different behavior
-    # but at 20k-30k steps, the effect is usually minimal for "seeing" progress.
     model = PPO.load(args_cli.checkpoint, env=env)
     
-    # 4. Reset environment
+    # 5. Reset environment
     obs = env.reset()
     
-    # 5. Simulation loop
-    print("Starting visual verification...")
+    # 6. Optional: Manual Teleport to Waypoint
+    if args_cli.waypoint_index is not None:
+        wp_path = os.path.join(ARCPRO_LAB_DIR, "mdp", "track_centerline.npy")
+        if os.path.exists(wp_path):
+            wps = np.load(wp_path)
+            if args_cli.waypoint_index < len(wps):
+                target_wp = wps[args_cli.waypoint_index]
+                print(f"Teleporting to Waypoint {args_cli.waypoint_index}: {target_wp}")
+                
+                import math
+                yaw = target_wp[2]
+                qw = math.cos(yaw/2.0)
+                qz = math.sin(yaw/2.0)
+                
+                raw_env = env.unwrapped
+                asset = raw_env.scene["robot"]
+                
+                pose = torch.tensor([[target_wp[0], target_wp[1], 1.5, qw, 0.0, 0.0, qz]], device=raw_env.device)
+                asset.write_root_pose_to_sim(pose)
+                asset.write_root_velocity_to_sim(torch.zeros((1, 6), device=raw_env.device))
+                print("Teleport complete.")
+
+    # 7. Simulation loop
+    print("Starting visual verification (STRICT TERMINATIONS ACTIVE)...")
+    step_count = 0
     while simulation_app.is_running():
         with torch.no_grad():
-            # Get action from policy
             actions, _ = model.predict(obs, deterministic=True)
-            # Step environment
             obs, rewards, dones, info = env.step(actions)
             
-        # Update simulation app
+            if step_count % 10 == 0:
+                raw_env = env.unwrapped
+                raw_lat_err = raw_env.extras.get("raw_lat_err", torch.tensor([0.0]))[0].item()
+                raw_speed = raw_env.extras.get("raw_speed", torch.tensor([0.0]))[0].item()
+                steer = actions[0][0].item()
+                throttle = actions[0][1].item()
+                print(f"Step {step_count:4} | LatErr: {raw_lat_err:6.3f}m | Speed: {raw_speed:5.2f}m/s | Act: [S:{steer:5.2f}, T:{throttle:5.2f}]")
+            
         simulation_app.update()
+        step_count += 1
 
-    # 6. Close environment
     env.close()
     simulation_app.close()
 

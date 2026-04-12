@@ -14,23 +14,23 @@ echo "--------------------------------------------------"
 # Default values
 NUM_ENVS=1
 HEADLESS=""
+CHECKPOINT=""
 
 # Parse arguments
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --num_envs) NUM_ENVS="$2"; shift ;;
         --headless) HEADLESS="--headless" ;;
+        --checkpoint) CHECKPOINT="--checkpoint $2"; shift ;;
         *) echo "Unknown parameter passed: $1"; exit 1 ;;
     esac
     shift
 done
 
 # Run training
-# --headless: Faster training without GUI
-# --num_envs: Number of parallel simulation environments
-# --enable_cameras: Required for vision-based policies
 PYTHONUNBUFFERED=1 $ISAACLAB_PATH -p "$PROJECT_DIR/arcproLab/scripts/train_policy.py" \
     --num_envs $NUM_ENVS \
     $HEADLESS \
     --total_timesteps 1000000 \
-    --enable_cameras
+    --enable_cameras \
+    $CHECKPOINT

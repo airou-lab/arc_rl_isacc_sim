@@ -11,6 +11,7 @@ parser = argparse.ArgumentParser(description="Train an SB3 policy for ARCPro Lan
 parser.add_argument("--num_envs", type=int, default=16, help="Number of parallel simulation environments.")
 parser.add_argument("--seed", type=int, default=42, help="Seed for the environment.")
 parser.add_argument("--total_timesteps", type=int, default=1000000, help="Total timesteps to train.")
+parser.add_argument("--checkpoint", type=str, default=None, help="Path to a checkpoint to resume from.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -69,32 +70,72 @@ def main():
     os.makedirs(log_dir, exist_ok=True)
 
     # 6. Define Policy & Model
-    # Note: Using MlpPolicy as Sb3VecEnvWrapper currently flattens observations.
-    model = PPO(
-        "MlpPolicy",
-        env,
-        verbose=1,
-        learning_rate=3e-4,
-        n_steps=2048,
-        batch_size=64,
-        n_epochs=10,
-        gamma=0.99,
-        gae_lambda=0.95,
-        clip_range=0.2,
-        ent_coef=0.0,
-        tensorboard_log=log_dir,
-        seed=args_cli.seed,
-        device="cuda"
-    )
+    if args_cli.checkpoint:
+        print(f"Resuming from checkpoint: {args_cli.checkpoint}")
+        model = PPO.load(
+            args_cli.checkpoint,
+            env,
+            verbose=1,
+            tensorboard_log=log_dir,
+            seed=args_cli.seed,
+            device="cuda"
+        )
+    else:
+        # Note: Using MlpPolicy as Sb3VecEnvWrapper currently flattens observations.
+        model = PPO(
+            "MlpPolicy",
+            env,
+            verbose=1,
+            learning_rate=3e-4,
+            n_steps=2048,
+            batch_size=64,
+            n_epochs=10,
+            gamma=0.99,
+            gae_lambda=0.95,
+            clip_range=0.2,
+            ent_coef=0.0,
+            tensorboard_log=log_dir,
+            seed=args_cli.seed,
+            device="cuda"
+        )
 
     # 7. Callbacks
+    from stable_baselines3.common.callbacks import BaseCallback
+    
+    class RewardLoggerCallback(BaseCallback):
+        def __init__(self, verbose: int = 0):
+            super().__init__(verbose)
+        
+        def _on_step(self) -> bool:
+            if self.n_calls % 1000 == 0:
+                # Get rewards from info
+                info = self.locals.get("infos", [{}])[0]
+                ep_rew = info.get("episode", {}).get("r", 0.0)
+                ep_len = info.get("episode", {}).get("l", 0)
+                print(f"[PROGRESS] Step {self.n_calls} | EpRew: {ep_rew:.2f} | EpLen: {ep_len}")
+                sys.stdout.flush()
+            return True
+
+    class SaveVecNormalizeCallback(BaseCallback):
+        def __init__(self, save_path: str, save_freq: int, verbose: int = 0):
+            super().__init__(verbose)
+            self.save_path = save_path
+            self.save_freq = save_freq
+
+        def _on_step(self) -> bool:
+            if self.n_calls % self.save_freq == 0:
+                self.training_env.save(os.path.join(self.save_path, "vec_normalize.pkl"))
+            return True
+
     checkpoint_callback = CheckpointCallback(save_freq=10000, save_path=log_dir, name_prefix="model")
+    vec_norm_callback = SaveVecNormalizeCallback(save_path=log_dir, save_freq=10000)
+    reward_logger_callback = RewardLoggerCallback()
 
     # 8. Train
     print(f"Starting training for {args_cli.total_timesteps} steps...")
     model.learn(
         total_timesteps=args_cli.total_timesteps,
-        callback=checkpoint_callback,
+        callback=[checkpoint_callback, vec_norm_callback, reward_logger_callback],
         progress_bar=True
     )
 
