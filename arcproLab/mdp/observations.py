@@ -42,6 +42,19 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
     
     lat_err, head_err = tm.compute_errors(asset.data.root_pos_w, yaw)
+    
+    # APPLY LANE OFFSET: Target 2.25m to the right of the mathematical centerline (8x scale)
+    # This is the dead center of the 4.5m wide right lane.
+    lat_err = lat_err - 2.25 
+    
+    # Distance Tracking
+    if "distance" not in env.extras:
+        env.extras["distance"] = torch.zeros(env.num_envs, device=env.device)
+    
+    # Calculate distance moved in this step (Forward velocity * dt)
+    # We use local X velocity * environment dt (0.05s)
+    env.extras["distance"] += asset.data.root_lin_vel_b[:, 0] * 0.05
+    
     # Normalize lateral error for 8x car (meters relative to giant scale)
     obs[:, 8] = lat_err * 0.125
     obs[:, 9] = head_err
@@ -50,6 +63,10 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     if "distance" in env.extras:
         obs[:, 11] = env.extras["distance"]
         
+    # Store raw values in extras for easy access by scripts (not used by policy)
+    env.extras["raw_lat_err"] = lat_err
+    env.extras["raw_speed"] = asset.data.root_lin_vel_b[:, 0]
+    
     # Final verification for NaNs
     nan_mask = torch.isnan(obs)
     if nan_mask.any():

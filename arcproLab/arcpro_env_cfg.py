@@ -120,22 +120,25 @@ class ActionCfg:
 
 @configclass
 class RewardCfg:
-    speed = RewTerm(func=mdp_rew.speed_reward, weight=1.0)
-    # Strong lateral error penalty (Off-track penalty > Speed reward)
+    speed = RewTerm(func=mdp_rew.speed_reward, weight=5.0) # Increased from 1.0
+    # Moderate lateral error penalty (Speed reward now competitive with staying on track)
     lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=5.0)
-    # Discourage staying still
+    # Discourage staying still (increased to prevent creeping)
     stationary = RewTerm(
-        func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.1, -1.0, 0.0),
+        func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.5, -5.0, 0.0),
         weight=1.0
     )
+    # Prevent 180s
+    heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
 
 @configclass
 class TerminationCfg:
     # height termination: Catch flying robots
     height = DoneTerm(func=mdp_done.height_termination)
     # Contact termination: Reset if hitting roadmarks (white lines)
-    # Balanced at 2.2m (0.275 normalized) for 8x robot clearance
     roadmark_contact = DoneTerm(func=mdp_done.white_line_contact)
+    # Stagnation: Reset if stuck against a wall
+    stagnation = DoneTerm(func=mdp_done.stagnation_termination)
 
 @configclass
 class ARCProEnvCfg(ManagerBasedRLEnvCfg):

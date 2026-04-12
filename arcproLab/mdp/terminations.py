@@ -29,18 +29,18 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     # Get direct math error in meters
     lat_err, _ = tm.compute_errors(asset.data.root_pos_w, yaw)
     
-    # CALIBRATION (Step 0 Center = 0.0m)
-    # If robot is 3.6m wide, it has only ~0.5m of wiggle room in a 4.5m lane.
-    # Reset if it drifts more than 0.6m from its starting lane center.
-    drift = torch.abs(lat_err)
-    marker_hit = drift > 0.6
+    # LANE BOUNDARIES (8x Scale)
+    # Centerline (Yellow) is 0.0m. Right Shoulder (White) is 4.5m.
+    # Reset if the car center crosses the yellow line into the left lane (< 0.0m) 
+    # or goes off the road shoulder (> 4.5m)
+    marker_hit = (lat_err < 0.0) | (lat_err > 4.5)
 
     # Apply 50-step settling buffer for the physics to 'link' (8x scale is heavy)
     settled = env.episode_length_buf > 50
 
     # Debug logging (env 0)
     if settled[0].item() and marker_hit[0].item():
-        print(f"[TERMINATION] Lane Departure! Drift: {drift[0].item():.3f}m (Limit 0.6m) | Raw LatErr: {lat_err[0].item():.3f}m")
+        print(f"[TERMINATION] Lane Departure! LatErr: {lat_err[0].item():.3f}m (Allowed -0.5m to 4.5m)")
 
     return settled & (chassis_crash | marker_hit)
 
@@ -50,3 +50,33 @@ def height_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     height = asset.data.root_pos_w[:, 2]
     settled = env.episode_length_buf > 5
     return settled & ((height < 0.1) | (height > 2.0))
+
+def stagnation_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Terminates if the robot hasn't made forward progress in 100 steps."""
+    # Apply 50-step settling buffer for the physics to 'link' (8x scale is heavy)
+    settled = env.episode_length_buf > 50
+    
+    # Initialize extras if not present
+    if "last_dist" not in env.extras:
+        env.extras["last_dist"] = torch.zeros(env.num_envs, device=env.device)
+        env.extras["stagnant_steps"] = torch.zeros(env.num_envs, device=env.device)
+
+    current_dist = env.extras.get("distance", torch.zeros(env.num_envs, device=env.device))
+    
+    # Check progress only if settled
+    # (Reset counter if we haven't settled yet to avoid instant reset)
+    progress = (current_dist - env.extras["last_dist"]) > 0.1
+    env.extras["stagnant_steps"] = torch.where(~settled | progress, 
+                                               torch.zeros_like(env.extras["stagnant_steps"]), 
+                                               env.extras["stagnant_steps"] + 1)
+    
+    # Update last distance for next check
+    env.extras["last_dist"] = current_dist.clone()
+    
+    # Terminate if stuck for more than 100 steps AFTER settling
+    stuck = env.extras["stagnant_steps"] > 100
+    
+    if stuck[0].item():
+        print(f"[TERMINATION] Robot Stagnant! No progress for 100 steps.")
+        
+    return stuck

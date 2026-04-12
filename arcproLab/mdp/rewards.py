@@ -60,3 +60,18 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     steering = env.action_manager.action[:, 0]
     reward = -0.1 * torch.abs(steering)
     return reward
+
+def heading_alignment_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """Rewards facing the correct way along the track waypoints."""
+    obs = env.observation_manager.compute()["policy"]
+    # Index 9 is heading error (radians)
+    head_err = obs[:, 9]
+    
+    # Reward is cosine of error (max 1.0 when perfectly aligned, negative if > 90deg)
+    reward = torch.cos(head_err)
+    
+    # Handle NaNs
+    nan_mask = torch.isnan(reward)
+    if nan_mask.any():
+        reward[nan_mask] = 0.0
+    return reward
