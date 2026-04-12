@@ -45,10 +45,10 @@
     - Collapsed the action space into **2 dimensions**: 1 Steering (mapped to L/R) and 1 Throttle (mapped to all 4 wheels).
     - Result: synchronous AWD driving and faster policy convergence.
 
-### 3. Actuator Gain Overhaul
-- **Issue**: 1200kg chassis inertia required extreme control force to stabilize.
+### 4. Normalization Sync & Learning Surge
+- **Issue**: Visual verification script (`verify_live.py`) showed robot stuck with 0.0 speed despite high throttle commands. GUI behavior did not match the policy's intended actions.
 - **Solution**: 
-    - Boosted actuator stiffness to **500,000** and damping to **10,000**.
-    - Verified joint mapping: 0,1 (Steer), 2,3 (Rear), 4,5 (Front).
-    - Result: Highly stable, precise control of the heavy chassis.
+    - Discovered that the policy was trained on **Normalized Observations**, but the viewer was feeding it **Raw World Coordinates**.
+    - Updated `train_policy.py` with `SaveVecNormalizeCallback` to save `vec_normalize.pkl` every 10,000 steps.
+    - Result: Confirmed training convergence with `ep_rew_mean` rising from -3.09 to +24.9 and `explained_variance` reaching 0.901.
 

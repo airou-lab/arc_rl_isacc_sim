@@ -11,24 +11,22 @@ The project is on the `dev` branch. Phase 09-01 and 09-02 are complete. Physics 
 
 ## Recent Activity
 - **Phase 09-01 Complete**: Enabled visuals, calibrated 8x physics, implemented raycast-snapped spawn, and aligned waypoints.
-- **Phase 09-02 (Physical Calibration - Verified)**:
-    - **Status**: Physically Stable. Pending Policy Retraining confirmation.
-    - **1400kg Balanced Mass Distribution**: Corrected physical imbalance by implementing a custom spawner (`arcproLab/mdp/spawner.py`) to apply realistic mass: Chassis (1200kg), Wheels (75kg), Knuckles (10kg).
-    - **Actuator Gain Overhaul**: Massively increased steering and throttle gains (Stiffness: 500,000, Damping: 10,000) to stabilize the 1200kg heavy chassis.
-    - **Safe Spawn Height**: Set spawn height to 1.0m (`arcproLab/mdp/events.py`) to prevent 3.6m wide wheels from clipping into the ground plane.
-    - **Action Space Refactor (2D Action Space)**: Implemented `GroupedJointAction` classes to collapse control into a stable 2D interface (1 Steering, 1 Throttle).
-    - **Verification**: `check_bias.py` confirms drift is reduced to <2 degrees per 100 steps. 
-- **Phase 09-03 Initiated**: PPO retraining started with stabilized 1400kg physics and 2D action space.
+- **Phase 09-02 Complete (Physical Calibration & Validation)**:
+    - **Status**: VERIFIED. Agent successfully learning on heavy-chassis physics.
+    - **1400kg Balanced Mass Distribution**: Corrected physical imbalance using a custom spawner (`arcproLab/mdp/spawner.py`).
+    - **Actuator Gain Overhaul**: Stabilized 1200kg chassis with 500,000 stiffness gains.
+    - **Normalization Breakthrough**: Identified that verification scripts must load `vec_normalize.pkl` to match the policy's input space. Implemented periodic normalization saves in `train_policy.py`.
+- **Phase 09-03 Active**: PPO retraining showing strong convergence. `ep_rew_mean` surged from -3.09 to +24.9 at 40k steps.
 
 ## Known Issues & Solutions
-1. **Convergence Uncertainty**: While physics are stable, it is not yet confirmed if the agent can effectively learn complex maneuvers with the 1200kg mass.
-2. **Excessive Wheel Spin**: Resolved by 2D Action Space grouping and increased actuator damping.
-3. **Physical Bias/Drift**: Resolved by balancing link masses and increasing actuator gains.
+1. **Normalization Mismatch**: Resolved by implementing `SaveVecNormalizeCallback` to save stats every 10k steps.
+2. **Visual Misalignment at End-of-Track**: Confirmed Waypoint 999 does not align with visual mesh; verification focused on Waypoint 0.
+3. **Excessive Wheel Spin**: Resolved by 2D Action Space sync and 5,000 actuator damping.
 
 ## Active Todos (Queue)
 1. [x] **09-01-stabilize-loop**: Enable visuals, verify 8x scale, and initiate dry run.
-2. [/] **09-02-physical-calibration**: (VERIFIED PHYSICAL) Pending confirmation of policy learning on heavy-chassis physics.
-3. [/] **09-03-policy-retraining**: (ACTIVE) Resume PPO training with 1 environment, 1400kg balanced physics, and 2D action space.
+2. [x] **09-02-physical-calibration**: (COMPLETE) Verified stable physics and learning convergence.
+3. [/] **09-03-policy-retraining**: (ACTIVE) PPO training progressing healthy (~17 FPS).
 
 
 ## Blockers
