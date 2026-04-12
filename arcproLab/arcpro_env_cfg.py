@@ -130,6 +130,8 @@ class RewardCfg:
     )
     # Prevent 180s
     heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
+    # Smoothness Calibration: Penalize steering wiggles
+    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=1.0)
 
 @configclass
 class TerminationCfg:

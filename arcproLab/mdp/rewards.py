@@ -61,6 +61,19 @@ def steering_jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     reward = -0.1 * torch.abs(steering)
     return reward
 
+def action_rate_smoothness_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """Penalizes rapid changes in actions (wiggling)."""
+    # Current vs Previous actions
+    current_action = env.action_manager.action
+    prev_action = env.action_manager.prev_action
+    
+    # Penalize the squared difference (heavier penalty for large jumps)
+    # Focus mainly on steering (index 0)
+    steer_diff = current_action[:, 0] - prev_action[:, 0]
+    reward = -1.0 * torch.square(steer_diff)
+    
+    return reward
+
 def heading_alignment_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     """Rewards facing the correct way along the track waypoints."""
     obs = env.observation_manager.compute()["policy"]

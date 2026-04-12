@@ -30,10 +30,10 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     lat_err, _ = tm.compute_errors(asset.data.root_pos_w, yaw)
     
     # LANE BOUNDARIES (8x Scale)
-    # Centerline (Yellow) is 0.0m. Right Shoulder (White) is 4.5m.
-    # Reset if the car center crosses the yellow line into the left lane (< 0.0m) 
-    # or goes off the road shoulder (> 4.5m)
-    marker_hit = (lat_err < 0.0) | (lat_err > 4.5)
+    # Robot width is 3.6m. Right lane is 4.5m wide.
+    # To keep WHEELS inside the 4.5m lane:
+    # Reset if center < 0.5m (crosses yellow) or > 4.0m (crosses white)
+    marker_hit = (lat_err < 0.5) | (lat_err > 4.0)
 
     # Apply 50-step settling buffer for the physics to 'link' (8x scale is heavy)
     settled = env.episode_length_buf > 50
