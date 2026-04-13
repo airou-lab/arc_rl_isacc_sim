@@ -119,7 +119,7 @@ class HierarchicalPathPlanningPolicy(RecurrentActorCriticPolicy):
         command_blend_factor: float = 0.6,
         # Removed dead parameter steering_blend_factor=0.4
         progressive_curvature_exp: float = 1.15,
-        max_deviation_meters: float = 2.0,
+        max_deviation_meters: float = 0.5,
     ):
         """
         Initialize the hierarchical policy.

@@ -38,7 +38,7 @@ def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     reward = torch.where(
         torch.abs(lat_err) < threshold,
         torch.ones_like(lat_err),
-        -torch.abs(lat_err) * 2.0
+        -torch.abs(lat_err) * 10.0 # Heavy penalty for crossing boundaries
     )
     
     # Handle NaNs

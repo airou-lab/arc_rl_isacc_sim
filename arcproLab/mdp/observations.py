@@ -47,6 +47,9 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     
     lat_err, head_err = tm.compute_errors(local_pos, yaw)
     
+    # Target Middle of Right Lane (approx 0.56m from double yellow line)
+    lat_err = lat_err - 0.5625
+    
     # Distance Tracking
     if "distance" not in env.extras:
         env.extras["distance"] = torch.zeros(env.num_envs, device=env.device)

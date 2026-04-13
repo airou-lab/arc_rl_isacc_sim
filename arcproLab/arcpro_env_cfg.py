@@ -119,7 +119,7 @@ import mdp.actions as arcpro_actions
 @configclass
 class ActionCfg:
     steering = arcpro_actions.GroupedJointPositionActionCfg(asset_name="robot", joint_names=["Joint_Steer_L", "Joint_Steer_R"], scale=1.0)
-    throttle = arcpro_actions.GroupedJointVelocityActionCfg(asset_name="robot", joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], scale=40.0)
+    throttle = arcpro_actions.GroupedJointVelocityActionCfg(asset_name="robot", joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], scale=60.0)
 
 @configclass
 class RewardCfg:
@@ -152,7 +152,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     viewer: ViewerCfg = ViewerCfg(eye=(-15.0, 6.875, 1.25), lookat=(-16.25, 5.56, 0.0))
     
     enable_cameras: bool = True
-    scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=2, env_spacing=50.0)
+    scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=32, env_spacing=50.0)
     observations: ObservationCfg = ObservationCfg()
     actions: ActionCfg = ActionCfg()
     rewards: RewardCfg = RewardCfg()
