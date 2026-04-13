@@ -19,6 +19,12 @@ def measure_usd(usd_path):
     print(f"Opening stage: {usd_path}")
     stage = Usd.Stage.Open(usd_path)
     
+    # List all meshes
+    print("\nListing all meshes in stage:")
+    for prim in stage.Traverse():
+        if prim.IsA(UsdGeom.Mesh):
+            print(f"  [MESH] {prim.GetPath()}")
+    
     # Check MetersPerUnit
     mpu = UsdGeom.GetStageMetersPerUnit(stage)
     up_axis = UsdGeom.GetStageUpAxis(stage)

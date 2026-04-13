@@ -17,7 +17,7 @@ class TrackManager:
         self.waypoints = None # (N, 3) - [x, y, yaw]
         
         # Default path to waypoints file
-        self.wp_path = os.path.join(os.path.dirname(__file__), "track_centerline.npy")
+        self.wp_path = os.path.join(os.path.dirname(__file__), "track_centerline_1x.npy")
         
         if os.path.exists(self.wp_path):
             self.load_waypoints(self.wp_path)

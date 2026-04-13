@@ -10,14 +10,15 @@ from isaaclab.envs import ManagerBasedRLEnv
 def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """
     Terminates if any wheel hits the boundaries. 
-    Calibrated for 8x robot (3.6m wide) and 0.73m mathematical offset.
+    Calibrated for 1x robot (0.45m wide).
     """
     asset = env.scene[asset_cfg.name]
     
     # 1. Physical Crash (High-force impact)
+    # Reverted threshold from 5000.0 (8x) to 100.0 (1x)
     sensor = env.scene.sensors["contact_forces"]
     forces = torch.norm(sensor.data.net_forces_w, dim=-1)
-    chassis_crash = torch.any(forces > 5000.0, dim=1)
+    chassis_crash = torch.any(forces > 100.0, dim=1)
     
     # 2. Precision Lane Contact
     from mdp.track_manager import get_track_manager
@@ -26,21 +27,26 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     q = asset.data.root_quat_w
     yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
     
-    # Get direct math error in meters
-    lat_err, _ = tm.compute_errors(asset.data.root_pos_w, yaw)
+    # Get environment-relative position
+    env_origins = env.scene.env_origins
+    local_pos = asset.data.root_pos_w - env_origins
     
-    # LANE BOUNDARIES (8x Scale)
-    # Robot width is 3.6m. Right lane is 4.5m wide.
-    # To keep WHEELS inside the 4.5m lane:
-    # Reset if center < 0.5m (crosses yellow) or > 4.0m (crosses white)
-    marker_hit = (lat_err < 0.5) | (lat_err > 4.0)
+    # Get direct math error in meters using local position
+    lat_err, _ = tm.compute_errors(local_pos, yaw)
+    
+    # LANE BOUNDARIES (1x Scale)
+    # Robot width is 0.45m. Right lane is ~1.125m wide.
+    # To keep WHEELS inside the ~1.125m lane:
+    # center is allowed ~ +/- 0.3m? 
+    # Let's use 0.5m as reset threshold for simplicity
+    marker_hit = torch.abs(lat_err) > 0.5
 
-    # Apply 50-step settling buffer for the physics to 'link' (8x scale is heavy)
-    settled = env.episode_length_buf > 50
+    # Lower settling buffer for light 1x physics
+    settled = env.episode_length_buf > 10
 
     # Debug logging (env 0)
     if settled[0].item() and marker_hit[0].item():
-        print(f"[TERMINATION] Lane Departure! LatErr: {lat_err[0].item():.3f}m (Allowed -0.5m to 4.5m)")
+        print(f"[TERMINATION] Lane Departure! LatErr: {lat_err[0].item():.3f}m (Allowed +/- 0.5m)")
 
     return settled & (chassis_crash | marker_hit)
 
@@ -49,12 +55,13 @@ def height_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     asset = env.scene[asset_cfg.name]
     height = asset.data.root_pos_w[:, 2]
     settled = env.episode_length_buf > 5
-    return settled & ((height < 0.1) | (height > 2.0))
+    # Adjusted height for 1x car (Min 0.02m to avoid ground clipping, Max 0.5m for airtime)
+    return settled & ((height < 0.02) | (height > 0.5))
 
 def stagnation_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Terminates if the robot hasn't made forward progress in 100 steps."""
-    # Apply 50-step settling buffer for the physics to 'link' (8x scale is heavy)
-    settled = env.episode_length_buf > 50
+    # Lower settling buffer for light 1x physics
+    settled = env.episode_length_buf > 10
     
     # Initialize extras if not present
     if "last_dist" not in env.extras:
@@ -65,7 +72,8 @@ def stagnation_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = S
     
     # Check progress only if settled
     # (Reset counter if we haven't settled yet to avoid instant reset)
-    progress = (current_dist - env.extras["last_dist"]) > 0.1
+    # Lower progress threshold for 1x scale (0.01m vs 0.1m)
+    progress = (current_dist - env.extras["last_dist"]) > 0.01
     env.extras["stagnant_steps"] = torch.where(~settled | progress, 
                                                torch.zeros_like(env.extras["stagnant_steps"]), 
                                                env.extras["stagnant_steps"] + 1)

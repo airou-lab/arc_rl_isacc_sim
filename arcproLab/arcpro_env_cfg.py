@@ -48,18 +48,19 @@ class ARCProSceneCfg(InteractiveSceneCfg):
     )
 
     # Ground Plane (Visual + Safety Backup)
-    ground_plane = AssetBaseCfg(
-        prim_path="/World/defaultGroundPlane",
-        spawn=sim_utils.GroundPlaneCfg(),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -1.0)),
-    )
+    # REMOVED: User wants robot to fall into void
+    # ground_plane = AssetBaseCfg(
+    #     prim_path="/World/defaultGroundPlane",
+    #     spawn=sim_utils.GroundPlaneCfg(),
+    #     init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -0.1)),
+    # )
 
-    # Track from no_graph_sim.usd (Original visuals, hardened in-place)
+    # Track from no_graph_sim.usd (Clean 1x version: No grass/foliage/fences)
     track = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Track",
         spawn=sim_utils.UsdFileCfg(
-            usd_path=os.path.join(USD_DIR, "no_graph_sim.usd"),
-            scale=(1.0, 1.0, 1.0), 
+            usd_path=os.path.join(USD_DIR, "no_graph_sim_clean_1x.usda"),
+            scale=(0.125, 0.125, 0.125), # Shrink world to match 1.0x robot
         ),
         # Use origin position to match USD world coordinates
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
@@ -67,26 +68,28 @@ class ARCProSceneCfg(InteractiveSceneCfg):
 
 
     
-    # Robot (8.0x Metric Scale based on GUI resize)
+    # Robot (1.0x Metric Scale)
     robot = ARCPRO_ROBOT_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=ARCPRO_ROBOT_CFG.spawn.replace(
             usd_path=os.path.join(ARCPRO_LAB_DIR, "assets", "robot", "F1Tenth_Metric.usd"),
-            scale=(8.0, 8.0, 8.0),
+            scale=(1.0, 1.0, 1.0), # Revert to 1.0x
         ),
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
             # Fixed Spawn Point: Centerline (Shifted to align with Waypoints)
-            pos=(-130.03, 44.48, 0.42), 
-            rot=(0.7071, 0.0, 0.0, 0.7071) # +90 degrees Z-up (Flipped 180)
+            # 8x pos: (-130.03, 44.48, 0.42) -> 1x pos: (-16.25, 5.56, 0.05)
+            pos=(-16.25375, 5.56, 0.05), 
+            rot=(0.7071, 0.0, 0.0, 0.7071) # +90 degrees Z-up
         ), 
     )
     
-    # Camera (Scaled offset for 8x robot)
+    # Camera (Standard offset for 1x robot)
     tiled_camera = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraSensor",
         update_period=0.0,
         spawn=sim_utils.PinholeCameraCfg(),
-        offset=TiledCameraCfg.OffsetCfg(pos=(2.24, 0.0, 1.28), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
+        # 8x pos: (2.24, 0.0, 1.28) -> 1x pos: (0.28, 0.0, 0.16)
+        offset=TiledCameraCfg.OffsetCfg(pos=(0.28, 0.0, 0.16), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
         data_types=["rgb"], width=160, height=90,
     )
 
@@ -145,24 +148,24 @@ class TerminationCfg:
 @configclass
 class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     # Adjust viewer to see the robot at its new world position
-    viewer: ViewerCfg = ViewerCfg(eye=(-120.0, 55.0, 10.0), lookat=(-129.0, 46.0, 0.0))
+    # 8x eye: (-120.0, 55.0, 10.0) -> 1x eye: (-15.0, 6.875, 1.25)
+    viewer: ViewerCfg = ViewerCfg(eye=(-15.0, 6.875, 1.25), lookat=(-16.25, 5.56, 0.0))
     
     enable_cameras: bool = True
-    scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=1, env_spacing=1000.0)
+    scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=2, env_spacing=50.0)
     observations: ObservationCfg = ObservationCfg()
     actions: ActionCfg = ActionCfg()
     rewards: RewardCfg = RewardCfg()
     terminations: TerminationCfg = TerminationCfg()
     events: EventCfg = EventCfg()
-
     sim: SimulationCfg = SimulationCfg(
-        dt=0.005, # 200Hz for balanced performance
-        render_interval=10, # Maintain 20Hz visual (200 / 10)
+        dt=0.002, # 500Hz for high-fidelity small scale physics
+        render_interval=25, # Maintain 20Hz visual (500 / 25)
         device="cuda:0",
         physx=sim_utils.PhysxCfg(
             solver_type=1, # TGS
-            max_position_iteration_count=8, # From main branch
-            max_velocity_iteration_count=4, # From main branch
+            max_position_iteration_count=16, # Increased from 8
+            max_velocity_iteration_count=4, 
             bounce_threshold_velocity=0.5, 
             enable_ccd=True, 
             enable_stabilization=True,
@@ -174,7 +177,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     )
 
     def __post_init__(self):
-        self.decimation = 10 # Sync with render_interval
+        self.decimation = 25 # Sync with render_interval (500Hz / 25 = 20Hz control)
         self.episode_length_s = 120.0 
         self.viewer.camera_follow_prim_path = None
         

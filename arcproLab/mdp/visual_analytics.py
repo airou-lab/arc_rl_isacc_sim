@@ -48,7 +48,7 @@ class TelemetryWindow:
                 
                 ui.Spacer(height=15)
                 ui.Label("GSD Phase 7 Status:", style={"font_size": 12, "color": 0xFFAAAAAA})
-                ui.Label("- Map Scale: 8.0x", style={"font_size": 10})
+                ui.Label("- Map Scale: 1.0x", style={"font_size": 10})
                 ui.Label("- Physics: SDF (High Fidelity)", style={"font_size": 10})
                 ui.Label("- Camera: Manual Control", style={"font_size": 10})
 

@@ -18,8 +18,8 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     obs = torch.zeros((env.num_envs, 12), device=env.device)
     
     # Index 3: Forward Speed (m/s) - Local X velocity
-    # Normalize for 8x car (1m/s big car = 0.125m/s small car logic)
-    obs[:, 3] = asset.data.root_lin_vel_b[:, 0] * 0.125
+    # Metric scale: 1.0 = 1m/s
+    obs[:, 3] = asset.data.root_lin_vel_b[:, 0]
     
     # Index 4: Yaw Rate (rad/s) - Local Z angular velocity
     obs[:, 4] = asset.data.root_ang_vel_b[:, 2]
@@ -41,11 +41,11 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     # yaw = atan2(2(qw*qz + qx*qy), 1 - 2(qy^2 + qz^2))
     yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
     
-    lat_err, head_err = tm.compute_errors(asset.data.root_pos_w, yaw)
+    # Get environment origins to convert world pos to local track pos
+    env_origins = env.scene.env_origins
+    local_pos = asset.data.root_pos_w - env_origins
     
-    # APPLY LANE OFFSET: Target 2.25m to the right of the mathematical centerline (8x scale)
-    # This is the dead center of the 4.5m wide right lane.
-    lat_err = lat_err - 2.25 
+    lat_err, head_err = tm.compute_errors(local_pos, yaw)
     
     # Distance Tracking
     if "distance" not in env.extras:
@@ -55,8 +55,8 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     # We use local X velocity * environment dt (0.05s)
     env.extras["distance"] += asset.data.root_lin_vel_b[:, 0] * 0.05
     
-    # Normalize lateral error for 8x car (meters relative to giant scale)
-    obs[:, 8] = lat_err * 0.125
+    # Lateral Error (meters relative to Yellow Centerline)
+    obs[:, 8] = lat_err
     obs[:, 9] = head_err
     
     # Index 11: Total Distance (Accumulated)

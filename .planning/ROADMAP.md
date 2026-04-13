@@ -3,7 +3,7 @@
 ## Overview
 This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 
-## Milestone 1: Physical Fidelity & Policy Foundation (v1.2)
+## Milestone 1: Physical Fidelity & Policy Foundation (v1.2) - COMPLETE
 *Focus: 1.0x metric stabilization, hierarchical policy stack, and true physics restoration.*
 
 - [x] **Phase 1: Environment Foundation** - Established stable USD assets and connectivity.
@@ -14,26 +14,28 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 - [x] **Phase 6: Physics Restoration** - Reverted to 1.0x metric scaling with 20kg mass.
 - [x] **Phase 7: Gymnasium & Environment Hygiene** - Modernized API and cleaned up terminal noise.
 - [x] **Phase 8: Physics Fidelity Restoration** - High-fidelity physics parameters (damping, stiffness).
-- [/] **Phase 9: Training Loop Stabilization** - (ACTIVE) Stabilized 8x physics, implemented 2D action space, and confirmed PPO convergence.
+- [x] **Phase 9: Training Loop Stabilization** - Stabilized 8x physics, implemented 2D action space, and confirmed PPO convergence.
+- [x] **Phase 10: Asset Downscaling** - Reverted to 1.0x metric scale, isolated roads, and removed terrain clutter.
 
-## Milestone 2: Autonomous Urban Navigation (v2.0)
+## Milestone 2: Autonomous Urban Navigation (v2.0) - ACTIVE
 *Focus: Graph-based routing, intersection logic, and multi-agent coordination.*
 
-- [ ] **Phase 10: Intersection Navigation** - Implement graph-based route planning.
-- [ ] **Phase 11: Hierarchical Policy Migration** - Port the `Worker-Driver` architecture from the sibling folder and refactor for the 1500kg physics.
-- [ ] **Phase 12: Environment Scale Alignment** - Scale USD road assets by 8.0x to match the robot scale, allowing removal of observation normalization (0.125).
+- [/] **Phase 11: Retraining & Intersection logic** - (ACTIVE) Retrain policy at 1x and implement graph-based route planning.
+- [ ] **Phase 12: Hierarchical Policy Migration** - Port the `Worker-Driver` architecture from the sibling folder and refactor for the physics.
+- [x] **Phase 13: Environment Scale Alignment** - (COMPLETED via Phase 10) Scaled USD road assets to match the robot scale.
 
 ## Progress
 
 | Phase | Milestone | Status | Completed |
 |-------|-----------|--------|-----------|
-| 1, 2, 3, 4 | M1 | COMPLETE | 2026-03-30 |
-| 5. Policy Integration | M1 | COMPLETE | 2026-04-02 |
-| 6, 7, 8. Physics & Hygiene | M1 | COMPLETE | 2026-04-05 |
-| 9. Training Stability | M1 | ACTIVE | - |
-| 10. Intersection Nav | M2 | Planned | - |
-| 11. Hierarchical Refactor| M2 | Planned | - |
-| 12. Environment Scaling  | M2 | Planned | - |
+| 1-4   | M1 | COMPLETE | 2026-03-30 |
+| 5     | M1 | COMPLETE | 2026-04-02 |
+| 6-8   | M1 | COMPLETE | 2026-04-05 |
+| 9     | M1 | COMPLETE | 2026-04-11 |
+| 10    | M1 | COMPLETE | 2026-04-12 |
+| 13    | M2 | COMPLETE | 2026-04-12 |
+| 11    | M2 | ACTIVE   | - |
+| 12    | M2 | Planned  | - |
 
 ---
-*Roadmap updated: 2026-04-10*
+*Roadmap updated: 2026-04-12*

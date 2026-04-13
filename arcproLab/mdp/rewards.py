@@ -31,14 +31,14 @@ def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     obs = env.observation_manager.compute()["policy"]
     lat_err = obs[:, 8]
     
-    # Calibration Threshold: 0.6m physical error
-    # 0.6m * 0.125 = 0.075 normalized
-    threshold = 0.075
+    # Calibration Threshold: 0.2m physical error from yellow line
+    threshold = 0.2
     
+    # Square the error to penalize deviation more aggressively
     reward = torch.where(
         torch.abs(lat_err) < threshold,
         torch.ones_like(lat_err),
-        -torch.abs(lat_err) * 5.0 # Increased penalty for crossing boundaries
+        -torch.abs(lat_err) * 2.0
     )
     
     # Handle NaNs

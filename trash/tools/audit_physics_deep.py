@@ -1,8 +1,12 @@
 import sys
 import os
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(CURRENT_DIR)
-sys.path.append(os.path.join(CURRENT_DIR, "arcproLab"))
+
+# Set up paths properly
+PROJECT_ROOT = "/home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim"
+ARCPRO_LAB_DIR = os.path.join(PROJECT_ROOT, "arcproLab")
+
+sys.path.append(PROJECT_ROOT)
+sys.path.append(ARCPRO_LAB_DIR)
 
 import argparse
 from isaaclab.app import AppLauncher
@@ -31,7 +35,7 @@ def deep_audit():
     print("="*50)
 
     # 1. Check USD Asset directly
-    usd_path = os.path.join(os.path.dirname(__file__), "arcproLab", "assets", "robot", "F1Tenth_Metric.usd")
+    usd_path = os.path.join(ARCPRO_LAB_DIR, "assets", "robot", "F1Tenth_Metric.usd")
     print(f"\n[1] Auditing USD Asset: {usd_path}")
     stage = Usd.Stage.Open(usd_path)
     if not stage:
@@ -52,7 +56,11 @@ def deep_audit():
 
     # 2. Check Runtime Configuration
     print(f"\n[2] Auditing Runtime Config (arcpro_robot_cfg.py)")
-    print(f"  - Configured Mass: {ARCPRO_ROBOT_CFG.spawn.mass_props.mass}")
+    if ARCPRO_ROBOT_CFG.spawn.mass_props is not None:
+        print(f"  - Configured Mass (mass_props): {ARCPRO_ROBOT_CFG.spawn.mass_props.mass}")
+    else:
+        print(f"  - Configured Mass (mass_props): NONE (Using spawner overrides)")
+    
     print(f"  - Solver Iterations (Pos/Vel): {ARCPRO_ROBOT_CFG.spawn.articulation_props.solver_position_iteration_count}/{ARCPRO_ROBOT_CFG.spawn.articulation_props.solver_velocity_iteration_count}")
     
     for act_name, act_cfg in ARCPRO_ROBOT_CFG.actuators.items():
@@ -79,9 +87,6 @@ def deep_audit():
         spawn=sim_utils.GroundPlaneCfg(),
     )
     
-    # Use real config scale (8.0x) and no overrides
-    scene_cfg.robot.spawn.scale = (8.0, 8.0, 8.0) 
-
     sim_cfg = SimulationCfg(dt=0.01, device="cuda:0")
     sim = sim_utils.SimulationContext(sim_cfg)
     
@@ -90,7 +95,6 @@ def deep_audit():
     print("  - Simulation Context Initialized.")
     
     robot = scene["robot"]
-    print(f"  - Robot spawned at scale: {robot.data.root_state_w[:, 7:10]}") # Just checking if scale is reflected in data if possible, though scale isn't in root_state usually
     
     # Check joint positions
     print(f"  - Joint Positions: {robot.data.joint_pos}")
@@ -102,6 +106,16 @@ def deep_audit():
     print(f"\n[4] Post-Step State:")
     print(f"  - Root Position (Z): {robot.data.root_pos_w[0, 2]:.4f}")
     
+    # Total Mass Check
+    total_mass = 0
+    stage = Usd.Stage.Open(simulation_app.context.get_stage_url())
+    for prim in stage.Traverse():
+        if "Robot" in str(prim.GetPath()) and prim.HasAPI(UsdPhysics.MassAPI):
+            mass = prim.GetAttribute("physics:mass").Get()
+            if mass:
+                total_mass += mass
+    print(f"  - Total Runtime Mass (Sum of Robot Prims): {total_mass:.2f} kg")
+
     # If Z is very low, it might be clipping
     if robot.data.root_pos_w[0, 2] < 0.05:
         print("  - [!] WARNING: Robot Z-height is very low. Possible clipping into ground.")

@@ -14,9 +14,9 @@ import mdp.spawner as arcpro_spawner
 def spawn_f1tenth_preset(prim_path, cfg, translation=None, orientation=None):
     """Preset spawner that includes mass overrides for F1Tenth."""
     mass_overrides = {
-        "Chassis": 1200.0,
-        "Wheel_.*": 75.0,
-        "Knuckle_.*": 10.0,
+        "Chassis": 20.0,
+        "Wheel_.*": 1.0,
+        "Knuckle_.*": 0.1,
     }
     return arcpro_spawner.spawn_f1tenth(prim_path, cfg, translation, orientation, mass_overrides=mass_overrides)
 
@@ -47,7 +47,7 @@ class ArcProRobotCfg(ArticulationCfg):
     )
 
     init_state: ArticulationCfg.InitialStateCfg = ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 1.0), 
+        pos=(0.0, 0.0, 0.1), # Lowered for 1x scale
         rot=(1.0, 0.0, 0.0, 0.0),
         joint_pos={".*": 0.0},
     )
@@ -55,17 +55,17 @@ class ArcProRobotCfg(ArticulationCfg):
     actuators: dict = {
         "steering": ImplicitActuatorCfg(
             joint_names_expr=["Joint_Steer_.*"],
-            effort_limit_sim=500000.0, # Increased from 100k
+            effort_limit_sim=5.0, # Lowered from 100.0
             velocity_limit_sim=10.0,
-            stiffness=500000.0, # Increased from 100k
-            damping=10000.0, # Increased from 2k
+            stiffness=20.0, # Lowered from 1000.0
+            damping=2.0, # Lowered from 50.0
         ),
         "throttle": ImplicitActuatorCfg(
             joint_names_expr=["Joint_Drive_.*"], 
-            effort_limit_sim=500000.0, # Increased from 200k
+            effort_limit_sim=5.0, # Lowered from 100.0
             velocity_limit_sim=100.0,
             stiffness=0.0,
-            damping=5000.0, # Increased from 1k
+            damping=1.0, # Lowered from 10.0
         ),
     }
 

@@ -67,7 +67,8 @@ class HierarchicalPathPlanningPolicy(RecurrentActorCriticPolicy):
     LSTM hidden state and the planned waypoints.
     """
     # Normalization constant for waypoints (meters -> normalized space)
-    WAYPOINT_NORM_SCALE = 20.0
+    # Reduced from 20.0 (8x) to 2.5 (1x)
+    WAYPOINT_NORM_SCALE = 2.5
 
     # Telemetry vector indices (must match experiment.py TELEMETRY_INDICES)
     IDX_TURN_TOKEN = 0 # Discrete turn command {-1, 0, 1} from Worker
@@ -118,7 +119,7 @@ class HierarchicalPathPlanningPolicy(RecurrentActorCriticPolicy):
         command_blend_factor: float = 0.6,
         # Removed dead parameter steering_blend_factor=0.4
         progressive_curvature_exp: float = 1.15,
-        max_deviation_meters: float = 8.0,
+        max_deviation_meters: float = 2.0,
     ):
         """
         Initialize the hierarchical policy.

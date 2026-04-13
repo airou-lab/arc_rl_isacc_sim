@@ -28,6 +28,16 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.sim import SimulationContext, SimulationCfg
+# Add project root and arcproLab to sys.path
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
+ARCPRO_LAB_DIR = os.path.join(PROJECT_ROOT, "arcproLab")
+
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+if ARCPRO_LAB_DIR not in sys.path:
+    sys.path.append(ARCPRO_LAB_DIR)
+
 from arcpro_env_cfg import ARCProSceneCfg
 
 def main():

@@ -18,15 +18,18 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     asset = env.scene[asset_cfg.name]
     
     # Target Waypoint: Centerline (Yellow Line)
-    # Original: -129.30 -> Shifted to align with Waypoints: -130.03
-    spawn_x, spawn_y = -130.03, 44.48
+    # 8x pos: (-130.03, 44.48) -> 1x pos: (-16.25375, 5.56)
+    local_spawn_x, local_spawn_y = -16.25375, 5.56
     spawn_yaw = 1.5708 # +90 degrees (Flipped 180)
+    
+    # Get environment origins
+    env_origins = env.scene.env_origins[env_ids]
     
     # Initialize tensors
     final_pos = torch.zeros((len(env_ids), 3), device=env.device)
-    final_pos[:, 0] = spawn_x
-    final_pos[:, 1] = spawn_y
-    final_pos[:, 2] = 1.0 # Safe initial height
+    final_pos[:, 0] = env_origins[:, 0] + local_spawn_x
+    final_pos[:, 1] = env_origins[:, 1] + local_spawn_y
+    final_pos[:, 2] = env_origins[:, 2] + 0.1 # Lower safe initial height
     
     quats = torch.zeros((len(env_ids), 4), device=env.device)
     import math
@@ -38,13 +41,14 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     query = omni.physx.get_physx_scene_query_interface()
     
     for i, env_id in enumerate(env_ids):
-        # Raycast from far above down to the road
-        hit = query.raycast_closest((spawn_x, spawn_y, 100.0), (0.0, 0.0, -1.0), 200.0)
+        # Raycast from far above down to the road using the calculated world-space position
+        world_x, world_y = final_pos[i, 0].item(), final_pos[i, 1].item()
+        hit = query.raycast_closest((world_x, world_y, 100.0), (0.0, 0.0, -1.0), 200.0)
         
         if hit["hit"]:
             hit_path = str(hit.get("rigidBody") or hit.get("collisionPath") or "")
             if "robot" not in hit_path.lower():
-                final_pos[i, 2] = hit["position"][2] + 1.0 # Elevated height
+                final_pos[i, 2] = hit["position"][2] + 0.1 # Elevated height (Lowered)
                 # if i == 0: print(f"[Event] Reset Snapped Env 0 to Z={final_pos[i, 2]:.2f}")
     
     # Teleport
