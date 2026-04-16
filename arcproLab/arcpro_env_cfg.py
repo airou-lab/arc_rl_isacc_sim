@@ -77,9 +77,10 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             scale=(1.0, 1.0, 1.0), # Revert to 1.0x
         ),
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
-            # Fixed Spawn Point: Centerline (Nudged 0.05m towards yellow line)
-            pos=(-16.20375, 5.56, 0.05), 
-            rot=(0.7071, 0.0, 0.0, 0.7071) # +90 degrees Z-up
+            # Fixed Spawn Point: Centerline (Nudged 0.5m towards yellow line)
+            # Original -16.25375 + 0.5 = -15.75375
+            pos=(-15.75375, 5.56, 0.05), 
+            rot=(0.7071, 0.0, 0.0, -0.7071) # -90 degrees Z-up (Face South)
         ), 
     )
     

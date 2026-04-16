@@ -17,8 +17,8 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     """
     asset = env.scene[asset_cfg.name]
     
-    # Target Waypoint: Centerline (Nudged 0.05m towards yellow line)
-    local_spawn_x, local_spawn_y = -16.20375, 5.56
+    # Target Waypoint: Centerline (Nudged 0.5m towards yellow line)
+    local_spawn_x, local_spawn_y = -15.75375, 5.56
     spawn_yaw = -1.5708 # -90 degrees (Face South)
     
     # Get environment origins
