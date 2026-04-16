@@ -208,8 +208,26 @@ class TrackManager:
         yaws = np.arctan2(dy, dx)
         
         wps = np.stack([resampled_x, resampled_y, yaws], axis=1)
+        
+        # 4. Offset to Right Lane Center
+        # Road center is -15.835, Spawn is -16.255.
+        # We need to shift waypoints along their normal by ~0.42m to the right.
+        # For South-facing (Yaw -1.57), Right is -X.
+        
+        # Simple directional offset for now (assume mostly straight for spawn region)
+        # In a full track we'd use the normal vector for each waypoint
+        dx = np.gradient(resampled_x)
+        dy = np.gradient(resampled_y)
+        # Normal vector (-dy, dx)
+        norms = np.stack([-dy, dx], axis=1)
+        norms = norms / np.linalg.norm(norms, axis=1)[:, None]
+        
+        # Shift waypoints by 0.42m along the normal (towards the right lane)
+        # Using -0.42 because +Normal is Left (West)
+        wps[:, :2] += norms * -0.42
+        
         self.waypoints = torch.tensor(wps, device=self.device, dtype=torch.float32)
-        print(f"[TrackManager] Procedurally generated {len(self.waypoints)} waypoints.")
+        print(f"[TrackManager] Procedurally generated {len(self.waypoints)} waypoints (OFFSET TO RIGHT LANE).")
 
     def get_closest_waypoint_data(self, pos: torch.Tensor) -> torch.Tensor:
         """

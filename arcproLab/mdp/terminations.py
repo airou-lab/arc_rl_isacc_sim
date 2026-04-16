@@ -35,12 +35,11 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     lat_err, _ = tm.compute_errors(local_pos, yaw)
     
     # LANE BOUNDARIES (1x Scale)
-    # Total Road Width measured as ~1.6m. 
-    # Center is now aligned with waypoints.
-    # We terminate if the robot's center exceeds +/- 0.8m from centerline.
-    # (Robot width is 0.45m, so this is very close to the physical edge).
-    inner_hit = lat_err > 0.8
-    outer_hit = lat_err < -0.8
+    # Target: Right Lane Center (spawn point)
+    # Lane Width: ~0.8m (distance between Yellow and White markers)
+    # We terminate if the robot's center exceeds +/- 0.4m from lane center.
+    inner_hit = lat_err > 0.4 # Yellow Line
+    outer_hit = lat_err < -0.4 # White Line (Tipping point)
     marker_hit = inner_hit | outer_hit
 
     # 0 grace period for physics stability (as requested)
@@ -48,9 +47,9 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
 
     # Debug logging (env 0)
     if (marker_hit[0].item() or chassis_crash[0].item()) and (env.num_envs == 1 or env.scene.env_origins.shape[0] > 0):
-        reason = "Left Edge Hit" if inner_hit[0].item() else ("Right Edge Hit" if outer_hit[0].item() else "Chassis Crash")
+        reason = "Yellow Line Hit" if inner_hit[0].item() else ("White Line Hit" if outer_hit[0].item() else "Chassis Crash")
         val = lat_err[0].item()
-        print(f"[TERMINATION] {reason}! LatErr: {val:.3f}m | Limit: +/- 0.8m")
+        print(f"[TERMINATION] {reason}! LatErr: {val:.3f}m | Limit: +/- 0.4m")
 
     return settled & (chassis_crash | marker_hit)
 
