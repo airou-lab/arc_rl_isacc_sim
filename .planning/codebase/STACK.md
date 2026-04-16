@@ -1,69 +1,70 @@
 # Technology Stack
 
-**Analysis Date:** 2025-04-28
+**Analysis Date:** 2025-05-15
 
 ## Languages
 
 **Primary:**
-- Python 3.10+ - Used for all RL environment logic, training scripts, and asset management.
+- Python 3.10+ - RL environment logic, training scripts, and asset management.
 
 **Secondary:**
-- Bash - Used for orchestration scripts (`train.sh`, `verify_sim.sh`, `run_gui_verify.sh`).
+- Bash - Orchestration scripts (`train.sh`, `verify_sim.sh`, `run_gui_verify.sh`).
 
 ## Runtime
 
 **Environment:**
-- Isaac Sim 4.0+ (Omniverse)
-- Isaac Lab 1.0+ (formerly Orbit)
+- Isaac Sim 4.0+ - Real-time physics engine and renderer.
+- Isaac Lab 1.0+ - Manager-based RL environment orchestration.
 
 **Package Manager:**
-- Conda/Mamba (Implicitly managed by Isaac Lab environment)
-- pip - For secondary dependencies in `requirements.txt`.
-- Lockfile: missing (relies on Isaac Lab base container/installation)
+- Conda/Mamba - Integrated with Isaac Lab.
+- pip - Secondary dependencies.
+- Lockfile: missing (managed by base Isaac Lab installation).
 
 ## Frameworks
 
 **Core:**
-- Isaac Lab 1.0+ - Manager-based environment orchestration.
-- Gymnasium 1.0+ - Standard interface for RL environments.
+- Isaac Lab 1.0+ - Core orchestration.
+- Gymnasium 1.0+ - RL environment interface.
 
 **RL Algorithm:**
-- Stable Baselines3 (SB3) - Specifically `PPO` for navigation policy training.
-- isaaclab_rl - Isaac Lab wrapper for SB3.
+- Stable Baselines3 (SB3) - PPO for navigation policy.
+- isaaclab_rl - SB3 wrapper for Isaac Lab.
 
 **Build/Dev:**
-- PhysX 5.1 - High-fidelity physics solver.
-- USD (Universal Scene Description) - Industry-standard asset and scene management.
+- PhysX 5.1 - Physics solver (TGS solver type).
+- USD (Universal Scene Description) - Industry-standard asset management.
 
 ## Key Dependencies
 
 **Critical:**
-- `isaaclab.envs.ManagerBasedRLEnv` - Base class for the environment.
-- `torch` - Backend for neural networks and vectorized physics operations.
+- `isaaclab.envs.ManagerBasedRLEnv` - Base class.
+- `torch` - Backend for NN and vectorized physics.
 
 **Infrastructure:**
-- `omni.physx` - Direct interaction with the physics solver for raycasting/snapping logic.
-- `numpy` (< 2.0) - Numerical processing for waypoint management.
+- `omni.physx` - Physics interaction (raycasting).
+- `numpy` (< 2.0) - Waypoint processing.
 
 ## Configuration
 
 **Environment:**
-- `arcproLab/arcpro_env_cfg.py` - Main simulation and RL configuration.
-- `arcproLab/arcpro_robot_cfg.py` - Robot physical properties (Mass: 20kg, Scale: 8.0x).
+- `arcproLab/arcpro_env_cfg.py` - Main configuration (1x Scale, 500Hz physics, 20Hz control).
+- `arcproLab/arcpro_robot_cfg.py` - Robot properties (20kg mass, 1.0x metric scale).
 
 **Build:**
-- `train.sh` - Standardizes training parameters.
-- `.github/workflows/ci.yml` - CI configuration.
+- `train.sh` - Standardized training.
+- `run_gui_verify.sh` - GUI-based verification.
 
 ## Platform Requirements
 
 **Development:**
-- NVIDIA GPU with 8GB+ VRAM (12GB+ recommended for cameras).
-- Ubuntu 22.04+ with Isaac Lab installed.
+- NVIDIA GPU with 8GB+ VRAM (12GB+ for camera rendering).
+- Ubuntu 22.04+ with Isaac Lab 1.0+ installed.
 
 **Production:**
-- Headless simulation support via `verify_sim.sh` and `train.sh`.
+- Headless simulation support for training.
+- GUI support for verification and visualization.
 
 ---
 
-*Stack analysis: 2025-04-28*
+*Stack analysis: 2025-05-15*

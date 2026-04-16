@@ -1,15 +1,16 @@
 # Coding Conventions
 
-**Analysis Date:** 2025-04-28
+**Analysis Date:** 2025-05-15
 
 ## Naming Patterns
 
 **Files:**
 - Snake case for all scripts and modules: `arcpro_env_cfg.py`, `train_policy.py`.
 - Lowercase for asset directories: `assets/`, `openStreetUSD/`.
+- `_1x` suffix for 1x-metric scaled assets: `no_graph_sim_clean_1x.usda`.
 
 **Functions:**
-- Snake case: `reset_robot_to_lane()`.
+- Snake case: `get_telemetry_vector()`, `fov_visibility_termination()`.
 
 **Classes:**
 - CamelCase for configuration classes: `ARCProEnvCfg`, `ARCProSceneCfg`.
@@ -20,7 +21,6 @@
 ## Code Style
 
 **Formatting:**
-- Flake8 for linting (implied by `requirements.txt`).
 - Standard Python style following Isaac Lab developer guidelines (PEP8).
 
 **Linting:**
@@ -30,30 +30,31 @@
 
 **Order:**
 1. Standard library imports.
-2. Third-party library imports (e.g., `torch`, `omni`).
-3. Local application imports (e.g., `arcpro_env_cfg`).
+2. Third-party library imports (`torch`, `omni`, `isaaclab`).
+3. Local application imports (`mdp.observations`, `arcpro_env_cfg`).
 
 **Path Aliases:**
-- `sys.path.append(os.path.join(os.path.dirname(__file__), ".."))` is used in scripts to access `arcproLab` modules.
+- Use `sys.path.append(os.path.dirname(os.path.abspath(__file__)))` in config files.
+- Use root-relative imports where possible in scripts.
 
 ## Error Handling
 
 **Patterns:**
-- Extensive retry loops for stochastic simulation operations (e.g., `reset_robot_to_lane`).
-- Fallback positions and warning logs when critical simulation geometry cannot be detected.
+- **NaN Protection**: Explicitly zero out NaNs in observation vectors.
+- **Physics Snapping**: Use raycasting in `mdp.events` to snap the robot to road height during reset.
+- **Terminal Debugging**: Print clear termination reasons (e.g., "[TERMINATION] Driving Blind!") to stdout for easier debugging.
 
 ## Logging
 
 **Framework:**
-- `print()` for local script output.
+- `print()` for local script output and real-time termination debugging.
 - `TensorBoard` for training progress via Stable Baselines3.
 
 ## Workflow Conventions
 
-**Stabilization Tasks:**
-- Use `.planning/todos/` for tracking discrete stabilization tasks.
-- Each todo should have a clear Goal and a list of actionable Tasks.
-- Phase 09 specifically uses `verify_spawn.py` as a mandatory sanity check before code promotion.
+**Metric Verification:**
+- Always run `verify_metric.py` after changes to physics or assets to ensure 1x scale integrity.
+- Use `run_gui_verify.sh` for manual visual inspection of policy behavior and camera FOV.
 
 ## Module Design
 
@@ -62,7 +63,8 @@
 
 **Config Classes:**
 - Use `@configclass` decorator from `isaaclab.utils.configclass` for all environment and robot configurations.
+- Centralize all magic numbers (scales, offsets, thresholds) in `@configclass` objects in `arcpro_env_cfg.py`.
 
 ---
 
-*Convention analysis: 2025-04-28*
+*Convention analysis: 2025-05-15*

@@ -1,24 +1,25 @@
 # Testing Patterns
 
-**Analysis Date:** 2025-04-28
+**Analysis Date:** 2025-05-15
 
 ## Test Framework
 
 **Runner:**
 - `pytest` for unit testing logic.
-- Bash scripts for simulation-based verification (`verify_sim.sh`).
+- Bash scripts for simulation-based verification (`verify_sim.sh`, `run_gui_verify.sh`).
 
 **Run Commands:**
 ```bash
-pytest tests/           # Run logic tests
-./verify_sim.sh         # Headless simulation performance audit
-python arcproLab/scripts/verify_spawn.py --num_envs 16 # Spawn and camera verification
+pytest tests/           # Run logic tests (TrackManager)
+./verify_sim.sh         # Headless performance audit
+./run_gui_verify.sh     # Visual verification of latest model
+python arcproLab/scripts/verify_metric.py --num_envs 1 # Detailed metric and joint audit
 ```
 
 ## Test File Organization
 
 **Location:**
-- Logic tests are separate in `tests/`.
+- Logic tests are in `tests/`.
 - Simulation verification scripts are in `arcproLab/scripts/`.
 
 **Naming:**
@@ -29,47 +30,48 @@ python arcproLab/scripts/verify_spawn.py --num_envs 16 # Spawn and camera verifi
 
 **Logic Testing:**
 - Focus on `TrackManager` and vectorized math in `mdp/`.
-- Uses `pytest` to verify waypoint generation and distance calculations.
+- Verifies waypoint generation, distance calculations, and coordinate transformations at 1x scale.
 
 ## Simulation Verification Patterns
 
-**Phase 09 Stabilization Loop:**
-- **Sanity Check**: Run `verify_spawn.py` to ensure the robot starts on the road and cameras are correctly positioned.
-- **Performance Audit**: Run `verify_sim.sh` to monitor FPS and physics stability at 8.0x scale.
-- **Regression Check**: Run `verify_policy.py` with a known good model (e.g., `road_following_model.pth`) to ensure environment changes haven't broken the telemetry logic.
+**1x Metric Verification Loop:**
+- **Metric Integrity**: Run `verify_metric.py` to ensure positions, velocities, and joint efforts align with metric expectations (e.g., speed in m/s, mass in kg).
+- **Spawn & Reset Audit**: `verify_spawn.py` ensures the robot snaps correctly to the road and starts in the correct orientation.
+- **Visual & FOV Audit**: `run_gui_verify.sh` allows manual verification of the camera FOV and the `fov_visibility_termination` logic.
+- **Telemetry Audit**: Use the Telemetry UI (`mdp/visual_analytics.py`) to observe real-time speed, lateral error, and steering response.
 
 ## Mocking
 
 **Framework:**
-- Not extensively used; simulation verification relies on running the actual Isaac Sim instance.
+- Simulation verification relies on the live Isaac Sim environment.
+- No extensive mocking of physics components is used.
 
 ## Coverage
 
 **Requirements:**
-- Logic tests for critical math in `TrackManager` are expected.
-- Coverage metrics are not strictly enforced.
+- High coverage for `TrackManager` and `observations.py` logic.
 
 ## Test Types
 
 **Unit Tests:**
-- Waypoint error calculations.
-- Tensor shape verification in `observations.py`.
+- Waypoint error calculations (`tests/test_track_manager.py`).
+- Telemetry vector construction shape and range checks.
 
 **Integration Tests:**
-- Robot-track alignment during reset events (`verify_spawn.py`).
-- Full RL training loop convergence checks (`train.sh`).
+- Robot-track alignment during reset events.
+- Action-to-Joint velocity mapping (e.g., 60.0 throttle -> ~3.0 m/s).
 
 **E2E Tests:**
-- `run_gui_verify.sh` provides a manual end-to-end check of the trained policy in the simulation.
+- Full training-to-verification pipeline using `train.sh` followed by `run_gui_verify.sh`.
 
 ## Common Patterns
 
-**Async Testing:**
-- Simulation steps are blocking; tests iterate through fixed numbers of steps and verify state.
+**Termination Testing:**
+- Intentional driving off-road or out-of-FOV to verify that the environment resets and prints the correct termination reason to stdout.
 
-**Error Testing:**
-- Testing fallback behavior in `events.py` when the robot is spawned far from the track.
+**Joint Audit:**
+- `verify_metric.py` audits specific joint velocities (`Joint_Drive_FL`, etc.) to ensure the drivetrain is operating within expected rad/s ranges.
 
 ---
 
-*Testing analysis: 2025-04-28*
+*Testing analysis: 2025-05-15*

@@ -1,15 +1,15 @@
 # Architecture
 
-**Analysis Date:** 2024-04-12
+**Analysis Date:** 2025-05-15
 
 ## Pattern Overview
 
-**Overall:** Modular RL Environment based on Isaac Lab's Manager-Based RL pattern, transitioned to a 1.0x true metric physics scale.
+**Overall:** Modular RL Environment based on Isaac Lab's Manager-Based RL pattern, fully transitioned to a 1.0x true metric physics scale.
 
 **Key Characteristics:**
-- **True Physics Scaling:** All assets and physics parameters are aligned to a 1.0x metric scale (1 unit = 1 meter), ensuring realistic dynamics.
-- **Road in Void:** Minimalist environment architecture where the robot exists on a track suspended in a void, facilitating clean training and strict termination logic.
-- **Decoupled MDP:** Observations, rewards, and terminations are defined in modular files within `arcproLab/mdp/`, allowing for easy iteration of the RL logic.
+- **True Metric Scaling:** The robot is defined at 1.0x scale (1 unit = 1 meter). The environment USD is scaled to 0.125x to achieve metric parity with the robot, ensuring realistic mass and inertia dynamics.
+- **Road in Void:** Minimalist environment architecture (`no_graph_sim_clean_1x.usda`) where the robot exists on a track suspended in a void, facilitating clean training and strict termination logic.
+- **Vision-Centric Navigation:** Navigation is driven by a tiled camera sensor with integrated FOV-based termination to ensure the agent remains within visual operational limits.
 
 ## Layers
 
@@ -40,8 +40,8 @@
 
 1. Raw physics data (positions, velocities, quats) is pulled from the Isaac Sim stage via `SceneEntityCfg`.
 2. `mdp.observations.get_telemetry_vector` processes raw data into a 12-element telemetry vector.
-3. `TrackManager` computes lateral and heading errors relative to the `track_centerline_1x.npy` waypoints.
-4. Final observation vector is passed to the policy.
+3. `TrackManager` computes lateral and heading errors relative to the `track_centerline_1x.npy` waypoints using environment-relative positions (`root_pos_w - env_origins`).
+4. Final observation vector is passed to the policy, with target lateral error shifted by 0.5625m to center the robot in the right lane.
 
 **State Management:**
 - Environment state is managed by Isaac Lab's `ManagerBasedRLEnv`.
@@ -50,41 +50,42 @@
 ## Key Abstractions
 
 **TrackManager:**
-- Purpose: Centralizes waypoint handling and error computation.
+- Purpose: Centralizes waypoint handling and error computation in metric units.
 - Examples: `arcproLab/mdp/track_manager.py`
-- Pattern: Singleton manager initialized with track-specific waypoints.
+- Pattern: Singleton manager initialized with 1x-scaled waypoints (`track_centerline_1x.npy`).
 
 **Telemetry Protocol:**
 - Purpose: Standardized 12-element vector for policy input.
 - Examples: `arcproLab/mdp/observations.py`
-- Pattern: Index-fixed vector (Indices 3, 4, 5, 6, 8, 9, 11).
+- Pattern: Index-fixed vector (Index 3: Speed, 4: Yaw Rate, 5-6: Actions, 8: Lat Err, 9: Head Err, 11: Distance).
 
 ## Entry Points
 
 **Training Script:**
 - Location: `arcproLab/scripts/train_policy.py`
 - Triggers: User execution of `train.sh`.
-- Responsibilities: Initializes the environment and starts the RL training loop.
+- Responsibilities: Initializes the environment and starts the RL training loop using SB3 PPO.
 
 **Verification Script:**
-- Location: `arcproLab/scripts/verify_policy.py`
-- Triggers: User execution of `verify_sim.sh`.
-- Responsibilities: Loads a trained model and runs it in the simulation with telemetry visualization.
+- Location: `arcproLab/scripts/verify_policy.py` and `arcproLab/scripts/verify_live.py`.
+- Triggers: User execution of `verify_sim.sh` or `run_gui_verify.sh`.
+- Responsibilities: Loads a trained model and runs it in the simulation with telemetry visualization and FOV monitoring.
 
 ## Error Handling
 
-**Strategy:** Fail-fast for physics anomalies, soft-reset for environment violations.
+**Strategy:** Fail-fast for physics anomalies, strict termination for environment violations.
 
 **Patterns:**
 - **NaN Protection:** `get_telemetry_vector` checks for and zeros out NaNs to prevent policy explosion.
-- **Strict Termination:** Resets triggered by `height_termination` (falling into void) or `white_line_contact`.
+- **FOV Termination:** `fov_visibility_termination` resets the environment if the robot's velocity vector points outside the camera's horizontal FOV.
+- **Strict Lane Termination:** `white_line_contact` triggers reset if lateral error exceeds 2.7m or is less than 0.225m (right lane boundaries).
 
 ## Cross-Cutting Concerns
 
 **Logging:** RL metrics logged to `logs/ppo/`, telemetry logged to console/UI during verification.
-**Validation:** `TrackManager` validates track geometry against USD meshes during sampling.
-**Scale Transition:** Centralized scaling in `arcpro_env_cfg.py` where the world is shrunk by 0.125x to match the 1.0x robot.
+**Validation:** `TrackManager` validates track geometry against 1x waypoints.
+**Scale Parity:** Centralized scaling in `arcpro_env_cfg.py` where the world is scaled to 0.125x to match the 1.0x robot's metric properties (20kg mass, metric dimensions).
 
 ---
 
-*Architecture analysis: 2024-04-12*
+*Architecture analysis: 2025-05-15*
