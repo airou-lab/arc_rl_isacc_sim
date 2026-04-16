@@ -25,6 +25,7 @@ import isaaclab.envs.mdp as mdp
 
 from arcpro_robot_cfg import ARCPRO_ROBOT_CFG
 import mdp.observations as mdp_obs, mdp.rewards as mdp_rew, mdp.terminations as mdp_done, mdp.events as mdp_events
+import mdp.spawner as arcpro_spawner
 from mdp.debug_terminations import debug_termination
 
 @configclass
@@ -87,10 +88,28 @@ class ARCProSceneCfg(InteractiveSceneCfg):
     tiled_camera = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraSensor",
         update_period=0.0,
-        spawn=sim_utils.PinholeCameraCfg(),
+        spawn=sim_utils.PinholeCameraCfg(
+            horizontal_aperture=2.65, # Approx 69 deg FOV
+            focal_length=1.93,
+        ),
         # 8x pos: (2.24, 0.0, 1.28) -> 1x pos: (0.28, 0.0, 0.16)
         offset=TiledCameraCfg.OffsetCfg(pos=(0.28, 0.0, 0.16), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
         data_types=["rgb"], width=160, height=90,
+    )
+
+    # Camera Visual Helper (Invisible to sensors, visible in GUI)
+    camera_cone = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraVisualCone",
+        spawn=sim_utils.ConeCfg(
+            func=arcpro_spawner.spawn_guide_cone,
+            radius=0.03,
+            height=0.1,
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 1.0), opacity=0.5),
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(
+            pos=(0.35, 0.0, 0.16), # Slightly in front of camera lens
+            rot=(0.7071, 0.0, 0.7071, 0.0) # Point along X-axis (Forward)
+        ),
     )
 
     # Contact Sensor: Detect chassis collisions (crashes)
@@ -119,7 +138,12 @@ import mdp.actions as arcpro_actions
 @configclass
 class ActionCfg:
     steering = arcpro_actions.GroupedJointPositionActionCfg(asset_name="robot", joint_names=["Joint_Steer_L", "Joint_Steer_R"], scale=1.0)
-    throttle = arcpro_actions.GroupedJointVelocityActionCfg(asset_name="robot", joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], scale=60.0)
+    throttle = arcpro_actions.GroupedJointVelocityActionCfg(
+        asset_name="robot", 
+        joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
+        scale=60.0,
+        clip={"throttle": (0.0, 1.0)} # Force forward motion only
+    )
 
 @configclass
 class RewardCfg:
@@ -144,6 +168,11 @@ class TerminationCfg:
     roadmark_contact = DoneTerm(func=mdp_done.white_line_contact)
     # Stagnation: Reset if stuck against a wall
     stagnation = DoneTerm(func=mdp_done.stagnation_termination)
+    # FOV Driving: Reset if driving into areas not visible to the camera
+    driving_blind = DoneTerm(
+        func=mdp_done.fov_visibility_termination,
+        params={"horizontal_aperture": 2.65, "focal_length": 1.93}
+    )
 
 @configclass
 class ARCProEnvCfg(ManagerBasedRLEnvCfg):

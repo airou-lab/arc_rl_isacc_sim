@@ -9,6 +9,22 @@ import isaaclab.sim as sim_utils
 import isaaclab.sim.schemas as schemas
 from isaaclab.sim.utils import clone, get_current_stage
 import re
+from pxr import Usd, UsdGeom
+
+@clone
+def spawn_guide_cone(
+    prim_path: str,
+    cfg: sim_utils.ConeCfg,
+    translation: tuple[float, float, float] | None = None,
+    orientation: tuple[float, float, float, float] | None = None,
+    **kwargs,
+) -> Usd.Prim:
+    """Spawns a cone and sets its purpose to 'guide' so it's invisible to sensors."""
+    prim = sim_utils.spawn_cone(prim_path, cfg, translation, orientation, **kwargs)
+    # Set purpose to guide (Invisible to standard RenderProducts/Cameras)
+    geom_prim = UsdGeom.Imageable(prim)
+    geom_prim.CreatePurposeAttr().Set(UsdGeom.Tokens.guide)
+    return prim
 
 @clone
 def spawn_f1tenth(
