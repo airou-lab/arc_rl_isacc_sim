@@ -44,6 +44,20 @@ class GroupedJointAction(ActionTerm):
         return 1
 
     @property
+    def action_space(self) -> gym.Space:
+        # Define bounds based on clip if available
+        low, high = -1.0, 1.0
+        if hasattr(self.cfg, "clip") and self.cfg.clip is not None:
+            if isinstance(self.cfg.clip, dict):
+                # For grouped actions, we usually just have one term
+                for val in self.cfg.clip.values():
+                    low, high = val[0], val[1]
+            elif isinstance(self.cfg.clip, tuple):
+                low, high = self.cfg.clip[0], self.cfg.clip[1]
+        
+        return gym.spaces.Box(low=low, high=high, shape=(self.action_dim,))
+
+    @property
     def raw_actions(self) -> torch.Tensor:
         return self._raw_actions
 
@@ -54,6 +68,17 @@ class GroupedJointAction(ActionTerm):
     def process_actions(self, actions: torch.Tensor):
         # actions is (num_envs, 1)
         self._raw_actions[:] = actions
+        
+        # Apply clipping if specified in config
+        # Note: self.cfg.clip can be a dict or None
+        if hasattr(self.cfg, "clip") and self.cfg.clip is not None:
+            if isinstance(self.cfg.clip, dict):
+                # For grouped actions, we usually just have one term, but we check all
+                for val in self.cfg.clip.values():
+                    actions = torch.clamp(actions, val[0], val[1])
+            elif isinstance(self.cfg.clip, tuple):
+                actions = torch.clamp(actions, self.cfg.clip[0], self.cfg.clip[1])
+
         # Broadcast and apply scale/offset
         self._processed_actions[:] = self._offset + self._scale * actions.repeat(1, self._num_joints)
 

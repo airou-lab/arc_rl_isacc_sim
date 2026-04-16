@@ -25,18 +25,17 @@ def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     """Reward based on lateral offset from track centerline. Reads from env.extras."""
     lat_err = env.extras.get("lat_err", torch.zeros(env.num_envs, device=env.device))
     
-    # Target: Center of Lane (2.42m from yellow line)
-    # Using absolute error for stability
+    # Target: Lane Center (0.56m offset was used in Phase 1, but TrackManager already centers waypoints)
+    # Since TrackManager centers waypoints, target is 0.0
     abs_lat = torch.abs(lat_err)
-    err_from_target = abs_lat - 2.42
     
-    # Calibration Threshold: 0.3m error from target
-    threshold = 0.3
+    # Calibration Threshold: 0.1m error from center
+    threshold = 0.1
     
     reward = torch.where(
-        torch.abs(err_from_target) < threshold,
+        abs_lat < threshold,
         torch.ones_like(lat_err),
-        -torch.abs(err_from_target) * 10.0
+        -abs_lat * 5.0 # Scale penalty
     )
     
     # Handle NaNs
@@ -63,6 +62,11 @@ def action_rate_smoothness_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     """Penalizes rapid changes in actions (wiggling)."""
     # Current vs Previous actions
     current_action = env.action_manager.action
+    
+    # Check if prev_action is available
+    if not hasattr(env.action_manager, "prev_action") or env.action_manager.prev_action is None:
+        return torch.zeros(env.num_envs, device=env.device)
+        
     prev_action = env.action_manager.prev_action
     
     # Penalize the squared difference (heavier penalty for large jumps)

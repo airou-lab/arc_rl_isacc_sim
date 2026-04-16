@@ -36,15 +36,20 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     
     # LANE BOUNDARIES (1x Scale)
     # Robot width is 0.45m. Right lane is ~1.125m wide.
-    # User requested strict white line boundary at 2.7m
-    marker_hit = (torch.abs(lat_err) < 0.225) | (torch.abs(lat_err) > 2.7)
+    # User requested strict lane boundaries at 0.225m (inner/yellow) and 1.5m (outer/white).
+    # Since TrackManager centers waypoints, positive lat_err is towards the yellow line.
+    inner_hit = lat_err > 0.225
+    outer_hit = lat_err < -1.5
+    marker_hit = inner_hit | outer_hit
 
     # 0 grace period for physics stability (as requested)
     settled = torch.ones(env.num_envs, device=env.device, dtype=torch.bool)
 
     # Debug logging (env 0)
-    if settled[0].item() and marker_hit[0].item():
-        print(f"[TERMINATION] Lane Departure! LatErr: {lat_err[0].item():.3f}m (Safe Zone: 0.225 to 2.7)")
+    if (marker_hit[0].item() or chassis_crash[0].item()) and (env.num_envs == 1 or env.scene.env_origins.shape[0] > 0):
+        reason = "Yellow Line Hit" if inner_hit[0].item() else ("White Line Hit" if outer_hit[0].item() else "Chassis Crash")
+        val = lat_err[0].item()
+        print(f"[TERMINATION] {reason}! LatErr: {val:.3f}m | Limits: -1.5 to 0.225")
 
     return settled & (chassis_crash | marker_hit)
 

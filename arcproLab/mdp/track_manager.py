@@ -14,67 +14,81 @@ class TrackManager:
     """
     def __init__(self, device: str = "cuda:0"):
         self.device = device
-        self.waypoints = None # (N, 3) - [x, y, yaw]
+        self.waypoints = None
         self.visualizer = None # Debug markers
+        self.density = 0.5 # Default density
         
-        # Default path to waypoints file
-        self.wp_path = os.path.join(os.path.dirname(__file__), "track_centerline_1x.npy")
+        # Use USD path from standard location
+        self.usd_path = "/home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim/openStreetUSD/no_graph_sim_clean_1x.usda"
         
-        if os.path.exists(self.wp_path):
-            self.load_waypoints(self.wp_path)
-        else:
-            # Try to sample from USD if we are in a running simulation
-            try:
-                print(f"[TrackManager] {self.wp_path} not found. Attempting to sample from USD...")
-                self.sample_waypoints_from_usd()
-                if self.waypoints is not None:
-                    self.save_waypoints(self.wp_path)
-            except Exception as e:
-                # Fallback: Create a simple straight line for Road A if file missing and USD sampling fails
-                # Starting at (-125, 62) and going North (+Y)
-                print(f"[TrackManager] Warning: USD sampling failed ({e}). Using fallback straight line.")
-                y_coords = np.linspace(62, 200, 100)
-                wps = np.zeros((100, 3))
-                wps[:, 0] = -125.0 # X
-                wps[:, 1] = y_coords # Y
-                wps[:, 2] = np.pi / 2.0 # Yaw (North)
-                self.waypoints = torch.tensor(wps, device=self.device, dtype=torch.float32)
+        # PRIORITIZE PROCEDURAL SAMPLING
+        print(f"[TrackManager] Initializing procedural waypoint generation from road markers...")
+        try:
+            self.sample_waypoints_from_usd(density=self.density)
+        except Exception as e:
+            print(f"[TrackManager] Procedural sampling failed ({e}), falling back to file...")
+            self.wp_path = os.path.join(os.path.dirname(__file__), "track_centerline_1x.npy")
+            if os.path.exists(self.wp_path):
+                self.load_waypoints(self.wp_path)
+            else:
+                print(f"[TrackManager] CRITICAL: No waypoint source found.")
 
     def load_waypoints(self, path: str):
         """Loads waypoints from a .npy file."""
         data = np.load(path)
-        # FLIP HEADING: The 1x waypoints face North (1.57), but we want to drive South (-1.57).
-        # We add pi to the heading column (index 2).
+        
+        # 1. REVERSE ORDER: Ensure sequence moves South.
+        data = data[::-1]
+        
+        # 2. FLIP HEADING: Ensure yaw faces South (-1.57).
         data[:, 2] += np.pi
-        # Wrap to [-pi, pi]
         data[:, 2] = np.arctan2(np.sin(data[:, 2]), np.cos(data[:, 2]))
         
-        self.waypoints = torch.tensor(data, device=self.device, dtype=torch.float32)
-        print(f"[TrackManager] Loaded {len(self.waypoints)} waypoints from {path} (HEADING FLIPPED SOUTH)")
-        print(f"[TrackManager] Sample Waypoints (Local):\n{self.waypoints[:5, :2]}")
+        # 3. OFFSET TO LANE CENTER (Visual & Logic): 
+        # When facing South (-Y), Right is -X. Double yellow is at current X.
+        # We shift X by -0.5625 to put waypoints in the center of the right lane.
+        # This makes compute_errors return 0 when robot is centered in the lane.
+        data[:, 0] -= 0.5625
+        
+        # Use .copy() to fix negative strides
+        self.waypoints = torch.tensor(data.copy(), device=self.device, dtype=torch.float32)
+        print(f"[TrackManager] Loaded {len(self.waypoints)} waypoints (REVERSED, FLIPPED SOUTH, OFFSET 0.56m)")
         
         # Initialize visualizer if in GUI mode
         try:
-            from isaaclab.utils.assets import VisualizationMarkers, VisualizationMarkersCfg
+            from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
             import isaaclab.sim as sim_utils
             
-            # Use a unique prim path for visuals
+            # Use arrows to show direction
             marker_cfg = VisualizationMarkersCfg(
                 prim_path="/Visuals/TrackWaypoints",
                 markers={
-                    "dot": sim_utils.SphereCfg(
-                        radius=0.1, # Slightly larger for visibility
+                    "arrow": sim_utils.UsdFileCfg(
+                        usd_path=f"{sim_utils.ISAAC_ASSETS_DIR}/Visuals/checkpoint_arrow.usd",
+                        scale=(0.2, 0.2, 0.2),
                         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 0.0))
                     )
                 }
             )
             self.visualizer = VisualizationMarkers(marker_cfg)
             
-            # Visualize a subset of waypoints
-            vis_pos = self.waypoints[::5, :3].clone()
-            vis_pos[:, 2] = 0.5 # Lift them high above the road
-            self.visualizer.visualize(vis_pos)
-            print(f"[TrackManager] Visualized {len(vis_pos)} waypoints at height 0.5m")
+            # Visualize waypoints
+            vis_pos = self.waypoints[::10, :3].clone()
+            vis_pos[:, 2] = 0.1 # Sit on road
+            
+            # Create quaternions for South facing (Yaw = -1.57)
+            import math
+            num_wps = vis_pos.shape[0]
+            quats = torch.zeros((num_wps, 4), device=self.device)
+            # South is -90 deg around Z
+            half_yaw = -1.5708 / 2.0
+            quats[:, 0] = math.cos(half_yaw)
+            quats[:, 3] = math.sin(half_yaw)
+            
+            self.visualizer.visualize(vis_pos, quats)
+            print(f"[TrackManager] Visualized {len(vis_pos)} waypoints as ARROWS")
+        except Exception as e:
+            print(f"[TrackManager] Visualization error: {e}")
         except Exception as e:
             print(f"[TrackManager] Visualization error: {e}")
 
@@ -98,51 +112,70 @@ class TrackManager:
         if stage is None:
             raise RuntimeError("USD stage not found. USD sampling requires a running simulation.")
 
-        print(f"[TrackManager] Scanning stage: {stage.GetRootLayer().identifier}")
-        raw_points = []
-        # Traverse the stage using PrimRange for better reference handling
-        for prim in Usd.PrimRange(stage.GetPseudoRoot()):
-            if prim.IsA(UsdGeom.Mesh):
-                prim_path = str(prim.GetPath())
-                # Filter for actual road meshes only.
-                # Avoid 'track' keyword as it catches the entire root hierarchy (grass, terrain, etc)
-                is_track = any(keyword in prim_path.lower() for keyword in ["pavement", "road", "drivable_surfaces"])
-                
-                # Explicitly exclude grass and terrain
-                if any(k in prim_path.lower() for k in ["grass", "terrain", "field"]):
-                    is_track = False
-                
-                if is_track:
-                    mesh = UsdGeom.Mesh(prim)
-                    points = mesh.GetPointsAttr().Get()
-                    if points:
-                        # Get world transform
-                        xform = UsdGeom.Xformable(prim)
-                        world_transform = xform.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
-                        print(f" - Found track mesh: {prim_path} ({len(points)} points)")
-                        for p in points:
-                            p_world = world_transform.Transform(p)
-                            raw_points.append([p_world[0], p_world[1]])
+        print(f"[TrackManager] Sampling waypoints from road markers (Procedural)")
+        yellow_pts = []
+        white_pts = []
+        
+        # The track is scaled by 0.125 in the scene config.
+        # ComputeLocalToWorldTransform already includes this scale.
+        env0_track_path = "/World/envs/env_0/Track"
+        track_prim = stage.GetPrimAtPath(env0_track_path)
+        
+        # Get env_0 origin to ensure waypoints are local
+        env0_origin = Gf.Vec3d(0, 0, 0)
+        env0_prim = stage.GetPrimAtPath("/World/envs/env_0")
+        if env0_prim.IsValid():
+            env0_xform = UsdGeom.Xformable(env0_prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+            env0_origin = env0_xform.ExtractTranslation()
 
-        if not raw_points:
-            # Fallback: List all meshes to see what we missed
-            all_meshes = [str(p.GetPath()) for p in Usd.PrimRange(stage.GetPseudoRoot()) if p.IsA(UsdGeom.Mesh)]
-            print(f"[TrackManager] ERR: No road meshes found. Total meshes in stage: {len(all_meshes)}")
-            if all_meshes:
-                print(f" - Example mesh paths: {all_meshes[:5]}")
-            raise RuntimeError("No road meshes found in USD stage.")
+        from pxr import UsdShade
+        for prim in Usd.PrimRange(track_prim if track_prim.IsValid() else stage.GetPseudoRoot()):
+            if not prim.IsA(UsdGeom.Mesh):
+                continue
+                
+            path = str(prim.GetPath())
+            if "roadmarks" not in path.lower() and "piece" not in path.lower():
+                continue
+                
+            binding_api = UsdShade.MaterialBindingAPI(prim)
+            material, _ = binding_api.ComputeBoundMaterial()
+            if not material:
+                continue
+                
+            mat_path = str(material.GetPath()).lower()
+            mesh = UsdGeom.Mesh(prim)
+            points_attr = mesh.GetPointsAttr().Get()
+            if not points_attr:
+                continue
+                
+            xform = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+            
+            for p in points_attr:
+                p_world = xform.Transform(p)
+                # Subtract env origin to get local coordinates
+                p_local = [p_world[0] - env0_origin[0], p_world[1] - env0_origin[1]]
+                
+                if "yellow" in mat_path:
+                    yellow_pts.append(p_local)
+                elif "white" in mat_path:
+                    white_pts.append(p_local)
 
-        print(f"[TrackManager] Collected {len(raw_points)} raw points from USD.")
-        pts = np.array(raw_points)
-        # Round to 2 decimal places for deduplication
-        pts = np.unique(np.round(pts, 2), axis=0)
+        if not yellow_pts or not white_pts:
+            pts = np.array(yellow_pts + white_pts)
+        else:
+            y_pts = np.unique(np.round(np.array(yellow_pts), 2), axis=0)
+            w_pts = np.unique(np.round(np.array(white_pts), 2), axis=0)
+            lane_centers = []
+            for yp in y_pts:
+                dists = np.sum((w_pts - yp)**2, axis=1)
+                center = (yp + w_pts[np.argmin(dists)]) / 2.0
+                lane_centers.append(center)
+            pts = np.unique(np.round(np.array(lane_centers), 2), axis=0)
 
         # 2. Simple ordering (Nearest Neighbor)
         ordered_pts = []
-        
-        # START NEAR ROBOT SPAWN: (-129, 46)
-        spawn_target = np.array([-129.46, 46.92])
-        start_dists = np.sum((pts - spawn_target)**2, axis=1)
+        spawn_target = np.array([-16.25, 5.56])
+        start_dists = np.sum((pts[:, :2] - spawn_target)**2, axis=1)
         curr_idx = np.argmin(start_dists)
         
         visited = set([curr_idx])
@@ -151,28 +184,18 @@ class TrackManager:
         while len(visited) < len(pts):
             last_pt = ordered_pts[-1]
             dists = np.sum((pts - last_pt)**2, axis=1)
-            # Mask visited
-            for v in visited:
-                dists[v] = np.inf
-            
+            for v in visited: dists[v] = np.inf
             next_idx = np.argmin(dists)
-            # INCREASE GAP THRESHOLD: 50.0m for giant scale tiles
-            if dists[next_idx] > 50.0**2: 
-                print(f"[TrackManager] Large gap detected ({np.sqrt(dists[next_idx]):.2f}m). Stopping segment.")
-                break
-            
+            if dists[next_idx] > 2.0**2: break
             ordered_pts.append(pts[next_idx])
             visited.add(next_idx)
-            curr_idx = next_idx
             
         ordered_pts = np.array(ordered_pts)
 
         # 3. Resample to fixed density
-        # Calculate cumulative distance
         diffs = np.diff(ordered_pts, axis=0)
         segment_dists = np.sqrt(np.sum(diffs**2, axis=1))
         cum_dist = np.concatenate(([0], np.cumsum(segment_dists)))
-        
         total_dist = cum_dist[-1]
         num_samples = int(total_dist / density)
         interp_dists = np.linspace(0, total_dist, num_samples)
@@ -180,20 +203,13 @@ class TrackManager:
         resampled_x = np.interp(interp_dists, cum_dist, ordered_pts[:, 0])
         resampled_y = np.interp(interp_dists, cum_dist, ordered_pts[:, 1])
         
-        # 4. Compute Tangents/Yaw
         dx = np.gradient(resampled_x)
         dy = np.gradient(resampled_y)
         yaws = np.arctan2(dy, dx)
         
         wps = np.stack([resampled_x, resampled_y, yaws], axis=1)
-        
-        # 5. NO SHIFT (Keep in World Coordinates to match manual GUI placement)
-        # offset = wps[0, :2].copy()
-        # wps[:, :2] -= offset
-        # print(f"[TrackManager] Shifted waypoints by {offset} to center at (0,0)")
-        
         self.waypoints = torch.tensor(wps, device=self.device, dtype=torch.float32)
-        print(f"[TrackManager] Successfully sampled {len(self.waypoints)} waypoints from USD.")
+        print(f"[TrackManager] Procedurally generated {len(self.waypoints)} waypoints.")
 
     def get_closest_waypoint_data(self, pos: torch.Tensor) -> torch.Tensor:
         """
