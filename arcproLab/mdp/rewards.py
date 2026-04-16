@@ -8,12 +8,12 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
 def speed_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Rewards forward speed (current_speed * 0.3)."""
+    """Rewards forward speed, heavily penalizes reverse driving."""
     asset = env.scene[asset_cfg.name]
     speed = asset.data.root_lin_vel_b[:, 0]
     
-    # Simple speed reward (matching the logic from original policy environment)
-    reward = speed * 0.3
+    # Positive reward for forward speed, -2.0 penalty for reverse
+    reward = torch.where(speed > 0, speed * 0.5, torch.tensor(-2.0, device=env.device))
     
     # Handle NaNs
     nan_mask = torch.isnan(reward)
@@ -22,23 +22,21 @@ def speed_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntity
     return reward
 
 def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
-    """
-    Reward based on lateral offset from track centerline.
-    Original Logic: 
-    - if abs(lat_err) < 0.5: +1.0
-    - else: -abs(lat_err) * 2.0
-    """
-    obs = env.observation_manager.compute()["policy"]
-    lat_err = obs[:, 8]
+    """Reward based on lateral offset from track centerline. Reads from env.extras."""
+    lat_err = env.extras.get("lat_err", torch.zeros(env.num_envs, device=env.device))
     
-    # Calibration Threshold: 0.2m physical error from yellow line
-    threshold = 0.2
+    # Target: Center of Lane (2.42m from yellow line)
+    # Using absolute error for stability
+    abs_lat = torch.abs(lat_err)
+    err_from_target = abs_lat - 2.42
     
-    # Square the error to penalize deviation more aggressively
+    # Calibration Threshold: 0.3m error from target
+    threshold = 0.3
+    
     reward = torch.where(
-        torch.abs(lat_err) < threshold,
+        torch.abs(err_from_target) < threshold,
         torch.ones_like(lat_err),
-        -torch.abs(lat_err) * 10.0 # Heavy penalty for crossing boundaries
+        -torch.abs(err_from_target) * 10.0
     )
     
     # Handle NaNs
@@ -75,10 +73,8 @@ def action_rate_smoothness_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     return reward
 
 def heading_alignment_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
-    """Rewards facing the correct way along the track waypoints."""
-    obs = env.observation_manager.compute()["policy"]
-    # Index 9 is heading error (radians)
-    head_err = obs[:, 9]
+    """Rewards facing the correct way along the track waypoints. Reads from env.extras."""
+    head_err = env.extras.get("head_err", torch.zeros(env.num_envs, device=env.device))
     
     # Reward is cosine of error (max 1.0 when perfectly aligned, negative if > 90deg)
     reward = torch.cos(head_err)

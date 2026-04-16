@@ -15,6 +15,7 @@ class TrackManager:
     def __init__(self, device: str = "cuda:0"):
         self.device = device
         self.waypoints = None # (N, 3) - [x, y, yaw]
+        self.visualizer = None # Debug markers
         
         # Default path to waypoints file
         self.wp_path = os.path.join(os.path.dirname(__file__), "track_centerline_1x.npy")
@@ -42,8 +43,40 @@ class TrackManager:
     def load_waypoints(self, path: str):
         """Loads waypoints from a .npy file."""
         data = np.load(path)
+        # FLIP HEADING: The 1x waypoints face North (1.57), but we want to drive South (-1.57).
+        # We add pi to the heading column (index 2).
+        data[:, 2] += np.pi
+        # Wrap to [-pi, pi]
+        data[:, 2] = np.arctan2(np.sin(data[:, 2]), np.cos(data[:, 2]))
+        
         self.waypoints = torch.tensor(data, device=self.device, dtype=torch.float32)
-        print(f"[TrackManager] Loaded {len(self.waypoints)} waypoints from {path}")
+        print(f"[TrackManager] Loaded {len(self.waypoints)} waypoints from {path} (HEADING FLIPPED SOUTH)")
+        print(f"[TrackManager] Sample Waypoints (Local):\n{self.waypoints[:5, :2]}")
+        
+        # Initialize visualizer if in GUI mode
+        try:
+            from isaaclab.utils.assets import VisualizationMarkers, VisualizationMarkersCfg
+            import isaaclab.sim as sim_utils
+            
+            # Use a unique prim path for visuals
+            marker_cfg = VisualizationMarkersCfg(
+                prim_path="/Visuals/TrackWaypoints",
+                markers={
+                    "dot": sim_utils.SphereCfg(
+                        radius=0.1, # Slightly larger for visibility
+                        visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 0.0))
+                    )
+                }
+            )
+            self.visualizer = VisualizationMarkers(marker_cfg)
+            
+            # Visualize a subset of waypoints
+            vis_pos = self.waypoints[::5, :3].clone()
+            vis_pos[:, 2] = 0.5 # Lift them high above the road
+            self.visualizer.visualize(vis_pos)
+            print(f"[TrackManager] Visualized {len(vis_pos)} waypoints at height 0.5m")
+        except Exception as e:
+            print(f"[TrackManager] Visualization error: {e}")
 
     def save_waypoints(self, path: str):
         """Saves waypoints to a .npy file."""
