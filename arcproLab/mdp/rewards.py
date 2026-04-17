@@ -25,19 +25,17 @@ def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     """Reward based on lateral offset from track centerline. Reads from env.extras."""
     lat_err = env.extras.get("lat_err", torch.zeros(env.num_envs, device=env.device))
     
-    # Target: Center of Right Lane
-    # Since TrackManager waypoints are exactly on the Yellow Line (lat_err = 0.0),
-    # the center of the right lane is at -0.8m (total road width is 1.6m).
-    target_err = -0.8
-    abs_err_from_target = torch.abs(lat_err - target_err)
+    # Target: Lane Center (0.56m offset was used in Phase 1, but TrackManager already centers waypoints)
+    # Since TrackManager centers waypoints, target is 0.0
+    abs_lat = torch.abs(lat_err)
     
-    # Calibration Threshold: 0.1m error from lane center
+    # Calibration Threshold: 0.1m error from center
     threshold = 0.1
     
     reward = torch.where(
-        abs_err_from_target < threshold,
+        abs_lat < threshold,
         torch.ones_like(lat_err),
-        -abs_err_from_target * 5.0 # Scale penalty
+        -abs_lat * 5.0 # Scale penalty
     )
     
     # Handle NaNs

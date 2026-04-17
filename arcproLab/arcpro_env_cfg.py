@@ -77,9 +77,10 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             scale=(1.0, 1.0, 1.0), # Revert to 1.0x
         ),
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
-            # Nudged X towards yellow line, Fixed Z to prevent hovering
-            pos=(-16.15, 5.56, 0.05),
-            rot=(0.7071, 0.0, 0.0, -0.7071) # Face South
+            # Fixed Spawn Point: Centerline (Shifted to align with Waypoints)
+            # 8x pos: (-130.03, 44.48, 0.42) -> 1x pos: (-16.25, 5.56, 0.05)
+            pos=(-16.25375, 5.56, 0.05), 
+            rot=(0.7071, 0.0, 0.0, 0.7071) # +90 degrees Z-up
         ), 
     )
     
@@ -109,6 +110,14 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             pos=(0.35, 0.0, 0.16), # Slightly in front of camera lens
             rot=(0.7071, 0.0, 0.7071, 0.0) # Point along X-axis (Forward)
         ),
+    )
+
+    # Contact Sensor: Detect chassis collisions (crashes)
+    contact_forces = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/Chassis",
+        update_period=0.0,
+        history_length=3,
+        debug_vis=True,
     )
 
 @configclass
