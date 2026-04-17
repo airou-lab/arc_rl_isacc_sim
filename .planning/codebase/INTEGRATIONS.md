@@ -1,66 +1,54 @@
 # External Integrations
 
-**Analysis Date:** 2025-05-15
+**Analysis Date:** 2025-05-20
 
 ## APIs & External Services
 
-**Simulation:**
-- NVIDIA Isaac Sim 4.0+ - Real-time physics engine and renderer.
-  - SDK: `omni`, `isaacsim`.
-
-**RL Framework:**
-- Isaac Lab 1.0+ - Environment manager and RL interface.
-  - SDK: `isaaclab`.
-- Stable Baselines3 (SB3) - PPO for policy training.
-  - SDK: `isaaclab_rl.sb3`.
+**NVIDIA Isaac Sim / Kit:**
+- Service: Simulation environment for physics and rendering.
+- SDK: `omni.isaac.core`, `omni.kit.app`.
 
 ## Data Storage
 
-**Assets:**
-- OpenStreetUSD - USD map tiles and road assets.
-  - Primary: `openStreetUSD/no_graph_sim_clean_1x.usda` (Clean 1x metric version).
-  - Asset Management: Integrated via `UsdFileCfg` with `scale=(0.125, 0.125, 0.125)`.
+**USD Framework:**
+- Type: Universal Scene Description (USD) for environment and robot state.
+- Connection: `omni.usd.get_context().get_stage()`.
+- Primary file: `openStreetUSD/no_graph_sim_clean_1x.usda`.
 
-**Robot Asset:**
-- **F1Tenth_Metric.usd**: 1.0x metric-calibrated robot asset.
-  - Location: `arcproLab/assets/robot/`.
-  - Config: `arcproLab/arcpro_robot_cfg.py`.
-
-**Models:**
-- PyTorch Weights - Saved as `.pth` or `.zip` files for SB3.
-  - Primary Model: `arcproLab/models/road_following_model.pth`.
-  - Checkpoints: `logs/ppo/`.
-
-**Navigation Data:**
-- Waypoint Arrays - NumPy arrays containing absolute track centerlines.
-  - Files: `arcproLab/mdp/track_centerline_1x.npy` (1x metric scaled).
-  - Format: [X, Y, Yaw, Velocity] (Altitude-aware).
-  - Managed by: `arcproLab/mdp/track_manager.py`.
+**Waypoints:**
+- Type: Pre-generated track geometry stored in `.npy` format.
+- Client: `numpy`.
+- Path: `arcproLab/mdp/track_centerline_1x.npy`.
 
 ## Authentication & Identity
 
 **Auth Provider:**
-- None - Local or containerized execution.
+- None (Local development environment only).
 
 ## Monitoring & Observability
 
-**Logs:**
-- TensorBoard - Real-time training monitoring in `logs/ppo/`.
-- Stdout - Real-time termination logs and telemetry audits.
-- Telemetry UI: `mdp/visual_analytics.py` provides real-time graphing of speed, lateral error, and joint velocities.
+**TensorBoard:**
+- Approach: Integrated via SB3's `tensorboard_log` parameter.
+- Usage: Training reward, loss, and episode length tracking.
+
+**In-Sim Telemetry:**
+- Approach: Custom `omni.ui` overlay for real-time verification.
+- Location: `arcproLab/mdp/visual_analytics.py`.
 
 ## CI/CD & Deployment
 
 **CI Pipeline:**
-- GitHub Actions - Automated testing in `.github/workflows/ci.yml`.
+- Service: GitHub Actions (via `.github/workflows/ci.yml`).
+- Purpose: Basic syntax and configuration checks.
 
-**Deployment Target:**
-- Physical F1Tenth Hardware - Simulation target mimics 20kg mass and 4WD drive at 1.0x metric scale.
+**Hosting:**
+- Platform: Local GPU workstation or headless server.
 
 ## Environment Configuration
 
 **Required env vars:**
-- None detected; managed through `@configclass` Python objects.
+- `ISAACSIM_PATH`: Path to the Isaac Sim installation.
+- `LD_LIBRARY_PATH`: Standard CUDA and NVIDIA library paths.
 
 ## Webhooks & Callbacks
 
@@ -72,4 +60,4 @@
 
 ---
 
-*Integration audit: 2025-05-15*
+*Integration audit: 2025-05-20*

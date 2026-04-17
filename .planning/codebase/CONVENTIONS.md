@@ -1,70 +1,82 @@
 # Coding Conventions
 
-**Analysis Date:** 2025-05-15
+**Analysis Date:** 2025-05-20
 
 ## Naming Patterns
 
 **Files:**
-- Snake case for all scripts and modules: `arcpro_env_cfg.py`, `train_policy.py`.
-- Lowercase for asset directories: `assets/`, `openStreetUSD/`.
-- `_1x` suffix for 1x-metric scaled assets: `no_graph_sim_clean_1x.usda`.
+- [snake_case.py]: All modules and scripts.
+- [snake_case_1x.usda]: Assets specifically scaled to 1.0x metric units.
 
 **Functions:**
-- Snake case: `get_telemetry_vector()`, `fov_visibility_termination()`.
+- [snake_case]: `get_telemetry_vector()`, `white_line_contact()`.
 
-**Classes:**
-- CamelCase for configuration classes: `ARCProEnvCfg`, `ARCProSceneCfg`.
+**Variables:**
+- [snake_case]: `lat_err`, `head_err`, `local_pos`.
 
 **Types:**
-- Use `torch.Tensor` for vectorized RL state; use standard Python types for configuration flags.
+- Use [CamelCase] for `@configclass` definitions: `ARCProEnvCfg`.
 
 ## Code Style
 
 **Formatting:**
-- Standard Python style following Isaac Lab developer guidelines (PEP8).
+- Standard PEP8. Use black or equivalent if available.
+- Indentation: 4 spaces.
 
 **Linting:**
-- `flake8` for syntax and style checking.
+- Syntax verification via GitHub Actions.
 
 ## Import Organization
 
 **Order:**
-1. Standard library imports.
-2. Third-party library imports (`torch`, `omni`, `isaaclab`).
-3. Local application imports (`mdp.observations`, `arcpro_env_cfg`).
+1. Standard library (`os`, `sys`, `math`).
+2. Third-party (`torch`, `numpy`).
+3. Omniverse/Isaac (`omni`, `pxr`, `isaaclab`).
+4. Internal modules (`mdp.*`, `arcpro_env_cfg`).
 
 **Path Aliases:**
-- Use `sys.path.append(os.path.dirname(os.path.abspath(__file__)))` in config files.
-- Use root-relative imports where possible in scripts.
+- Use `sys.path.append(os.path.dirname(os.path.abspath(__file__)))` at the top of configuration files to allow local imports.
 
 ## Error Handling
 
 **Patterns:**
-- **NaN Protection**: Explicitly zero out NaNs in observation vectors.
-- **Physics Snapping**: Use raycasting in `mdp.events` to snap the robot to road height during reset.
-- **Terminal Debugging**: Print clear termination reasons (e.g., "[TERMINATION] Driving Blind!") to stdout for easier debugging.
+- **Zero-Masking**: Always mask NaNs in observation tensors (`obs[nan_mask] = 0.0`).
+- **Grace Periods**: Use `env.episode_length_buf > 20` to allow physics to settle before applying strict terminations (e.g., FOV checks).
 
 ## Logging
 
 **Framework:**
-- `print()` for local script output and real-time termination debugging.
-- `TensorBoard` for training progress via Stable Baselines3.
+- `print()` for real-time termination reasons and script debug info.
+- `env.extras` for storing telemetry used by rewards and terminations.
 
-## Workflow Conventions
+## Comments
 
-**Metric Verification:**
-- Always run `verify_metric.py` after changes to physics or assets to ensure 1x scale integrity.
-- Use `run_gui_verify.sh` for manual visual inspection of policy behavior and camera FOV.
+**When to Comment:**
+- Explain magic numbers (e.g., mass overrides, PID gains, sensor offsets).
+- Document termination thresholds and reward weights.
+
+**JSDoc/TSDoc:**
+- Use standard docstrings for all MDP functions.
+
+## Function Design
+
+**Size:**
+- Keep MDP functions (rewards, terminations) focused and under 50 lines.
+
+**Parameters:**
+- Primary parameter is always `env: ManagerBasedRLEnv`.
+
+**Return Values:**
+- MDP functions MUST return `torch.Tensor` of shape `(num_envs,)`.
 
 ## Module Design
 
 **Exports:**
-- Use `__init__.py` to expose key logic in `arcproLab/mdp/`.
+- Group functional logic in `arcproLab/mdp/`.
 
 **Config Classes:**
-- Use `@configclass` decorator from `isaaclab.utils.configclass` for all environment and robot configurations.
-- Centralize all magic numbers (scales, offsets, thresholds) in `@configclass` objects in `arcpro_env_cfg.py`.
+- Inheritance-based configuration using `replace()` for specific variations (e.g., `ARCPRO_ROBOT_CFG.replace(...)`).
 
 ---
 
-*Convention analysis: 2025-05-15*
+*Convention analysis: 2025-05-20*

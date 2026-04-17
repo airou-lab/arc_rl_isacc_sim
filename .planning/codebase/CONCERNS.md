@@ -1,76 +1,83 @@
 # Codebase Concerns
 
-**Analysis Date:** 2025-05-15
+**Analysis Date:** 2025-05-20
 
-## Tech Debt
+## Redundant and Temporary Files
 
-**[Scale Ratio Maintenance]:**
-- Issue: The 1x metric scale relies on a fixed ratio between the 1.0x robot and 0.125x track. This is manually configured in `arcpro_env_cfg.py`.
-- Files: `arcproLab/arcpro_env_cfg.py`.
-- Impact: Modifying the track USD without adjusting the scale factor will break physics and waypoint alignment.
-- Fix approach: Formalize the scale factor in a central config or auto-calculate based on USD metadata if available.
+**`trash/` Directory:**
+- Issue: Contains 100+ legacy scripts and old USD files from previous phases (e.g., 8x scale logic, old physics fixes).
+- Files: `trash/` (recursive)
+- Impact: Clutters the repository and confuses developers looking for active tools.
+- Fix approach: Securely archive or remove the directory before Phase 11.
 
-**[Stochastic Reset Delay]:**
-- Issue: `reset_robot_to_fixed_spawn` and other events have 0 grace period for physics settling, which may cause jitter at the start of episodes.
-- Files: `arcproLab/mdp/events.py`.
-- Impact: Initial observations might be noisy due to physics solver stabilization.
+**Duplicate Cleanup Scripts:**
+- Issue: Multiple versions of terrain/environment cleaning scripts exist.
+- Files: `arcproLab/scripts/clean_terrain.py` vs `arcproLab/scripts/clean_terrain_v2.py`.
+- Impact: Inconsistency in environment preparation.
+- Fix approach: Retain `v2` and remove the original.
 
-## Known Bugs
+**Duplicate Asset Audits:**
+- Issue: Overlap between scripts that audit USD assets.
+- Files: `arcproLab/scripts/audit_assets.py` vs `arcproLab/scripts/audit_live.py`.
+- Impact: Redundant functionality.
+- Fix approach: Merge into a single `audit_usd.py` or similar.
 
-**[Raycast Snapping Jitter]:**
-- Issue: In some sections of the track, the raycast may hit internal geometry, causing the robot to spawn slightly above or below the road surface.
-- Files: `arcproLab/mdp/events.py`.
-- Trigger: Complex mesh intersections in `no_graph_sim_clean_1x.usda`.
-- Workaround: Snapping logic includes a small Z offset (+0.05m).
+**Scratch/Working Files:**
+- Issue: Temporary files from testing remain in the root or `arcproLab/`.
+- Files: `arc_rl_isacc_sim/tm_working.py`, `arc_rl_isacc_sim/test_sphere.py`, `arcproLab/scripts/agent_view.png`.
+- Impact: Repository "hygiene" issues.
+- Fix approach: Remove after verification or move to a dedicated `scratch/` folder ignored by git.
 
-## Security Considerations
+## Duplicate Logic (mdp vs scripts)
 
-**[Headless Execution]:**
-- Risk: Low. The environment is designed for local or private server execution.
+**Yaw Calculation:**
+- Issue: The math to convert quaternions to yaw is repeated in at least 5 locations.
+- Files: `arcproLab/mdp/observations.py`, `arcproLab/mdp/terminations.py`, `arcproLab/scripts/diagnose_lane.py`, `arcproLab/scripts/verify_spawn.py`.
+- Impact: If the Z-up convention or rotation logic changes, it must be fixed in all places.
+- Fix approach: Move to a central utility in `arcproLab/mdp/utils.py` or similar.
 
-## Performance Bottlenecks
+**Lateral Error Calculation:**
+- Issue: `TrackManager.compute_errors` is called independently by observations and terminations.
+- Files: `arcproLab/mdp/observations.py`, `arcproLab/mdp/terminations.py`.
+- Impact: Redundant computation.
+- Fix approach: Terminations should read `env.extras["lat_err"]` which is already populated by observations.
 
-**[Camera Rendering Overhead]:**
-- Problem: High-frequency camera rendering (20Hz) across many environments significantly impacts FPS and VRAM.
-- Files: `arcproLab/arcpro_env_cfg.py`.
-- Cause: Isaac Sim rendering pipeline overhead for tiled cameras.
-- Improvement path: Optimize camera resolution (currently 160x90) or use synthetic data generation for training where possible.
+**USD Stage Traversal:**
+- Issue: Multiple scripts traverse the stage looking for "yellow" or "white" markers.
+- Files: `arcproLab/mdp/track_manager.py`, `arcproLab/scripts/check_camera_and_lanes.py`.
+- Impact: Slow initialization and duplicate search logic.
+- Fix approach: Use `TrackManager` as the single source of truth for track geometry markers.
 
-## Fragile Areas
+## Technical Debt
 
-**[Waypoint-USD Sync]:**
-- Files: `arcproLab/mdp/track_centerline_1x.npy`, `openStreetUSD/no_graph_sim_clean_1x.usda`.
-- Why fragile: Waypoints are absolute coordinates. Moving the track in the USD world without regenerating waypoints breaks navigation.
-- Safe modification: Use `verify_spawn.py` to check alignment after any USD change.
+**Hardcoded Waypoint Paths:**
+- Issue: `TrackManager` has a hardcoded path to `track_centerline_1x.npy`.
+- Files: `arcproLab/mdp/track_manager.py`
+- Impact: Fragile if file structure changes.
+- Fix approach: Pass path via `ARCProEnvCfg`.
 
-**[Torque/Effort Calibration]:**
-- Files: `arcproLab/arcpro_robot_cfg.py`.
-- Why fragile: 1x scale physics is sensitive to small changes in effort limits and damping.
-- Test coverage: `verify_metric.py` provides joint velocity audits.
+**TrackManager Auto-Centering:**
+- Issue: The `generate_centerline` logic is complex and runs during environment initialization.
+- Files: `arcproLab/mdp/track_manager.py`
+- Impact: Can slow down startup; failure to find markers leads to fallback waypoints which might be misaligned.
+- Fix approach: Move centerline generation to a pre-processing script that saves a validated `.npy` file.
 
-## Scaling Limits
+## Logic Bugs
 
-**[Environment Count]:**
-- Current capacity: Tested up to 32 environments with cameras.
-- Limit: Limited by VRAM for rendering; training without cameras can scale significantly higher.
+**Masked Observations in Debug Tools:**
+- Issue: `debug_terminations.py` reads `obs[:, 8]` to check for marker hits, but `observations.py` masks this index to 0.0 to force vision-only driving.
+- Files: `arcproLab/mdp/debug_terminations.py`, `arcproLab/mdp/observations.py`.
+- Impact: `debug_termination` will never detect a marker hit.
+- Fix approach: `debug_termination` must use `env.extras["lat_err"]`.
 
-## Missing Critical Features
+## Scaling Gaps (Phase 11 Preparedness)
 
-**[Domain Randomization]:**
-- Problem: Lack of friction and mass randomization.
-- Blocks: Generalization for sim-to-real transfer.
-
-## Test Coverage Gaps
-
-**[Corner Case Navigation]:**
-- What's not tested: Navigation behavior on steep inclines or sharp hairpins if added to the track.
-- Files: `arcproLab/mdp/track_manager.py`.
-- Priority: Medium.
-
-**[Collision Penalty Tuning]:**
-- What's not tested: The effectiveness of the `roadmark_contact` termination in discouraging cutting corners.
-- Priority: High.
+**Intersection Support:**
+- Issue: `TrackManager` assumes a single sequence of waypoints.
+- Files: `arcproLab/mdp/track_manager.py`
+- Impact: Will fail at intersections where multiple paths exist.
+- Fix approach: Upgrade `TrackManager` to support branching graphs or dynamic target selection for Phase 11.
 
 ---
 
-*Concerns audit: 2025-05-15*
+*Concerns audit: 2025-05-20*

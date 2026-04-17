@@ -1,91 +1,86 @@
 # Architecture
 
-**Analysis Date:** 2025-05-15
+**Analysis Date:** 2025-05-20
 
 ## Pattern Overview
 
-**Overall:** Modular RL Environment based on Isaac Lab's Manager-Based RL pattern, fully transitioned to a 1.0x true metric physics scale.
+**Overall:** Modular RL Environment based on NVIDIA Isaac Lab's Manager-Based RL pattern, utilizing a 1.0x true metric physics scale.
 
 **Key Characteristics:**
-- **True Metric Scaling:** The robot is defined at 1.0x scale (1 unit = 1 meter). The environment USD is scaled to 0.125x to achieve metric parity with the robot, ensuring realistic mass and inertia dynamics.
-- **Road in Void:** Minimalist environment architecture (`no_graph_sim_clean_1x.usda`) where the robot exists on a track suspended in a void, facilitating clean training and strict termination logic.
-- **Vision-Centric Navigation:** Navigation is driven by a tiled camera sensor with integrated FOV-based termination to ensure the agent remains within visual operational limits.
+- **Metric Physics Parity:** Robot is defined at 1.0x scale (meters) with realistic mass (20kg) and inertia. The environment USD is scaled to 0.125x (from 8x source) to maintain metric consistency.
+- **Vision-First Navigation:** Telemetry observations are masked at the policy level to force reliance on camera input, while raw telemetry is used for reward and termination logic.
+- **Dynamic Track Management:** The system automatically identifies road markers (yellow/white) on the USD stage to generate a center-line for error computation, ensuring precise lane centering.
 
 ## Layers
 
 **Configuration Layer:**
-- Purpose: Defines the environment, robot, and training parameters.
-- Location: `arcproLab/arcpro_env_cfg.py`, `arcproLab/arcpro_robot_cfg.py`
-- Contains: Isaac Lab config classes (`ObservationCfg`, `RewardCfg`, etc.).
-- Depends on: `mdp` logic, `isaaclab` core.
-- Used by: Training and verification scripts.
+- Purpose: Defines the environment, robot, and MDP (Markov Decision Process) structure.
+- Location: `arcproLab/arcpro_env_cfg.py`, `arcproLab/arcpro_robot_cfg.py`.
+- Contains: `ARCProEnvCfg`, `ARCProSceneCfg`, `RewardCfg`, `TerminationCfg`.
+- Depends on: `isaaclab`, `mdp` logic.
+- Used by: Scripts in `arcproLab/scripts/`.
 
-**Logic Layer (MDP):**
-- Purpose: Implements the physics-to-RL mapping (state, reward, done).
-- Location: `arcproLab/mdp/`
-- Contains: Observation functions, reward terms, termination conditions, and the `TrackManager`.
-- Depends on: `torch`, `isaaclab`.
+**MDP (Logic) Layer:**
+- Purpose: Implements observations, rewards, and terminations.
+- Location: `arcproLab/mdp/`.
+- Contains: `observations.py`, `rewards.py`, `terminations.py`, `track_manager.py`.
+- Depends on: `torch`, `isaaclab`, `omni.usd`.
 - Used by: `arcproLab/arcpro_env_cfg.py`.
 
 **Asset Layer:**
-- Purpose: Provides the 3D models and environment definitions.
-- Location: `openStreetUSD/`, `arcproLab/assets/`
-- Contains: `.usd` and `.usda` files.
-- Depends on: NVIDIA Isaac Sim / USD framework.
-- Used by: `arcproLab/arcpro_env_cfg.py`.
+- Purpose: Provides the physical and visual representation of the world.
+- Location: `openStreetUSD/`, `arcproLab/assets/robot/`.
+- Contains: `no_graph_sim_clean_1x.usda`, `F1Tenth_Metric.usd`.
+- Depends on: Universal Scene Description (USD).
 
 ## Data Flow
 
 **Observation Pipeline:**
+1. **Raw State**: Positions, velocities, and quaternions extracted from the simulation.
+2. **Telemetry Computation**: `mdp.observations.get_telemetry_vector` calculates 12 features (odom, speed, yaw rate, errors, distance).
+3. **Error Calculation**: `TrackManager` computes `lat_err` and `head_err` relative to the centerline.
+4. **Masking**: Indices 8 (LatErr) and 9 (HeadErr) are zeroed out before reaching the policy to simulate "blind" driving (forcing vision reliance).
+5. **Extras**: Raw unmasked errors are stored in `env.extras` for use by the Reward and Termination managers.
 
-1. Raw physics data (positions, velocities, quats) is pulled from the Isaac Sim stage via `SceneEntityCfg`.
-2. `mdp.observations.get_telemetry_vector` processes raw data into a 12-element telemetry vector.
-3. `TrackManager` computes lateral and heading errors relative to the `track_centerline_1x.npy` waypoints using environment-relative positions (`root_pos_w - env_origins`).
-4. Final observation vector is passed to the policy, with target lateral error shifted by 0.5625m to center the robot in the right lane.
-
-**State Management:**
-- Environment state is managed by Isaac Lab's `ManagerBasedRLEnv`.
-- Telemetry-specific state (like accumulated distance) is stored in `env.extras`.
+**Action Pipeline:**
+1. **Policy Output**: Steer (-1 to 1) and Throttle (0 to 1).
+2. **Scaling**: Actions are scaled (e.g., Throttle x 60.0 rad/s) and applied to joint position/velocity targets via `ActionCfg`.
 
 ## Key Abstractions
 
 **TrackManager:**
-- Purpose: Centralizes waypoint handling and error computation in metric units.
-- Examples: `arcproLab/mdp/track_manager.py`
-- Pattern: Singleton manager initialized with 1x-scaled waypoints (`track_centerline_1x.npy`).
+- Purpose: Singleton that provides a unified interface for lane-tracking math.
+- Pattern: Auto-initializes by searching the USD stage for meshes with "yellow" or "white" in their material/path.
+- Logic: `arcproLab/mdp/track_manager.py`.
 
-**Telemetry Protocol:**
-- Purpose: Standardized 12-element vector for policy input.
-- Examples: `arcproLab/mdp/observations.py`
-- Pattern: Index-fixed vector (Index 3: Speed, 4: Yaw Rate, 5-6: Actions, 8: Lat Err, 9: Head Err, 11: Distance).
+**12-Element Telemetry Protocol:**
+- Purpose: Legacy-compatible feature vector ensuring continuity across training phases.
+- Definition: `arcproLab/mdp/observations.py`.
 
 ## Entry Points
 
-**Training Script:**
-- Location: `arcproLab/scripts/train_policy.py`
-- Triggers: User execution of `train.sh`.
-- Responsibilities: Initializes the environment and starts the RL training loop using SB3 PPO.
+**Training Entry:**
+- Location: `arcproLab/scripts/train_policy.py`.
+- Action: Sets up `ManagerBasedRLEnv` and runs SB3 PPO.
 
-**Verification Script:**
-- Location: `arcproLab/scripts/verify_policy.py` and `arcproLab/scripts/verify_live.py`.
-- Triggers: User execution of `verify_sim.sh` or `run_gui_verify.sh`.
-- Responsibilities: Loads a trained model and runs it in the simulation with telemetry visualization and FOV monitoring.
+**Verification Entry:**
+- Location: `arcproLab/scripts/verify_live.py`.
+- Action: Visual inspection with `TelemetryWindow` UI (`mdp/visual_analytics.py`).
 
 ## Error Handling
 
-**Strategy:** Fail-fast for physics anomalies, strict termination for environment violations.
+**Strategy:** Strict environment resets to prevent the policy from learning from "out-of-bounds" states.
 
 **Patterns:**
-- **NaN Protection:** `get_telemetry_vector` checks for and zeros out NaNs to prevent policy explosion.
-- **FOV Termination:** `fov_visibility_termination` resets the environment if the robot's velocity vector points outside the camera's horizontal FOV.
-- **Strict Lane Termination:** `white_line_contact` triggers reset if lateral error exceeds 2.7m or is less than 0.225m (right lane boundaries).
+- **NaN Zeroing**: `observations.py` zeros out NaNs to prevent policy weights from exploding.
+- **Strict Lane Termination**: `white_line_contact` resets the environment if `lat_err` > 0.2m or < -0.2m.
+- **FOV Protection**: `fov_visibility_termination` resets if the velocity vector diverges from the camera's visual cone.
 
 ## Cross-Cutting Concerns
 
-**Logging:** RL metrics logged to `logs/ppo/`, telemetry logged to console/UI during verification.
-**Validation:** `TrackManager` validates track geometry against 1x waypoints.
-**Scale Parity:** Centralized scaling in `arcpro_env_cfg.py` where the world is scaled to 0.125x to match the 1.0x robot's metric properties (20kg mass, metric dimensions).
+**Logging:** Training metrics go to `logs/`, runtime telemetry displayed via `omni.ui`.
+**Coordinate Frames:** Standardizes on `root_pos_w - env_origins` for environment-local calculations.
 
 ---
 
-*Architecture analysis: 2025-05-15*
+*Architecture analysis: 2025-05-20*

@@ -1,70 +1,66 @@
 # Technology Stack
 
-**Analysis Date:** 2025-05-15
+**Analysis Date:** 2025-05-20
 
 ## Languages
 
 **Primary:**
-- Python 3.10+ - RL environment logic, training scripts, and asset management.
-
-**Secondary:**
-- Bash - Orchestration scripts (`train.sh`, `verify_sim.sh`, `run_gui_verify.sh`).
+- Python 3.10+ - All RL logic, environment configuration, and training scripts.
 
 ## Runtime
 
 **Environment:**
-- Isaac Sim 4.0+ - Real-time physics engine and renderer.
-- Isaac Lab 1.0+ - Manager-based RL environment orchestration.
+- NVIDIA Isaac Sim 4.0+ - Primary simulation engine.
+- NVIDIA Isaac Lab (formerly Orbit) - Framework for modular RL environments.
 
 **Package Manager:**
-- Conda/Mamba - Integrated with Isaac Lab.
-- pip - Secondary dependencies.
-- Lockfile: missing (managed by base Isaac Lab installation).
+- `pip` - Standard Python dependency management.
+- Conda/Mamba - Used to manage the Isaac Sim environment.
+- Lockfile: `requirements.txt` (present).
 
 ## Frameworks
 
 **Core:**
-- Isaac Lab 1.0+ - Core orchestration.
-- Gymnasium 1.0+ - RL environment interface.
+- PyTorch 2.0+ - Neural network backend for RL policies.
+- Stable Baselines3 (SB3) - Implementation of PPO for training.
 
-**RL Algorithm:**
-- Stable Baselines3 (SB3) - PPO for navigation policy.
-- isaaclab_rl - SB3 wrapper for Isaac Lab.
+**Simulation:**
+- NVIDIA PhysX - Physics engine (configured for TGS solver, CCD enabled).
+- OpenUSD - Data format for assets and environment (`.usd`, `.usda`).
 
 **Build/Dev:**
-- PhysX 5.1 - Physics solver (TGS solver type).
-- USD (Universal Scene Description) - Industry-standard asset management.
+- `AppLauncher` (Isaac Lab) - Manages Isaac Sim process lifecycle.
 
 ## Key Dependencies
 
 **Critical:**
-- `isaaclab.envs.ManagerBasedRLEnv` - Base class.
-- `torch` - Backend for NN and vectorized physics.
+- `torch` - Vectorized math and neural networks.
+- `isaaclab` - Scene, Observation, Reward, and Action management.
+- `numpy` - Data processing for waypoints and scripts.
 
 **Infrastructure:**
-- `omni.physx` - Physics interaction (raycasting).
-- `numpy` (< 2.0) - Waypoint processing.
+- `omni.usd` / `pxr.Usd` - Low-level manipulation of the simulation stage.
+- `PIL` (Pillow) - Image capture and verification.
 
 ## Configuration
 
 **Environment:**
-- `arcproLab/arcpro_env_cfg.py` - Main configuration (1x Scale, 500Hz physics, 20Hz control).
-- `arcproLab/arcpro_robot_cfg.py` - Robot properties (20kg mass, 1.0x metric scale).
+- Isaac Sim Python App - Scripts must be launched via the Isaac Sim `python.sh` wrapper.
+- Environment variables: `ISAACSIM_PATH`, `OMNI_KIT_PATH`.
 
 **Build:**
-- `train.sh` - Standardized training.
-- `run_gui_verify.sh` - GUI-based verification.
+- `arcproLab/arcpro_env_cfg.py` - Core simulation and MDP configuration.
 
 ## Platform Requirements
 
 **Development:**
-- NVIDIA GPU with 8GB+ VRAM (12GB+ for camera rendering).
-- Ubuntu 22.04+ with Isaac Lab 1.0+ installed.
+- Ubuntu 22.04+ (WSL2 supported).
+- NVIDIA GPU (RTX 3080+ recommended) with `nvidia-driver-535+`.
+- CUDA 12.1+.
 
 **Production:**
-- Headless simulation support for training.
-- GUI support for verification and visualization.
+- Headless training on Linux servers with GPU acceleration.
 
 ---
 
-*Stack analysis: 2025-05-15*
+*Stack analysis: 2025-05-20*

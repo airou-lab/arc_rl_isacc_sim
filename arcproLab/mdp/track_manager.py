@@ -34,14 +34,11 @@ class TrackManager:
             self.collect_raw_marker_points()
             self.generate_centerline()
             
-            # ABSOLUTE FALLBACK: If procedural failed, load from file
             if self.waypoints is None:
                 print(f"[TrackManager] Procedural failed, loading from baseline file: {self.wp_path}")
                 if os.path.exists(self.wp_path):
                     self.load_waypoints(self.wp_path)
                 else:
-                    # Emergency default (Straight line through spawn)
-                    print("[TrackManager] CRITICAL: No waypoint source found. Using emergency dummy path.")
                     self.waypoints = torch.tensor([[-16.25, 5.56, -1.57]], device=self.device)
         
         self.refresh_visuals()
@@ -49,13 +46,11 @@ class TrackManager:
 
     def load_waypoints(self, path: str):
         data = np.load(path)
-        data = data[::-1] # South
-        data[:, 2] += np.pi # South
+        data = data[::-1]
+        data[:, 2] += np.pi
         data[:, 2] = np.arctan2(np.sin(data[:, 2]), np.cos(data[:, 2]))
-        # 175526f logic: shift to yellow, then we center it
+        # Shift legacy waypoints to approximate center
         data[:, 0] -= 0.5625 
-        # Shift back slightly to center (Yellow line is typically ~0.8m from center)
-        # If we load from file, we'll assume it needs a nudge to match the auto-centered 0.6 limit
         self.waypoints = torch.tensor(data.copy(), device=self.device, dtype=torch.float32)
 
     def collect_raw_marker_points(self):
@@ -75,13 +70,17 @@ class TrackManager:
             if not prim.IsA(UsdGeom.Mesh): continue
             path = str(prim.GetPath()).lower()
             
+            # Check material for color naming
             mat_path = ""
             binding_api = UsdShade.MaterialBindingAPI(prim)
             material, _ = binding_api.ComputeBoundMaterial()
             if material: mat_path = str(material.GetPath()).lower()
             
             search_str = path + mat_path
-            if "yellow" not in search_str and "white" not in search_str: continue
+            is_yellow = "yellow" in search_str
+            is_white = "white" in search_str
+            
+            if not (is_yellow or is_white): continue
             
             points_attr = UsdGeom.Mesh(prim).GetPointsAttr().Get()
             if not points_attr: continue
@@ -90,11 +89,15 @@ class TrackManager:
             for p in points_attr:
                 pw = xform.Transform(p)
                 pl = [pw[0] - env0_origin[0], pw[1] - env0_origin[1]]
-                if "yellow" in search_str: y_pts.append(pl)
+                if is_yellow: y_pts.append(pl)
                 else: w_pts.append(pl)
 
-        if y_pts: self.raw_yellow_pts = np.unique(np.round(np.array(y_pts), 2), axis=0)
-        if w_pts: self.raw_white_pts = np.unique(np.round(np.array(w_pts), 2), axis=0)
+        if y_pts: 
+            self.raw_yellow_pts = np.unique(np.round(np.array(y_pts), 2), axis=0)
+            print(f"[TrackManager] Found {len(self.raw_yellow_pts)} yellow markers.")
+        if w_pts: 
+            self.raw_white_pts = np.unique(np.round(np.array(w_pts), 2), axis=0)
+            print(f"[TrackManager] Found {len(self.raw_white_pts)} white markers.")
 
     def generate_centerline(self):
         if self.raw_yellow_pts is None or self.raw_white_pts is None:
