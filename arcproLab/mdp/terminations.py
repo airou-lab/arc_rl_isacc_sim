@@ -10,7 +10,7 @@ from isaaclab.envs import ManagerBasedRLEnv
 def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """
     Terminates if the robot hits the road boundaries.
-    Uses auto-centered TrackManager (0.0 is lane center).
+    Tightened limits: +/- 0.2m (from lane center).
     """
     from mdp.track_manager import get_track_manager
     tm = get_track_manager(device=env.device)
@@ -27,12 +27,10 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     # Get direct math error in meters
     lat_err, _ = tm.compute_errors(local_pos, yaw)
     
-    # LANE BOUNDARIES (Centered Logic)
-    # Total road width is ~1.6m. Center is 0.0.
-    # Yellow is roughly +0.8, White is roughly -0.8.
-    # Tightened to 0.6 to prevent falling off.
-    inner_hit = lat_err > 0.6
-    outer_hit = lat_err < -0.6
+    
+    # LANE BOUNDARIES (Tightened)
+    inner_hit = lat_err > 0.2
+    outer_hit = lat_err < -0.2
     marker_hit = inner_hit | outer_hit
 
     # 0 grace period for physics stability (as requested)
@@ -41,7 +39,7 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     # Debug logging (env 0)
     if marker_hit[0].item() and (env.num_envs == 1 or env.scene.env_origins.shape[0] > 0):
         reason = "Yellow Line Hit" if inner_hit[0].item() else "White Line Hit"
-        print(f"[TERMINATION] {reason}! LatErr: {lat_err[0].item():.3f}m | Limits: +/- 0.6")
+        print(f"[TERMINATION] {reason}! LatErr: {lat_err[0].item():.3f}m | Limits: +/- 0.2")
 
     return settled & marker_hit
 
