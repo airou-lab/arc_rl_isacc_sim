@@ -1,6 +1,6 @@
 # Coding Conventions
 
-**Analysis Date:** 2025-05-20
+**Analysis Date:** 2025-05-21
 
 ## Naming Patterns
 
@@ -9,10 +9,11 @@
 - [snake_case_1x.usda]: Assets specifically scaled to 1.0x metric units.
 
 **Functions:**
-- [snake_case]: `get_telemetry_vector()`, `white_line_contact()`.
+- [snake_case]: `get_telemetry_vector()`, `white_line_contact()`, `compute_marker_distances()`.
 
 **Variables:**
-- [snake_case]: `lat_err`, `head_err`, `local_pos`.
+- [snake_case]: `dist_y`, `dist_w`, `marker_hit`, `local_pos`.
+- Legacy names like `lat_err` and `head_err` may still appear in `env.extras` for compatibility but are deprecated.
 
 **Types:**
 - Use [CamelCase] for `@configclass` definitions: `ARCProEnvCfg`.
@@ -20,7 +21,7 @@
 ## Code Style
 
 **Formatting:**
-- Standard PEP8. Use black or equivalent if available.
+- Standard PEP8.
 - Indentation: 4 spaces.
 
 **Linting:**
@@ -41,19 +42,20 @@
 
 **Patterns:**
 - **Zero-Masking**: Always mask NaNs in observation tensors (`obs[nan_mask] = 0.0`).
-- **Grace Periods**: Use `env.episode_length_buf > 20` to allow physics to settle before applying strict terminations (e.g., FOV checks).
+- **Vision-Only Masking**: Explicitly zero out telemetry indices 8 & 9 in `observations.py` to force vision reliance.
+- **Grace Periods**: Use `env.episode_length_buf > 20` to allow physics to settle before applying strict terminations.
 
 ## Logging
 
 **Framework:**
-- `print()` for real-time termination reasons and script debug info.
-- `env.extras` for storing telemetry used by rewards and terminations.
+- `print()` for real-time termination reasons (e.g., "[TERMINATION] Yellow Boundary Hit!").
+- `env.extras` for storing raw proximity data used by rewards and terminations.
 
 ## Comments
 
 **When to Comment:**
-- Explain magic numbers (e.g., mass overrides, PID gains, sensor offsets).
-- Document termination thresholds and reward weights.
+- Document termination thresholds (e.g., "Reset if robot center is within 0.1m of any marker").
+- Explain USD stage traversal logic in `TrackManager`.
 
 **JSDoc/TSDoc:**
 - Use standard docstrings for all MDP functions.
@@ -75,8 +77,8 @@
 - Group functional logic in `arcproLab/mdp/`.
 
 **Config Classes:**
-- Inheritance-based configuration using `replace()` for specific variations (e.g., `ARCPRO_ROBOT_CFG.replace(...)`).
+- Inheritance-based configuration using `replace()` for specific variations.
 
 ---
 
-*Convention analysis: 2025-05-20*
+*Convention analysis: 2025-05-21*

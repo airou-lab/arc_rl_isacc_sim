@@ -1,15 +1,15 @@
 # Architecture
 
-**Analysis Date:** 2025-05-20
+**Analysis Date:** 2025-05-21
 
 ## Pattern Overview
 
 **Overall:** Modular RL Environment based on NVIDIA Isaac Lab's Manager-Based RL pattern, utilizing a 1.0x true metric physics scale.
 
 **Key Characteristics:**
-- **Metric Physics Parity:** Robot is defined at 1.0x scale (meters) with realistic mass (20kg) and inertia. The environment USD is scaled to 0.125x (from 8x source) to maintain metric consistency.
+- **Metric Physics Parity:** Robot is defined at 1.0x scale (meters) with realistic mass (20kg) and inertia. The environment USD is scaled to 1.0x (from 8x source) to maintain metric consistency.
 - **Vision-First Navigation:** Telemetry observations are masked at the policy level to force reliance on camera input, while raw telemetry is used for reward and termination logic.
-- **Dynamic Track Management:** The system automatically identifies road markers (yellow/white) on the USD stage to generate a center-line for error computation, ensuring precise lane centering.
+- **Direct Proximity Boundary Detection:** Replaces problematic centerline-based lateral error math with robust, marker-based proximity queries. The system identifies yellow and white road markers directly from the USD stage.
 
 ## Layers
 
@@ -38,9 +38,9 @@
 **Observation Pipeline:**
 1. **Raw State**: Positions, velocities, and quaternions extracted from the simulation.
 2. **Telemetry Computation**: `mdp.observations.get_telemetry_vector` calculates 12 features (odom, speed, yaw rate, errors, distance).
-3. **Error Calculation**: `TrackManager` computes `lat_err` and `head_err` relative to the centerline.
-4. **Masking**: Indices 8 (LatErr) and 9 (HeadErr) are zeroed out before reaching the policy to simulate "blind" driving (forcing vision reliance).
-5. **Extras**: Raw unmasked errors are stored in `env.extras` for use by the Reward and Termination managers.
+3. **Proximity Calculation**: `TrackManager` computes distances to the nearest yellow and white markers via `compute_marker_distances` using `torch.cdist`.
+4. **Error Masking**: Indices 8 (LatErr) and 9 (HeadErr) are zeroed out before reaching the policy to force vision reliance.
+5. **Extras**: Raw proximity and speed data are stored in `env.extras` for use by the Reward and Termination managers.
 
 **Action Pipeline:**
 1. **Policy Output**: Steer (-1 to 1) and Throttle (0 to 1).
@@ -49,12 +49,12 @@
 ## Key Abstractions
 
 **TrackManager:**
-- Purpose: Singleton that provides a unified interface for lane-tracking math.
-- Pattern: Auto-initializes by searching the USD stage for meshes with "yellow" or "white" in their material/path.
+- Purpose: Singleton providing distance-to-boundary queries.
+- Pattern: Automatically collects marker points ("yellow" or "white" materials/paths) from the USD stage on initialization.
 - Logic: `arcproLab/mdp/track_manager.py`.
 
 **12-Element Telemetry Protocol:**
-- Purpose: Legacy-compatible feature vector ensuring continuity across training phases.
+- Purpose: Feature vector ensuring continuity across training phases.
 - Definition: `arcproLab/mdp/observations.py`.
 
 ## Entry Points
@@ -69,11 +69,11 @@
 
 ## Error Handling
 
-**Strategy:** Strict environment resets to prevent the policy from learning from "out-of-bounds" states.
+**Strategy:** Strict environment resets using direct proximity thresholds to prevent learning from out-of-bounds states.
 
 **Patterns:**
 - **NaN Zeroing**: `observations.py` zeros out NaNs to prevent policy weights from exploding.
-- **Strict Lane Termination**: `white_line_contact` resets the environment if `lat_err` > 0.2m or < -0.2m.
+- **Direct Proximity Termination**: `white_line_contact` resets the environment if the robot center is within 0.1m of any road marker.
 - **FOV Protection**: `fov_visibility_termination` resets if the velocity vector diverges from the camera's visual cone.
 
 ## Cross-Cutting Concerns
@@ -83,4 +83,4 @@
 
 ---
 
-*Architecture analysis: 2025-05-20*
+*Architecture analysis: 2025-05-21*

@@ -1,16 +1,16 @@
 # Testing Patterns
 
-**Analysis Date:** 2025-05-20
+**Analysis Date:** 2025-05-21
 
 ## Test Framework
 
 **Runner:**
-- `pytest` for unit tests.
+- `pytest` for logic unit tests.
 - Custom verification scripts for simulation audits.
 
 **Run Commands:**
 ```bash
-pytest tests/                   # Run logic unit tests
+pytest tests/                   # Run logic unit tests (Warning: Many are currently legacy)
 ./verify_sim.sh                 # Headless performance/metric audit
 ./run_gui_verify.sh             # Visual verification with Telemetry UI
 python arcproLab/scripts/verify_spawn.py # Verify robot-track alignment
@@ -31,6 +31,7 @@ python arcproLab/scripts/verify_spawn.py # Verify robot-track alignment
 
 **Logic Testing (Pytest):**
 ```python
+# [LEGACY] Pattern for waypoint-based math
 def test_compute_errors():
     tm = TrackManager(device="cpu")
     # ... setup dummy waypoints ...
@@ -48,29 +49,30 @@ env = ManagerBasedRLEnv(cfg=ARCProEnvCfg())
 obs, _ = env.reset()
 for _ in range(100):
     env.step(zero_actions)
-    # verify lat_err in env.extras
+    # verify proximity triggers in env.extras
 ```
 
 ## Mocking
 
 **Framework:**
 - Minimal mocking. Most tests run either pure-math logic or full-physics simulation.
+- `sys.modules` mocking is used in `tests/test_track_manager.py` to bypass Isaac Sim imports for CI.
 
 **What NOT to Mock:**
 - Physics interactions (collisions, joint friction).
-- USD stage traversal.
+- USD stage traversal (unless performing pure logic tests).
 
 ## Coverage
 
 **Priority Areas:**
-- `TrackManager` waypoint ordering and error math.
-- `observations.py` telemetry vector indexing.
-- `terminations.py` lane boundary thresholds.
+- `TrackManager` marker point collection and `cdist` proximity queries.
+- `observations.py` telemetry vector indexing and masking.
+- `terminations.py` proximity-based lane boundary thresholds.
 
 ## Test Types
 
 **Unit Tests:**
-- Waypoint sequence generation.
+- Proximity math (Minimum distance to a point cloud).
 - Quaternion-to-Yaw conversion.
 
 **Integration Tests:**
@@ -79,17 +81,17 @@ for _ in range(100):
 
 **Functional Audits:**
 - `audit_live.py`: Checks for misaligned physics colliders.
-- `verify_metric.py`: Validates that 1.0m in sim matches 1.0m in physics properties.
+- `verify_metric.py`: Validates 1.0m scale consistency.
 
 ## Common Patterns
 
 **Async Testing:**
-- Simulation steps are blocking; no async/await patterns used in core MDP testing.
+- Simulation steps are blocking; no async/await patterns used.
 
 **Error Testing:**
-- Intentionally place the robot outside the lane boundaries to verify that `white_line_contact` triggers a reset.
+- Intentionally place the robot near markers to verify that `white_line_contact` triggers a reset at exactly 0.1m.
 - Drive the robot in reverse to verify that `speed_reward` becomes negative.
 
 ---
 
-*Testing analysis: 2025-05-20*
+*Testing analysis: 2025-05-21*

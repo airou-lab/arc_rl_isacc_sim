@@ -52,3 +52,11 @@
     - Updated `train_policy.py` with `SaveVecNormalizeCallback` to save `vec_normalize.pkl` every 10,000 steps.
     - Result: Confirmed training convergence with `ep_rew_mean` rising from -3.09 to +24.9 and `explained_variance` reaching 0.901.
 
+
+### 2026-04-18: Shift to Direct Proximity Termination
+- **Problem**: Centerline-based lateral error logic was unstable due to procedural waypoint generation failures on the 1.0x map, causing "phantom" resets in the middle of the road.
+- **Solution**: Implemented robust direct-distance termination.
+  - TrackManager now stores raw Yellow/White marker points as GPU tensors.
+  - Terminations are triggered if the robot center is < 0.1m from any marker point.
+  - This removes all dependency on "centerline" or "lane" ordering math.
+- **Result**: Verified in GUI that the robot drives through the lane and only resets upon physical boundary contact.

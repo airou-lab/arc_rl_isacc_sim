@@ -1,14 +1,14 @@
 # Codebase Concerns
 
-**Analysis Date:** 2025-05-20
+**Analysis Date:** 2025-05-21
 
 ## Redundant and Temporary Files
 
 **`trash/` Directory:**
-- Issue: Contains 100+ legacy scripts and old USD files from previous phases (e.g., 8x scale logic, old physics fixes).
+- Issue: Contains 100+ legacy scripts and old USD files from previous phases.
 - Files: `trash/` (recursive)
-- Impact: Clutters the repository and confuses developers looking for active tools.
-- Fix approach: Securely archive or remove the directory before Phase 11.
+- Impact: Clutters the repository and obscures active tools.
+- Fix approach: Archive or remove the directory.
 
 **Duplicate Cleanup Scripts:**
 - Issue: Multiple versions of terrain/environment cleaning scripts exist.
@@ -16,68 +16,40 @@
 - Impact: Inconsistency in environment preparation.
 - Fix approach: Retain `v2` and remove the original.
 
-**Duplicate Asset Audits:**
-- Issue: Overlap between scripts that audit USD assets.
-- Files: `arcproLab/scripts/audit_assets.py` vs `arcproLab/scripts/audit_live.py`.
-- Impact: Redundant functionality.
-- Fix approach: Merge into a single `audit_usd.py` or similar.
+## Logic Bugs and Technical Debt
 
-**Scratch/Working Files:**
-- Issue: Temporary files from testing remain in the root or `arcproLab/`.
-- Files: `arc_rl_isacc_sim/tm_working.py`, `arc_rl_isacc_sim/test_sphere.py`, `arcproLab/scripts/agent_view.png`.
-- Impact: Repository "hygiene" issues.
-- Fix approach: Remove after verification or move to a dedicated `scratch/` folder ignored by git.
+**Broken Unit Tests:**
+- Issue: `tests/test_track_manager.py` still expects centerline-based `compute_errors` and `get_closest_waypoint_data`, which are now stubbed/deprecated in favor of marker-based proximity.
+- Files: `tests/test_track_manager.py`, `arcproLab/mdp/track_manager.py`.
+- Impact: Unit tests give false positives or fail, making them useless for CI.
+- Fix approach: Refactor tests to validate `compute_marker_distances` and `collect_raw_marker_points`.
 
-## Duplicate Logic (mdp vs scripts)
+**Repeated Yaw Calculation:**
+- Issue: Quaternion-to-yaw math is repeated in multiple locations.
+- Files: `arcproLab/mdp/observations.py`, `arcproLab/mdp/terminations.py`, `arcproLab/scripts/diagnose_lane.py`.
+- Impact: Maintenance burden; risk of divergence in coordinate frame logic.
+- Fix approach: Move to a central utility in `arcproLab/mdp/utils.py`.
 
-**Yaw Calculation:**
-- Issue: The math to convert quaternions to yaw is repeated in at least 5 locations.
-- Files: `arcproLab/mdp/observations.py`, `arcproLab/mdp/terminations.py`, `arcproLab/scripts/diagnose_lane.py`, `arcproLab/scripts/verify_spawn.py`.
-- Impact: If the Z-up convention or rotation logic changes, it must be fixed in all places.
-- Fix approach: Move to a central utility in `arcproLab/mdp/utils.py` or similar.
-
-**Lateral Error Calculation:**
-- Issue: `TrackManager.compute_errors` is called independently by observations and terminations.
-- Files: `arcproLab/mdp/observations.py`, `arcproLab/mdp/terminations.py`.
-- Impact: Redundant computation.
-- Fix approach: Terminations should read `env.extras["lat_err"]` which is already populated by observations.
-
-**USD Stage Traversal:**
-- Issue: Multiple scripts traverse the stage looking for "yellow" or "white" markers.
-- Files: `arcproLab/mdp/track_manager.py`, `arcproLab/scripts/check_camera_and_lanes.py`.
-- Impact: Slow initialization and duplicate search logic.
-- Fix approach: Use `TrackManager` as the single source of truth for track geometry markers.
-
-## Technical Debt
-
-**Hardcoded Waypoint Paths:**
-- Issue: `TrackManager` has a hardcoded path to `track_centerline_1x.npy`.
-- Files: `arcproLab/mdp/track_manager.py`
-- Impact: Fragile if file structure changes.
-- Fix approach: Pass path via `ARCProEnvCfg`.
-
-**TrackManager Auto-Centering:**
-- Issue: The `generate_centerline` logic is complex and runs during environment initialization.
-- Files: `arcproLab/mdp/track_manager.py`
-- Impact: Can slow down startup; failure to find markers leads to fallback waypoints which might be misaligned.
-- Fix approach: Move centerline generation to a pre-processing script that saves a validated `.npy` file.
-
-## Logic Bugs
-
-**Masked Observations in Debug Tools:**
-- Issue: `debug_terminations.py` reads `obs[:, 8]` to check for marker hits, but `observations.py` masks this index to 0.0 to force vision-only driving.
-- Files: `arcproLab/mdp/debug_terminations.py`, `arcproLab/mdp/observations.py`.
-- Impact: `debug_termination` will never detect a marker hit.
-- Fix approach: `debug_termination` must use `env.extras["lat_err"]`.
+**Legacy Centerline Stubs:**
+- Issue: `TrackManager.compute_errors` and `observations.py` still contain "lat_err" and "head_err" logic (even if masked).
+- Files: `arcproLab/mdp/track_manager.py`, `arcproLab/mdp/observations.py`.
+- Impact: Confusing for new contributors; code paths exist that are no longer functional.
+- Fix approach: Completely remove `compute_errors` and refactor the telemetry vector to either remove or formally redefine indices 8 & 9.
 
 ## Scaling Gaps (Phase 11 Preparedness)
 
 **Intersection Support:**
-- Issue: `TrackManager` assumes a single sequence of waypoints.
+- Issue: `TrackManager` assumes a global set of markers but doesn't handle branching logic for intersections.
 - Files: `arcproLab/mdp/track_manager.py`
-- Impact: Will fail at intersections where multiple paths exist.
-- Fix approach: Upgrade `TrackManager` to support branching graphs or dynamic target selection for Phase 11.
+- Impact: In Phase 11, the robot might be "too close" to a marker of a crossing lane, triggering false terminations.
+- Fix approach: Implement marker segmentation or path-specific boundary sets.
+
+**Hardcoded Fallback Waypoints:**
+- Issue: `TrackManager` has a single hardcoded fallback waypoint: `torch.tensor([[-16.25, 5.56, -1.57]])`.
+- Files: `arcproLab/mdp/track_manager.py`
+- Impact: Environment initialization will be "wrong" if USD markers are not found.
+- Fix approach: Enforce a strict error if markers cannot be collected or use a dynamic spawn-point discovery.
 
 ---
 
-*Concerns audit: 2025-05-20*
+*Concerns audit: 2025-05-21*

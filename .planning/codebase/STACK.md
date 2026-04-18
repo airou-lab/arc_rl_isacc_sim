@@ -1,6 +1,6 @@
 # Technology Stack
 
-**Analysis Date:** 2025-05-20
+**Analysis Date:** 2025-05-21
 
 ## Languages
 
@@ -36,10 +36,10 @@
 **Critical:**
 - `torch` - Vectorized math and neural networks.
 - `isaaclab` - Scene, Observation, Reward, and Action management.
-- `numpy` - Data processing for waypoints and scripts.
+- `numpy` - Data processing for scripts.
 
 **Infrastructure:**
-- `omni.usd` / `pxr.Usd` - Low-level manipulation of the simulation stage.
+- `omni.usd` / `pxr.Usd` - Low-level manipulation of the simulation stage and marker discovery.
 - `PIL` (Pillow) - Image capture and verification.
 
 ## Configuration
@@ -63,4 +63,4 @@
 
 ---
 
-*Stack analysis: 2025-05-20*
+*Stack analysis: 2025-05-21*

@@ -1,6 +1,6 @@
 # Codebase Structure
 
-**Analysis Date:** 2025-05-20
+**Analysis Date:** 2025-05-21
 
 ## Directory Layout
 
@@ -24,8 +24,8 @@
 
 **arcproLab/mdp/:**
 - Purpose: Bridge between physics simulation and RL algorithms.
-- Contains: `observations.py` (telemetry), `rewards.py`, `terminations.py`, `events.py` (reset logic), `track_manager.py` (lane logic).
-- Key files: `track_manager.py` (dynamic centerline generation).
+- Contains: `observations.py` (telemetry), `rewards.py`, `terminations.py`, `events.py` (reset logic), `track_manager.py` (marker-based proximity).
+- Key files: `track_manager.py` (USD marker collection and `cdist` proximity queries).
 
 **arcproLab/scripts/:**
 - Purpose: Tools for development, training, and verification.
@@ -52,11 +52,11 @@
 - `arcproLab/arcpro_robot_cfg.py`: Robot physical parameters (Actuators, Sensors, Drivetrain).
 
 **Core Logic:**
-- `arcproLab/mdp/track_manager.py`: Singleton managing waypoints and errors.
-- `arcproLab/mdp/observations.py`: 12-element telemetry protocol implementation.
+- `arcproLab/mdp/track_manager.py`: Singleton managing boundary proximity queries.
+- `arcproLab/mdp/observations.py`: 12-element telemetry protocol implementation (with vision masking).
 
 **Testing:**
-- `tests/test_track_manager.py`: Validation of waypoint math.
+- `tests/test_track_manager.py`: [OUTDATED] Legacy waypoint math validation.
 
 ## Naming Conventions
 
@@ -90,4 +90,4 @@
 
 ---
 
-*Structure analysis: 2025-05-20*
+*Structure analysis: 2025-05-21*

@@ -76,7 +76,7 @@ def main():
             args_cli.checkpoint,
             env,
             verbose=1,
-            tensorboard_log=log_dir,
+            tensorboard_log=None,
             seed=args_cli.seed,
             device="cuda"
         )
@@ -94,7 +94,7 @@ def main():
             gae_lambda=0.95,
             clip_range=0.2,
             ent_coef=0.0,
-            tensorboard_log=log_dir,
+            tensorboard_log=None,
             seed=args_cli.seed,
             device="cuda"
         )
@@ -127,8 +127,8 @@ def main():
                 self.training_env.save(os.path.join(self.save_path, "vec_normalize.pkl"))
             return True
 
-    checkpoint_callback = CheckpointCallback(save_freq=10000, save_path=log_dir, name_prefix="model")
-    vec_norm_callback = SaveVecNormalizeCallback(save_path=log_dir, save_freq=10000)
+    checkpoint_callback = CheckpointCallback(save_freq=5000, save_path=log_dir, name_prefix="model")
+    vec_norm_callback = SaveVecNormalizeCallback(save_path=log_dir, save_freq=5000)
     reward_logger_callback = RewardLoggerCallback()
 
     # 8. Train
