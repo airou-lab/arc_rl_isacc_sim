@@ -134,8 +134,23 @@ class TrackManager:
             pass
 
     def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor):
-        # Legacy stub to keep observations/rewards from crashing
-        return torch.zeros(pos.shape[0], device=self.device), torch.zeros(pos.shape[0], device=self.device)
+        """Returns distance to lane center and heading error."""
+        self.ensure_synced()
+        
+        # Lane Center Approximation: (DistYellow - DistWhite) / 2
+        # If DistY > DistW, we are to the right of center (positive error)
+        # If DistW > DistY, we are to the left of center (negative error)
+        dist_y, dist_w = self.compute_marker_distances(pos)
+        lat_err = (dist_y - dist_w) * 0.5
+        
+        # Heading error relative to South (-PI/2)
+        target_yaw = -1.5708
+        head_err = yaw - target_yaw
+        
+        # Wrap heading error to [-pi, pi]
+        head_err = (head_err + np.pi) % (2 * np.pi) - np.pi
+
+        return lat_err, head_err
 
 _TRACK_MANAGER = None
 def get_track_manager(device: str = "cuda:0"):

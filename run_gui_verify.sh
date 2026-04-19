@@ -22,6 +22,9 @@ echo "Isaac Lab:   $ISAACLAB_PATH"
 echo "Checkpoint:  $LATEST_CHECKPOINT"
 echo "--------------------------------------------------"
 
+# Ensure DISPLAY is set for GUI
+export DISPLAY=:0
+
 # Run the verification script with GUI enabled
 $ISAACLAB_PATH -p "$PROJECT_DIR/arcproLab/scripts/verify_live.py" \
     --checkpoint "$LATEST_CHECKPOINT" \
