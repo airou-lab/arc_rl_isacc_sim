@@ -26,10 +26,10 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     env_origins = env.scene.env_origins
     local_pos = asset.data.root_pos_w - env_origins
 
-    # Indices 0-2: Relative Odometry (Pose since spawn)
-    obs[:, 0] = local_pos[:, 0] # Relative X
-    obs[:, 1] = local_pos[:, 1] # Relative Y
-    obs[:, 2] = yaw            # Current Heading (Relative to track North)
+    # Indices 0-2: Navigation intent (Mocked for Phase 11)
+    obs[:, 0] = 0.0  # IDX_TURN_TOKEN (STRAIGHT)
+    obs[:, 1] = 1.0  # IDX_GO_SIGNAL (GO)
+    obs[:, 2] = 0.0  # IDX_GOAL_DIST
 
     # Index 3: Forward Speed (m/s) - Local X velocity
     # Metric scale: 1.0 = 1m/s
@@ -40,8 +40,8 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
 
     # Indices 5-7: Last Actions (Clipped)
     try:
-        if env.action_manager.action is not None and env.action_manager.action.shape[1] >= 2:
-            obs[:, 5:7] = env.action_manager.action[:, :2] # Steer, Throttle
+        if env.action_manager.action is not None and env.action_manager.action.shape[1] >= 3:
+            obs[:, 5:8] = env.action_manager.action[:, :3] # Steer, Throttle, Brake
     except:
         pass # Actions not yet defined in Wave 1
 
@@ -51,8 +51,6 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     tm = get_track_manager(device=env.device)
 
     lat_err, head_err = tm.compute_errors(local_pos, yaw)    
-    # Target is already baked into waypoints (TrackManager offsets them by 0.56m)
-    # lat_err = lat_err - 0.5625 # DEPRECATED: Waypoints already in lane center
     
     # Distance Tracking
     if "distance" not in env.extras:
@@ -66,10 +64,13 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     env.extras["lat_err"] = lat_err
     env.extras["head_err"] = head_err
     
-    # Lateral and Heading Error (MASKED TO 0.0 - Forced Vision-Only Driving)
-    obs[:, 8] = 0.0 # lat_err
-    obs[:, 9] = 0.0 # head_err
+    # Lateral and Heading Error (Mapped to indices 8 and 9)
+    obs[:, 8] = lat_err
+    obs[:, 9] = head_err
     
+    # Index 10: Path Curvature (Kappa - Placeholder)
+    obs[:, 10] = 0.0
+
     # Index 11: Total Distance (Accumulated)
     if "distance" in env.extras:
         obs[:, 11] = env.extras["distance"]

@@ -138,11 +138,11 @@ import mdp.actions as arcpro_actions
 @configclass
 class ActionCfg:
     steering = arcpro_actions.GroupedJointPositionActionCfg(asset_name="robot", joint_names=["Joint_Steer_L", "Joint_Steer_R"], scale=1.0)
-    throttle = arcpro_actions.GroupedJointVelocityActionCfg(
+    drive = arcpro_actions.CombinedDriveActionCfg(
         asset_name="robot", 
         joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
         scale=60.0,
-        clip={"throttle": (0.0, 1.0)} # Force forward motion only
+        offset=0.0
     )
 
 @configclass

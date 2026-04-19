@@ -103,3 +103,42 @@ class GroupedJointVelocityActionCfg(GroupedJointActionCfg):
 class GroupedJointVelocityAction(GroupedJointAction):
     def apply_actions(self):
         self._asset.set_joint_velocity_target(self._processed_actions, joint_ids=self._joint_ids)
+
+@dataclass
+class CombinedDriveActionCfg(GroupedJointActionCfg):
+    """Configuration for a combined drive action term (Throttle + Brake)."""
+    def __post_init__(self):
+        self.class_type = CombinedDriveAction
+
+class CombinedDriveAction(GroupedJointAction):
+    """
+    Action term that fuses two scalar actions (Throttle, Brake) into a single 
+    velocity command for multiple joints.
+    
+    Formula: velocity = scale * throttle * (1.0 - brake) + offset
+    """
+    
+    @property
+    def action_dim(self) -> int:
+        return 2 # [Throttle, Brake]
+
+    @property
+    def action_space(self) -> gym.Space:
+        return gym.spaces.Box(low=0.0, high=1.0, shape=(self.action_dim,))
+
+    def process_actions(self, actions: torch.Tensor):
+        # actions is (num_envs, 2) -> [throttle, brake]
+        self._raw_actions[:] = actions
+        
+        throttle = actions[:, 0]
+        brake = actions[:, 1]
+        
+        # Effective drive signal: throttle modulated by brake
+        # 1.0 brake = 0.0 drive signal. 0.0 brake = pure throttle.
+        drive_signal = throttle * (1.0 - brake)
+        
+        # Broadcast and apply scale/offset to all drive joints
+        self._processed_actions[:] = self._offset + self._scale * drive_signal.unsqueeze(1)
+
+    def apply_actions(self):
+        self._asset.set_joint_velocity_target(self._processed_actions, joint_ids=self._joint_ids)
