@@ -17,10 +17,10 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     """
     asset = env.scene[asset_cfg.name]
     
-    # Target Waypoint: Centerline (Yellow Line)
-    # 8x pos: (-130.03, 44.48) -> 1x pos: (-16.25375, 5.56)
-    local_spawn_x, local_spawn_y = -16.25375, 5.56
-    spawn_yaw = -1.5708 # -90 degrees (Face South)
+    # Target Waypoint: Lane Center (Offset from double yellow line)
+    # Double Yellow is at X ~ -15.9616. Lane centers at X ~ -15.7416 and X ~ -16.1816
+    local_spawn_x, local_spawn_y = -16.1816, 5.50
+    spawn_yaw = -1.5708 # Face South
     
     # Get environment origins
     env_origins = env.scene.env_origins[env_ids]
@@ -29,13 +29,16 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     final_pos = torch.zeros((len(env_ids), 3), device=env.device)
     final_pos[:, 0] = env_origins[:, 0] + local_spawn_x
     final_pos[:, 1] = env_origins[:, 1] + local_spawn_y
-    final_pos[:, 2] = env_origins[:, 2] + 0.1 # Lower safe initial height
+    final_pos[:, 2] = env_origins[:, 2] + 0.05 # Lower safe initial height
     
+    # Construct quaternion (w, x, y, z) for Z-axis rotation
     quats = torch.zeros((len(env_ids), 4), device=env.device)
     import math
     half_yaw = spawn_yaw / 2.0
-    quats[:, 0] = math.cos(half_yaw)
-    quats[:, 3] = math.sin(half_yaw)
+    quats[:, 0] = math.cos(half_yaw) # W: 0.7071
+    quats[:, 1] = 0.0 # X
+    quats[:, 2] = 0.0 # Y
+    quats[:, 3] = math.sin(half_yaw) # Z: -0.7071
     
     # Raycast interface to find the ground
     query = omni.physx.get_physx_scene_query_interface()

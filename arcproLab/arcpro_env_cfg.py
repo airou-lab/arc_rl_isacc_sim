@@ -77,11 +77,11 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             scale=(1.0, 1.0, 1.0), # Revert to 1.0x
         ),
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
-            # Fixed Spawn Point: Centerline (Shifted to align with Waypoints)
-            # 8x pos: (-130.03, 44.48, 0.42) -> 1x pos: (-16.25, 5.56, 0.05)
-            pos=(-16.25375, 5.56, 0.05), 
-            rot=(0.7071, 0.0, 0.0, 0.7071) # +90 degrees Z-up
-        ), 
+            # Fixed Spawn Point: Lane Center (Offset from double yellow line)
+            pos=(-16.1816, 5.50, 0.05),
+            rot=(0.7071, 0.0, 0.0, -0.7071) # Face South
+        ),
+ 
     )
     
     # Camera (Standard offset for 1x robot)

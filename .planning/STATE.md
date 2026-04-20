@@ -10,10 +10,10 @@
 Achieved True 1.0x Metric Scale. Completed initial PPO retraining which identified a critical "Silent Failure" in lateral error perception (fixed in TrackManager). Now transitioning to the Hierarchical Path Planning Policy (HPPP) to provide waypoint-based navigation and robust visual feature extraction.
 
 ## Recent Activity
-- **Silent Failure Root Cause**: Identified that `TrackManager.compute_errors` was a legacy stub returning `0.0`.
-- **Perception Fix**: Implemented real lateral error calculation in `TrackManager` using USD markers.
-- **Brain Selection**: Decided to integrate `HierarchicalPathPlanningPolicy` from reference stack.
-- **Integration Research**: Mapped telemetry vector Protocol v2 to align with HPPP expectations.
+- **Spawn Alignment Fix**: Resolved issue where robot spawned on road divider (double yellow line). Shifted spawn to lane center (X ~ -16.18) for stable episode starts.
+- **Orientation Fix**: Corrected South-facing quaternion (WXYZ) in `events.py` and `arcpro_env_cfg.py` to prevent tilted/incorrect robot pose.
+- **Perception Offset**: Added `target_lane_offset` to `TrackManager` to allow policy to track lane center instead of road center.
+- **Brain Integration**: Successfully verified Hierarchical Path Planning Policy (HPPP) with real telemetry in GUI rollouts.
 
 ## Active Todos (Queue)
 1. [/] **11-09-production-run-v2**: (RUNNING) Retrain HierarchicalPathPlanningPolicy for 5,000,000 steps with fixed camera tilt and dynamic heading.

@@ -41,8 +41,14 @@ class TrackManager:
             if self.raw_white_pts is not None:
                 self.white_tensor = torch.tensor(self.raw_white_pts, device=self.device, dtype=torch.float32)
             
-            # Keep a dummy waypoint for reward functions that expect it (until we refactor rewards)
-            self.waypoints = torch.tensor([[-16.25, 5.56, -1.57]], device=self.device)
+            # Load real waypoints for lane-centering
+            if os.path.exists(self.wp_path):
+                print(f"[TrackManager] Loading waypoints from {self.wp_path}")
+                wp_data = np.load(self.wp_path)
+                self.waypoints = torch.tensor(wp_data, device=self.device, dtype=torch.float32)
+            else:
+                print(f"[TrackManager] WARNING: Waypoint file not found at {self.wp_path}. Using fallback.")
+                self.waypoints = torch.tensor([[-16.25, 5.56, -1.57]], device=self.device)
 
         if self.sync_attempts < 100:
             self.refresh_visuals()
@@ -133,37 +139,51 @@ class TrackManager:
         except:
             pass
 
-    def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor):
-        """Returns distance to lane center and heading error."""
+    def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor, target_lane_offset: float = 0.22):
+        """
+        Returns distance to lane center and heading error using waypoints.
+        target_lane_offset: Offset from the waypoint (double yellow line) to the lane center.
+                           Negative is Right (for North-facing waypoints).
+        """
         self.ensure_synced()
 
-        # Lane Center Approximation: (DistYellow - DistWhite) / 2
-        dist_y, dist_w = self.compute_marker_distances(pos)
-        lat_err = (dist_y - dist_w) * 0.5
+        # Find closest waypoints
+        dists = torch.cdist(pos[:, :2], self.waypoints[:, :2])
+        closest_idx = torch.argmin(dists, dim=1)
+        closest_wp = self.waypoints[closest_idx]
 
-        # Calculate target_yaw dynamically from track markers
-        # We use the two closest white markers to find the track direction
-        dists, indices = torch.topk(torch.cdist(pos[:, :2], self.white_tensor), k=2, largest=False)
-        p1 = self.white_tensor[indices[:, 0]]
-        p2 = self.white_tensor[indices[:, 1]]
+        # 1. Lateral Error
+        # Vector from waypoint to robot
+        wp_to_robot = pos[:, :2] - closest_wp[:, :2]
+        
+        # Waypoint orientation
+        wp_yaw = closest_wp[:, 2]
+        
+        # Normal vector to the path (rotate wp_yaw by +90 degrees)
+        # For a right-handed system, if forward is (cos(yaw), sin(yaw)), 
+        # left normal is (-sin(yaw), cos(yaw))
+        normal_x = -torch.sin(wp_yaw)
+        normal_y = torch.cos(wp_yaw)
+        
+        # Dot product with normal gives signed lateral error (positive = left of path)
+        raw_lat_err = wp_to_robot[:, 0] * normal_x + wp_to_robot[:, 1] * normal_y
+        
+        # Apply lane offset (Shift target to center of right lane)
+        lat_err = raw_lat_err - target_lane_offset
 
-        # Track direction vector (p1 to p2, or p2 to p1)
-        # We pick the direction that is generally aligned with current yaw
-        v1 = p2 - p1
-        v2 = p1 - p2
+        # Debug lat_err for spawn verification
+        if self.sync_attempts < 20 and pos.shape[0] > 0:
+            print(f"[TrackManager] DEBUG Pos: {pos[0, :2].cpu().numpy()} | WP: {closest_wp[0, :2].cpu().numpy()} | LatErr: {lat_err[0].item():.4f}")
 
-        target_yaw1 = torch.atan2(v1[:, 1], v1[:, 0])
-        target_yaw2 = torch.atan2(v2[:, 1], v2[:, 0])
-
-        # Pick the one closest to current yaw to handle bi-directional track ambiguity
-        diff1 = torch.abs(torch.atan2(torch.sin(yaw - target_yaw1), torch.cos(yaw - target_yaw1)))
-        diff2 = torch.abs(torch.atan2(torch.sin(yaw - target_yaw2), torch.cos(yaw - target_yaw2)))
-
-        target_yaw = torch.where(diff1 < diff2, target_yaw1, target_yaw2)
-        head_err = yaw - target_yaw
-
-        # Wrap heading error to [-pi, pi]
+        # 2. Heading Error
+        head_err = yaw - wp_yaw
+        # Wrap to [-pi, pi]
         head_err = torch.atan2(torch.sin(head_err), torch.cos(head_err))
+        
+        # Handle bi-directional track (allow driving either way)
+        import math
+        head_err = torch.where(head_err > math.pi/2, head_err - math.pi, head_err)
+        head_err = torch.where(head_err < -math.pi/2, head_err + math.pi, head_err)
 
         return lat_err, head_err
 
