@@ -30,6 +30,7 @@ import os
 import sys
 import numpy as np
 import gymnasium as gym
+import cv2
 
 # Add both root, arcproLab, and policy_stack to sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -196,6 +197,30 @@ def main():
             # Step environment
             obs, rewards, dones, infos = env.step(actions)
             
+            # Action Debug
+            # actions is (B, 3) -> [steer, throttle, brake]
+            steer = actions[0, 0]
+            throttle = actions[0, 1]
+            brake = actions[0, 2]
+            if count % 5 == 0:
+                print(f"  [ACT] Step {count:4d} | Steer: {steer:6.3f} | Throttle: {throttle:6.3f} | Brake: {brake:6.3f}")
+
+            # Save debug frames for the first 5 steps
+            if count < 5:
+                debug_dir = "debug_frames"
+                os.makedirs(debug_dir, exist_ok=True)
+                # obs is from VecNormalize -> HPPPDirectBridge
+                # obs["image"] is (B, C, H, W). We want the first env [0]
+                img_np = obs["image"][0] # (C, H, W)
+                # Convert from CHW to HWC for cv2
+                img_hwc = np.transpose(img_np, (1, 2, 0))
+                # It's normalized [0, 1] float, convert to [0, 255] uint8
+                img_uint8 = (img_hwc * 255).astype(np.uint8)
+                # Convert RGB to BGR for cv2
+                img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
+                cv2.imwrite(os.path.join(debug_dir, f"frame_{count}.png"), img_bgr)
+                print(f"  [DEBUG] Saved camera frame {count} to {debug_dir}/frame_{count}.png")
+
             # Update episode starts for LSTM reset logic
             episode_starts = dones
             
@@ -205,12 +230,22 @@ def main():
                 
             # Quick telemetry check
             if count % 20 == 0:
-                raw_env = env.get_wrapper_attr("unwrapped")
-                raw_lat_err = raw_env.extras.get("raw_lat_err", torch.tensor([0.0]))[0].item()
+                # The env chain is VecNormalize -> HPPPDirectBridge -> WaypointTrackingWrapper -> ManagerBasedRLEnv
+                raw_env = env.venv.venv.unwrapped
+                raw_lat_err = raw_env.extras.get("lat_err", torch.tensor([0.0]))[0].item()
                 print(f"  [Tele] LatErr: {raw_lat_err:6.3f}m")
+                
+            if dones[0]:
+                print(f"Episode terminated at step {count}.")
+                
+            simulation_app.update()
                 
     except KeyboardInterrupt:
         print("Simulation interrupted by user.")
+    except Exception as e:
+        print(f"Exception caught in simulation loop: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         print("Closing environment...")
         env.close()

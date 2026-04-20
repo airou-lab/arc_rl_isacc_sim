@@ -136,19 +136,34 @@ class TrackManager:
     def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor):
         """Returns distance to lane center and heading error."""
         self.ensure_synced()
-        
+
         # Lane Center Approximation: (DistYellow - DistWhite) / 2
-        # If DistY > DistW, we are to the right of center (positive error)
-        # If DistW > DistY, we are to the left of center (negative error)
         dist_y, dist_w = self.compute_marker_distances(pos)
         lat_err = (dist_y - dist_w) * 0.5
-        
-        # Heading error relative to South (-PI/2)
-        target_yaw = -1.5708
+
+        # Calculate target_yaw dynamically from track markers
+        # We use the two closest white markers to find the track direction
+        dists, indices = torch.topk(torch.cdist(pos[:, :2], self.white_tensor), k=2, largest=False)
+        p1 = self.white_tensor[indices[:, 0]]
+        p2 = self.white_tensor[indices[:, 1]]
+
+        # Track direction vector (p1 to p2, or p2 to p1)
+        # We pick the direction that is generally aligned with current yaw
+        v1 = p2 - p1
+        v2 = p1 - p2
+
+        target_yaw1 = torch.atan2(v1[:, 1], v1[:, 0])
+        target_yaw2 = torch.atan2(v2[:, 1], v2[:, 0])
+
+        # Pick the one closest to current yaw to handle bi-directional track ambiguity
+        diff1 = torch.abs(torch.atan2(torch.sin(yaw - target_yaw1), torch.cos(yaw - target_yaw1)))
+        diff2 = torch.abs(torch.atan2(torch.sin(yaw - target_yaw2), torch.cos(yaw - target_yaw2)))
+
+        target_yaw = torch.where(diff1 < diff2, target_yaw1, target_yaw2)
         head_err = yaw - target_yaw
-        
+
         # Wrap heading error to [-pi, pi]
-        head_err = (head_err + np.pi) % (2 * np.pi) - np.pi
+        head_err = torch.atan2(torch.sin(head_err), torch.cos(head_err))
 
         return lat_err, head_err
 

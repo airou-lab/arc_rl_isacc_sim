@@ -31,6 +31,6 @@ done
 PYTHONUNBUFFERED=1 $ISAACLAB_PATH -p "$PROJECT_DIR/arcproLab/scripts/train_policy.py" \
     --num_envs $NUM_ENVS \
     $HEADLESS \
-    --total_timesteps 1000000 \
+    --total_timesteps 5000000 \
     --enable_cameras \
     $CHECKPOINT

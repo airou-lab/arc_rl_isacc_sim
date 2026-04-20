@@ -93,7 +93,8 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             focal_length=1.93,
         ),
         # 8x pos: (2.24, 0.0, 1.28) -> 1x pos: (0.28, 0.0, 0.16)
-        offset=TiledCameraCfg.OffsetCfg(pos=(0.28, 0.0, 0.16), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
+        # rot: [0.985, 0.0, 0.174, 0.0] is ~20 deg tilt down around Y
+        offset=TiledCameraCfg.OffsetCfg(pos=(0.28, 0.0, 0.16), rot=(0.985, 0.0, 0.174, 0.0), convention="parent"),
         data_types=["rgb"], width=160, height=90,
     )
 
