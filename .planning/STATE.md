@@ -16,15 +16,15 @@ Achieved True 1.0x Metric Scale. Completed initial PPO retraining which identifi
 - **Integration Research**: Mapped telemetry vector Protocol v2 to align with HPPP expectations.
 
 ## Active Todos (Queue)
-1. [ ] **11-02-obs-alignment**: Align `mdp/observations.py` with HPPP Protocol v2.
-2. [ ] **11-03-brake-action**: Implement `CombinedDriveAction` in `mdp/actions.py`.
-3. [ ] **11-05-file-sync**: Import HPPP and FusionExtractor into `policy_stack/`.
-4. [ ] **11-06-train-setup**: Update `train_policy.py` for RecurrentPPO + Auxiliary losses.
+1. [/] **11-09-production-run-v2**: (RUNNING) Retrain HierarchicalPathPlanningPolicy for 5,000,000 steps with fixed camera tilt and dynamic heading.
+   - Command: `DISPLAY=:0 bash train.sh --num_envs 32 --headless`
+   - Log: `training_5m_v2.log`
+   - Fixes: 20deg camera tilt down, dynamic heading error calculation.
 
 ## Completed
-- [x] Phase 11: 1.0x Baseline Retraining (Identified perception bugs).
-- [x] Phase 09: Training Loop Stabilization (8x Baseline).
-- [x] Phase 10: Asset Downscaling (1.0x Restoration).
+- [x] Phase 11: 1.0x Baseline Retraining & Perception Fixes.
+- [x] Phase 11: Hierarchical Policy Integration (Submodule, Protocol v2, Bridges).
+- [x] Phase 11: Core Perception Debug (Camera tilt/Heading math).
 
 ## Blockers
 None.
