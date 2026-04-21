@@ -19,13 +19,14 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     # Get direct math error in meters
     dist_y, dist_w = tm.compute_marker_distances(asset.data.root_pos_w - env.scene.env_origins)
     
-    # Reset if robot center is within 0.1m of any marker
-    inner_hit = dist_y < 0.1
-    outer_hit = dist_w < 0.1
+    # Reset if any part of the robot hits the line markers
+    # 0.15m threshold allows the robot to exist in the ~0.44m wide lane
+    inner_hit = dist_y < 0.15
+    outer_hit = dist_w < 0.15
     marker_hit = inner_hit | outer_hit
 
-    # Debug logging
-    if marker_hit[0].item() and (env.num_envs == 1 or env.scene.env_origins.shape[0] > 0):
+    # Debug logging for environment 0
+    if marker_hit[0].item():
         reason = "Yellow Boundary Hit" if inner_hit[0].item() else "White Boundary Hit"
         print(f"[TERMINATION] {reason}! DistY: {dist_y[0].item():.3f}m | DistW: {dist_w[0].item():.3f}m")
 

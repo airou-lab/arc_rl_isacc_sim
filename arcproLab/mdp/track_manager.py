@@ -50,7 +50,9 @@ class TrackManager:
                 print(f"[TrackManager] WARNING: Waypoint file not found at {self.wp_path}. Using fallback.")
                 self.waypoints = torch.tensor([[-16.25, 5.56, -1.57]], device=self.device)
 
-        if self.sync_attempts < 100:
+        if self.sync_attempts < 500: # Keep trying to render for longer
+            if self.sync_attempts % 100 == 0:
+                print(f"[TrackManager] Visualizing {len(self.raw_yellow_pts) if self.raw_yellow_pts is not None else 0} yellow points...")
             self.refresh_visuals()
             self.sync_attempts += 1
 
@@ -69,74 +71,95 @@ class TrackManager:
         except:
             env0_origin = Gf.Vec3d(0,0,0)
 
-        y_pts, w_pts = [], []
+        y_data, w_data = [], []
         for prim in Usd.PrimRange(root_prim):
             if not prim.IsA(UsdGeom.Mesh): continue
-            path = str(prim.GetPath()).lower()
+            path = str(prim.GetPath())
             binding_api = UsdShade.MaterialBindingAPI(prim)
             material, _ = binding_api.ComputeBoundMaterial()
             mat_path = str(material.GetPath()).lower() if material else ""
             
-            search_str = path + mat_path
+            search_str = (path + mat_path).lower()
             is_yellow = "yellow" in search_str
             is_white = "white" in search_str
             if not (is_yellow or is_white): continue
             
+            # Use vertices to handle both small dots and large continuous meshes
             points_attr = UsdGeom.Mesh(prim).GetPointsAttr().Get()
             if not points_attr: continue
             
             xform = xform_cache.GetLocalToWorldTransform(prim)
             for p in points_attr:
                 pw = xform.Transform(p)
-                pl = [pw[0] - env0_origin[0], pw[1] - env0_origin[1]]
-                if is_yellow: y_pts.append(pl)
-                else: w_pts.append(pl)
+                pl = [pw[0] - env0_origin[0], pw[1] - env0_origin[1], pw[2] - env0_origin[2]]
+                
+                # Store tuple of (path_string, coordinates) for sorting
+                if is_yellow: y_data.append((path, pl))
+                else: w_data.append((path, pl))
 
-        if y_pts: self.raw_yellow_pts = np.unique(np.round(np.array(y_pts), 2), axis=0)
-        if w_pts: self.raw_white_pts = np.unique(np.round(np.array(w_pts), 2), axis=0)
+        if y_data: 
+            y_data.sort(key=lambda x: x[0])
+            y_pts_sorted = np.array([x[1] for x in y_data])
+            # Use a slightly larger tolerance for uniqueness to clean up vertex soup
+            _, unique_indices = np.unique(np.round(y_pts_sorted, 3), axis=0, return_index=True)
+            y_pts_unique = y_pts_sorted[np.sort(unique_indices)]
+            self.raw_yellow_pts = self._interpolate_path(y_pts_unique)
+            print(f"[TrackManager] Found {len(y_data)} yellow prims, generated {len(self.raw_yellow_pts)} wall markers.")
+
+        if w_data: 
+            w_data.sort(key=lambda x: x[0])
+            w_pts_sorted = np.array([x[1] for x in w_data])
+            _, unique_indices = np.unique(np.round(w_pts_sorted, 3), axis=0, return_index=True)
+            w_pts_unique = w_pts_sorted[np.sort(unique_indices)]
+            self.raw_white_pts = self._interpolate_path(w_pts_unique)
+            print(f"[TrackManager] Found {len(w_data)} white prims, generated {len(self.raw_white_pts)} wall markers.")
+
+    def _interpolate_path(self, sorted_pts, resolution=0.1):
+        """Fills gaps between sorted path points."""
+        if len(sorted_pts) < 2: return sorted_pts
+        dense_pts = []
+        for i in range(len(sorted_pts) - 1):
+            p1, p2 = sorted_pts[i], sorted_pts[i+1]
+            dist = np.linalg.norm(p2 - p1)
+            dense_pts.append(p1)
+            if 0.0 < dist < 2.0: # Only interpolate reasonable gaps (skip jumps between non-sequential prims)
+                num_steps = int(dist / resolution)
+                for step in range(1, num_steps):
+                    dense_pts.append(p1 + (p2 - p1) * (step / num_steps))
+        dense_pts.append(sorted_pts[-1])
+        return np.array(dense_pts)
 
     def compute_marker_distances(self, pos: torch.Tensor):
-        """Returns distance to closest yellow and white markers."""
+        """Returns distance to closest yellow and white markers (3D)."""
         self.ensure_synced()
         
-        dist_y = torch.min(torch.cdist(pos[:, :2], self.yellow_tensor), dim=1)[0]
-        dist_w = torch.min(torch.cdist(pos[:, :2], self.white_tensor), dim=1)[0]
+        # Check all 3 axes (X, Y, Z) for high-fidelity boundary checks
+        dist_y = torch.min(torch.cdist(pos[:, :3], self.yellow_tensor), dim=1)[0]
+        dist_w = torch.min(torch.cdist(pos[:, :3], self.white_tensor), dim=1)[0]
         
         return dist_y, dist_w
 
     def refresh_visuals(self):
+        # Use omni.debugDraw interface for guaranteed visibility in GUI
         try:
-            from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
-            import isaaclab.sim as sim_utils
-            import omni.usd
-            from pxr import UsdGeom, Gf
-
+            import omni.debugdraw
+            from pxr import Usd, UsdGeom
+            draw = omni.debugdraw.get_debug_draw_interface()
+            
             stage = omni.usd.get_context().get_stage()
-            env0_origin = Gf.Vec3d(0, 0, 0)
             env0_prim = stage.GetPrimAtPath("/World/envs/env_0")
-            if env0_prim.IsValid():
-                xform = UsdGeom.Xformable(env0_prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
-                env0_origin = xform.ExtractTranslation()
+            if not env0_prim.IsValid(): return
+            
+            xform = UsdGeom.Xformable(env0_prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+            origin = xform.ExtractTranslation()
 
-            def get_cfg(path, color):
-                return VisualizationMarkersCfg(prim_path=path, markers={"dot": sim_utils.SphereCfg(radius=0.03, 
-                    visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=color))})
-
-            if self.left_visualizer is None:
-                self.left_visualizer = VisualizationMarkers(get_cfg("/Visuals/YellowBoundaries", (1.0, 1.0, 0.0)))
-            if self.right_visualizer is None:
-                self.right_visualizer = VisualizationMarkers(get_cfg("/Visuals/WhiteBoundaries", (1.0, 1.0, 1.0)))
-
-            def to_world(lpts):
-                w = torch.zeros((len(lpts), 3), device=self.device)
-                w[:, 0] = torch.tensor(lpts[:, 0], device=self.device, dtype=torch.float32) + env0_origin[0]
-                w[:, 1] = torch.tensor(lpts[:, 1], device=self.device, dtype=torch.float32) + env0_origin[1]
-                w[:, 2] = env0_origin[2] + 0.2 # High visibility
-                return w
-
-            if self.raw_yellow_pts is not None: self.left_visualizer.visualize(to_world(self.raw_yellow_pts))
-            if self.raw_white_pts is not None: self.right_visualizer.visualize(to_world(self.raw_white_pts))
-        except:
+            if self.raw_yellow_pts is not None:
+                pts = [(p[0]+origin[0], p[1]+origin[1], p[2]+origin[2]+0.1) for p in self.raw_yellow_pts]
+                draw.draw_points(pts, [(1,1,0,1)]*len(pts), [10]*len(pts)) 
+            if self.raw_white_pts is not None:
+                pts = [(p[0]+origin[0], p[1]+origin[1], p[2]+origin[2]+0.1) for p in self.raw_white_pts]
+                draw.draw_points(pts, [(1,1,1,1)]*len(pts), [10]*len(pts))
+        except Exception as e:
             pass
 
     def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor, target_lane_offset: float = 0.22):
