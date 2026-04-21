@@ -33,6 +33,24 @@ This research identifies the optimal architecture for a real-time policy dashboa
 | OpenCV Sidecar | Gradio | Gradio is designed for demos, not high-frequency telemetry. |
 | Sidecar | In-process (omni.ui) | In-process GUIs block the simulation thread, causing FPS drops. |
 
+## Environment Compatibility & Robustness
+While Shared Memory (`shm`) is the fastest path, it requires careful handling in the Isaac Lab environment (especially if running in containers).
+
+### 1. Robust SHM Lifecycle
+- **Risk:** Resource leaks if simulation or GUI crashes.
+- **Strategy:** Implement a "Zombie Cleaner" in the simulation's `__init__`.
+- **Logic:** `shm.unlink()` before creating a new segment. Use `ResourceTracker` from `multiprocessing` to ensure the kernel releases segments on process exit.
+
+### 2. Environment Parity
+- **Risk:** Isaac Lab uses a specialized Python environment (`isaaclab.sh -p`).
+- **Strategy:** The sidecar GUI **must** be launched via the same wrapper to ensure dependency parity (OpenCV, Torch versions).
+- **Logic:** Launch sidecar as a child process using `subprocess.Popen([sys.executable, "policy_dashboard.py"])` to inherit the exact environment.
+
+### 3. IPC Fallback
+- **Risk:** Shared memory might be restricted on some filesystems.
+- **Strategy:** Implement a `BaseTelemetryStreamer` class with two implementations: `SHMStreamer` and `SocketStreamer` (Unix Domain Sockets).
+- **Logic:** Default to SHM; if it fails with `PermissionError`, automatically fall back to Sockets for reliability.
+
 ## Architecture Patterns
 
 ### Recommended Project Structure

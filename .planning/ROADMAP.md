@@ -52,5 +52,11 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 - [ ] **Phase 16: Coordination & Yielding Logic** - Develop social-norm based navigation (e.g., yielding at stop signs, 4-way stop logic) between Two Cars.
 - [ ] **Phase 17: MARL Training & Evaluation** - Train collaborative policies (MAPPO/IPPO) for high-density intersection throughput.
 
+## Milestone 5: Custom Hardware & Sim2Real (v4.0) - PLANNED
+*Focus: Transitioning from generic F1Tenth platforms to custom ARCPro hardware and real-world deployment.*
+
+- [ ] **Phase 18: Custom ARCPro Robot Remodel** - Replace F1Tenth assets with a full-fidelity custom ARCPro robot model. Calibrate true-to-life physics (Torque, Mass, Friction).
+- [ ] **Phase 19: Sim2Real Deployment** - Implement the self-driving policy on physical hardware with real-world perception bridges.
+
 ---
-*Roadmap updated: 2026-04-15*
+*Roadmap updated: 2026-04-20*
