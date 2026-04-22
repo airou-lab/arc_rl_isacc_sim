@@ -51,8 +51,6 @@ class TrackManager:
                 self.waypoints = torch.tensor([[-16.25, 5.56, -1.57]], device=self.device)
 
         if self.sync_attempts < 500: # Keep trying to render for longer
-            if self.sync_attempts % 100 == 0:
-                print(f"[TrackManager] Visualizing {len(self.raw_yellow_pts) if self.raw_yellow_pts is not None else 0} yellow points...")
             self.refresh_visuals()
             self.sync_attempts += 1
 
@@ -162,7 +160,7 @@ class TrackManager:
         except Exception as e:
             pass
 
-    def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor, target_lane_offset: float = 0.22):
+    def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor, target_lane_offset: float = 0.30):
         """
         Returns distance to lane center and heading error using waypoints.
         target_lane_offset: Offset from the waypoint (double yellow line) to the lane center.
@@ -193,10 +191,6 @@ class TrackManager:
         
         # Apply lane offset (Shift target to center of right lane)
         lat_err = raw_lat_err - target_lane_offset
-
-        # Debug lat_err for spawn verification
-        if self.sync_attempts < 20 and pos.shape[0] > 0:
-            print(f"[TrackManager] DEBUG Pos: {pos[0, :2].cpu().numpy()} | WP: {closest_wp[0, :2].cpu().numpy()} | LatErr: {lat_err[0].item():.4f}")
 
         # 2. Heading Error
         head_err = yaw - wp_yaw

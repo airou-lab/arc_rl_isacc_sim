@@ -17,9 +17,9 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     """
     asset = env.scene[asset_cfg.name]
     
-    # Target Waypoint: Lane Center (Offset from double yellow line)
-    # Double Yellow is at X ~ -15.9616. Lane centers at X ~ -15.7416 and X ~ -16.1816
-    local_spawn_x, local_spawn_y = -16.1816, 5.50
+    # Target Waypoint: Lane Center (Perfectly centered between boundaries)
+    # Double Yellow is at X ~ -15.9616. Lane center is at X ~ -16.2616
+    local_spawn_x, local_spawn_y = -16.2616, 5.50
     spawn_yaw = -1.5708 # Face South
     
     # Get environment origins
