@@ -7,6 +7,7 @@ A self-driving mobile robot that autonomously navigates between lanes and across
 - **v1.0 (MVP):** Single-track autonomous lane centering using SB3.
 - **v1.1 (Graph Nav):** Multi-segment navigation across intersections using graph-based route planning.
 - **v1.2 (True Physics):** High-fidelity simulation with 1.0x metric scaling, removed workarounds, and improved sim-to-real transferability.
+- **v2.0 (Custom & Real):** Transition to custom ARCPro robot assets and physical Sim2Real deployment.
 
 ## Context
 - **Framework:** NVIDIA IsaacLab / Isaac Sim.

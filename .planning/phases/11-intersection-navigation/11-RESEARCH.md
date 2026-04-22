@@ -44,11 +44,17 @@ arcproLab/
 ### Pattern 1: Mocked Navigation Intent
 **What:** Mocking the `turn_token` to `0.0` (STRAIGHT).
 **When to use:** During Phase 11 where no intersections exist in the USD scene.
+
+### Pattern 2: Dense Wall Termination
+**What:** Interpolating road markers at 0.1m intervals during the initial USD scan.
+**When to use:** When physical marker prims are sparse, causing "leakage" where the robot passes through gaps without resetting.
 **Example:**
 ```python
-# In observations.py
-obs[:, 0] = 0.0  # IDX_TURN_TOKEN
-obs[:, 1] = 1.0  # IDX_GO_SIGNAL
+# In TrackManager.py
+if dist > resolution:
+    num_steps = int(dist / resolution)
+    for step in range(1, num_steps):
+        dense_pts.append(p1 + (p2 - p1) * (step / num_steps))
 ```
 
 ### Anti-Patterns to Avoid
