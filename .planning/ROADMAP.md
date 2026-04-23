@@ -20,7 +20,7 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 ## Milestone 2: Autonomous Urban Navigation (v2.0) - ACTIVE
 *Focus: Graph-based routing, intersection logic, and multi-agent coordination.*
 
-- [/] **Phase 11: Retraining & Intersection logic** - (ACTIVE) Retrain policy at 1x and implement graph-based route planning.
+- [x] **Phase 11: Retraining & Intersection logic** - (COMPLETED) Retrained policy at 1x and implemented alignment-aware intersection gate permeability.
 - [ ] **Phase 12: Hierarchical Policy Migration** - Port the `Worker-Driver` architecture from the sibling folder and refactor for the physics.
 - [x] **Phase 13: Environment Scale Alignment** - (COMPLETED via Phase 10) Scaled USD road assets to match the robot scale.
 

@@ -11,21 +11,45 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     """
     Terminates if the robot center gets too close to ANY road marker.
     Ditches centerline math for robust direct proximity.
+    Supports permeable Gate markers (Stop Lines).
     """
     from mdp.track_manager import get_track_manager
     tm = get_track_manager(device=env.device)
     asset = env.scene[asset_cfg.name]
     
-    # Get direct math error in meters
-    dist_y, dist_w = tm.compute_marker_distances(asset.data.root_pos_w - env.scene.env_origins)
+    # Get direct distance to Yellow (Center), White (Edge), and Gate (Stop) markers
+    dist_y, dist_w, dist_g = tm.compute_marker_distances(asset.data.root_pos_w - env.scene.env_origins)
     
-    # Reset if any part of the robot hits the line markers
-    # 0.12m threshold allows the robot to exist in the ~0.44m wide lane
-    inner_hit = dist_y < 0.12
-    outer_hit = dist_w < 0.12
-    marker_hit = inner_hit | outer_hit
-
-    return marker_hit
+    # Standard boundaries (Always reset)
+    boundary_hit = (dist_y < 0.12) | (dist_w < 0.12)
+    
+    # Gates (Permeable if aligned)
+    gate_contact = dist_g < 0.12
+    
+    # Calculate yaw from quaternion
+    q = asset.data.root_quat_w
+    yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
+    
+    # Get heading error
+    _, head_err = tm.compute_errors(asset.data.root_pos_w[:, :2] - env.scene.env_origins[:, :2], yaw)
+    
+    # Only reset on Gate if alignment is poor (sliding into it)
+    # Alignment: cos(head_err) > 0.7 means robot is facing roughly forward/backward along the path
+    # We also check sin(head_err) to allow 90 degree crossing (perpendicular gates in intersections)
+    cos_err = torch.cos(head_err)
+    sin_err = torch.sin(head_err)
+    
+    # facing 0 or 180 (aligned with lane)
+    aligned_long = torch.abs(cos_err) > 0.707 
+    # facing 90 or 270 (crossing perpendicular stop lines)
+    aligned_lat = torch.abs(sin_err) > 0.707
+    
+    alignment_ok = aligned_long | aligned_lat
+    
+    # A gate hit is ONLY a termination if alignment is NOT okay
+    gate_hit = gate_contact & (~alignment_ok)
+    
+    return boundary_hit | gate_hit
 
 def fov_visibility_termination(env: ManagerBasedRLEnv, horizontal_aperture: float, focal_length: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Terminates if the robot drives in a direction outside its camera's FOV."""
@@ -43,7 +67,7 @@ def height_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     """Terminates if the robot flips or falls."""
     asset = env.scene[asset_cfg.name]
     height = asset.data.root_pos_w[:, 2]
-    return (height < 0.02) | (height > 0.5)
+    return (height < 0.02) | (height > 5.0)
 
 def stagnation_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Terminates if the robot hasn't made forward progress."""
