@@ -3,6 +3,11 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+"""
+Stable Centerline Generator (Rollback Version).
+Restores smooth 0.3m spacing and simple chaining.
+"""
+
 import argparse
 from isaaclab.app import AppLauncher
 
@@ -33,12 +38,8 @@ def main():
     
     y_pts = tm.raw_yellow_pts
     w_pts = tm.raw_white_pts
-    
-    if y_pts is None or w_pts is None:
-        print("[ERROR] Boundaries empty.")
-        return
 
-    # 1. Generate Mids (Strict 2D, force Z=0)
+    # 1. Generate Mids
     raw_mids = []
     for p_y in y_pts:
         dists = np.linalg.norm(w_pts[:, :2] - p_y[:2], axis=1)
@@ -49,8 +50,8 @@ def main():
     
     raw_mids = np.unique(np.round(np.array(raw_mids), 3), axis=0)
 
-    # 2. Sequential Chain (Increased threshold to 2.0m to bridge road gaps)
-    start_p = np.array([-16.2, 5.4, 0.0])
+    # 2. Sequential Chain (Previous Stable Logic)
+    start_p = np.array([-16.198, 5.45, 0.0])
     curr_idx = np.argmin(np.linalg.norm(raw_mids - start_p, axis=1))
     
     chain = [raw_mids[curr_idx]]
@@ -61,15 +62,14 @@ def main():
         dists = np.linalg.norm(raw_mids - curr_p, axis=1)
         dists[list(visited)] = 1e6
         next_idx = np.argmin(dists)
-        # Bridge gaps between non-continuous road meshes
-        if dists[next_idx] < 2.0:
+        if dists[next_idx] < 2.0: # Bridge larger gaps
             chain.append(raw_mids[next_idx])
             visited.add(next_idx)
         else: break
 
     chain = np.array(chain)
     
-    # 3. Add Yaw and Save
+    # 3. Final Path Calculation (0.3m spacing)
     final_data = []
     for i in range(len(chain) - 1):
         p1, p2 = chain[i], chain[i+1]
@@ -80,7 +80,7 @@ def main():
     out_path = os.path.join(os.path.dirname(__file__), "../mdp/track_centerline_1x.npy")
     np.save(out_path, final_data)
     
-    print(f"\n[SUCCESS] Generated {len(final_data)} ground-locked waypoints.")
+    print(f"\n[SUCCESS] Restored {len(final_data)} stable waypoints (0.3m spacing).")
     env.close()
 
 if __name__ == "__main__":

@@ -90,28 +90,80 @@ class TrackManager:
 
         def finalize_group(data_list, name):
             if not data_list: return None
-            # Sort by Path to keep sequence
-            data_list.sort(key=lambda x: x[0])
-            pts = np.array([x[1] for x in data_list])
-            _, idx = np.unique(np.round(pts, 3), axis=0, return_index=True)
-            unique_pts = pts[np.sort(idx)]
-            # INCREASE RESOLUTION: 0.05m spacing for "Dense Walls"
-            interpolated = self._interpolate_path(unique_pts, resolution=0.05)
-            print(f"[TrackManager] Finalized {name}: {len(interpolated)} points.")
-            return interpolated
+            
+            all_dense_pts = []
+            resolution = 0.05
+            
+            for path, mesh_data in data_list:
+                pts = np.array(mesh_data['points'])
+                indices = mesh_data['indices']
+                counts = mesh_data['counts']
+                
+                # Iterate through faces and their edges
+                curr_idx = 0
+                for count in counts:
+                    face_indices = indices[curr_idx : curr_idx + count]
+                    curr_idx += count
+                    
+                    # For each edge in the face (e.g., 0-1, 1-2, 2-0 for a triangle)
+                    for i in range(count):
+                        p1 = pts[face_indices[i]]
+                        p2 = pts[face_indices[(i + 1) % count]]
+                        
+                        dist = np.linalg.norm(p2 - p1)
+                        if dist > 0:
+                            num_steps = max(1, int(dist / resolution))
+                            for step in range(num_steps):
+                                all_dense_pts.append(p1 + (p2 - p1) * (step / num_steps))
+            
+            if not all_dense_pts: return None
+            final_pts = np.unique(np.round(np.array(all_dense_pts), 3), axis=0)
+            print(f"[TrackManager] Finalized {name}: {len(final_pts)} points (Edge-Sampled).")
+            return final_pts
+
+        # Update collection to include mesh topology
+        y_data, w_data = [], []
+        for prim in Usd.PrimRange(root_prim):
+            if not prim.IsA(UsdGeom.Mesh): continue
+            path = str(prim.GetPath())
+            binding_api = UsdShade.MaterialBindingAPI(prim)
+            mat, _ = binding_api.ComputeBoundMaterial()
+            search_str = (path + str(mat.GetPath() if mat else "")).lower()
+            
+            is_y = "yellow" in search_str
+            is_w = "white" in search_str
+            if not (is_y or is_w): continue
+            
+            mesh = UsdGeom.Mesh(prim)
+            points_attr = mesh.GetPointsAttr().Get()
+            indices_attr = mesh.GetFaceVertexIndicesAttr().Get()
+            counts_attr = mesh.GetFaceVertexCountsAttr().Get()
+            
+            if not points_attr or not indices_attr: continue
+            
+            xform = xform_cache.GetLocalToWorldTransform(prim)
+            # Transform points to Local Env Frame
+            transformed_pts = []
+            for p in points_attr:
+                pw = xform.Transform(p)
+                transformed_pts.append([pw[0] - env0_origin[0], pw[1] - env0_origin[1], pw[2] - env0_origin[2]])
+            
+            mesh_info = {'points': transformed_pts, 'indices': indices_attr, 'counts': counts_attr}
+            if is_y: y_data.append((path, mesh_info))
+            else: w_data.append((path, mesh_info))
 
         self.raw_yellow_pts = finalize_group(y_data, "Yellow")
         self.raw_white_pts = finalize_group(w_data, "White")
 
-    def _interpolate_path(self, sorted_pts, resolution=0.05):
+    def _interpolate_path(self, sorted_pts, resolution=0.05, max_gap=0.5):
         if len(sorted_pts) < 2: return sorted_pts
         dense_pts = []
         for i in range(len(sorted_pts) - 1):
             p1, p2 = sorted_pts[i], sorted_pts[i+1]
             dist = np.linalg.norm(p2 - p1)
             dense_pts.append(p1)
-            # Only interpolate small gaps (< 0.5m) to avoid jumping across the map
-            if 0.0 < dist < 0.5:
+            # Only bridge small gaps (e.g. vertices in the same mesh)
+            if 0.0 < dist < max_gap:
                 num_steps = int(dist / resolution)
                 for step in range(1, num_steps):
                     dense_pts.append(p1 + (p2 - p1) * (step / num_steps))
@@ -160,7 +212,7 @@ class TrackManager:
                 self.visualizer_waypoints.visualize(to_w(wp_viz, z_off=0.15))
         except: pass
 
-    def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor, target_lane_offset: float = 0.30):
+    def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor, target_lane_offset: float = 0.238):
         self.ensure_synced()
         dists = torch.cdist(pos[:, :2], self.waypoints[:, :2])
         closest_idx = torch.argmin(dists, dim=1)
