@@ -9,20 +9,23 @@ import os
 
 class TrackManager:
     """
-    Manages track markers and provides direct distance-to-boundary queries.
-    Ditches problematic centerline math for robust marker-based termination.
+    Robust Track Manager with VisualizationMarkers and Gap-Filling.
+    Ensures 'Dense Walls' for reliable termination and visible debug spheres.
     """
     def __init__(self, device: str = "cuda:0"):
         self.device = device
         self.waypoints = None
-        self.visualizer = None
-        self.left_visualizer = None
-        self.right_visualizer = None
         
-        self.raw_yellow_pts = None # CPU numpy
-        self.raw_white_pts = None  # CPU numpy
-        self.yellow_tensor = None  # GPU tensor
-        self.white_tensor = None   # GPU tensor
+        # Visualizers (Using reliable USD-based markers)
+        self.visualizer_yellow = None
+        self.visualizer_white = None
+        self.visualizer_waypoints = None
+        
+        # Point groups
+        self.raw_yellow_pts = None 
+        self.raw_white_pts = None  
+        self.yellow_tensor = None  
+        self.white_tensor = None   
         
         self.sync_attempts = 0
         self.max_sync_attempts = 10 
@@ -33,7 +36,7 @@ class TrackManager:
             return
 
         if self.sync_attempts == 0:
-            print(f"[TrackManager] Collecting road markers for boundary detection...")
+            print(f"[TrackManager] Building high-fidelity boundary markers...")
             self.collect_raw_marker_points()
             
             if self.raw_yellow_pts is not None:
@@ -41,16 +44,13 @@ class TrackManager:
             if self.raw_white_pts is not None:
                 self.white_tensor = torch.tensor(self.raw_white_pts, device=self.device, dtype=torch.float32)
             
-            # Load real waypoints for lane-centering
             if os.path.exists(self.wp_path):
-                print(f"[TrackManager] Loading waypoints from {self.wp_path}")
-                wp_data = np.load(self.wp_path)
-                self.waypoints = torch.tensor(wp_data, device=self.device, dtype=torch.float32)
+                self.waypoints = torch.tensor(np.load(self.wp_path), device=self.device, dtype=torch.float32)
             else:
-                print(f"[TrackManager] WARNING: Waypoint file not found at {self.wp_path}. Using fallback.")
                 self.waypoints = torch.tensor([[-16.25, 5.56, -1.57]], device=self.device)
 
-        if self.sync_attempts < 500: # Keep trying to render for longer
+        # Persistent visuals for GUI
+        if self.sync_attempts < 1000:
             self.refresh_visuals()
             self.sync_attempts += 1
 
@@ -58,31 +58,24 @@ class TrackManager:
         import omni.usd
         from pxr import Usd, UsdGeom, UsdShade, Gf
         stage = omni.usd.get_context().get_stage()
-        if stage is None: return
-
         root_prim = stage.GetPrimAtPath("/World/envs/env_0")
         if not root_prim.IsValid(): root_prim = stage.GetPseudoRoot()
-
         xform_cache = UsdGeom.XformCache()
-        try:
-            env0_origin = xform_cache.GetLocalToWorldTransform(root_prim).ExtractTranslation()
-        except:
-            env0_origin = Gf.Vec3d(0,0,0)
+        env0_origin = xform_cache.GetLocalToWorldTransform(root_prim).ExtractTranslation()
 
         y_data, w_data = [], []
+        
         for prim in Usd.PrimRange(root_prim):
             if not prim.IsA(UsdGeom.Mesh): continue
             path = str(prim.GetPath())
             binding_api = UsdShade.MaterialBindingAPI(prim)
-            material, _ = binding_api.ComputeBoundMaterial()
-            mat_path = str(material.GetPath()).lower() if material else ""
+            mat, _ = binding_api.ComputeBoundMaterial()
+            search_str = (path + str(mat.GetPath() if mat else "")).lower()
             
-            search_str = (path + mat_path).lower()
-            is_yellow = "yellow" in search_str
-            is_white = "white" in search_str
-            if not (is_yellow or is_white): continue
+            is_y = "yellow" in search_str
+            is_w = "white" in search_str
+            if not (is_y or is_w): continue
             
-            # Use vertices to handle both small dots and large continuous meshes
             points_attr = UsdGeom.Mesh(prim).GetPointsAttr().Get()
             if not points_attr: continue
             
@@ -90,37 +83,35 @@ class TrackManager:
             for p in points_attr:
                 pw = xform.Transform(p)
                 pl = [pw[0] - env0_origin[0], pw[1] - env0_origin[1], pw[2] - env0_origin[2]]
-                
-                # Store tuple of (path_string, coordinates) for sorting
-                if is_yellow: y_data.append((path, pl))
-                else: w_data.append((path, pl))
+                # GROUND LOCK
+                if -0.05 < pl[2] < 0.1:
+                    if is_y: y_data.append((path, pl))
+                    else: w_data.append((path, pl))
 
-        if y_data: 
-            y_data.sort(key=lambda x: x[0])
-            y_pts_sorted = np.array([x[1] for x in y_data])
-            # Use a slightly larger tolerance for uniqueness to clean up vertex soup
-            _, unique_indices = np.unique(np.round(y_pts_sorted, 3), axis=0, return_index=True)
-            y_pts_unique = y_pts_sorted[np.sort(unique_indices)]
-            self.raw_yellow_pts = self._interpolate_path(y_pts_unique)
-            print(f"[TrackManager] Found {len(y_data)} yellow prims, generated {len(self.raw_yellow_pts)} wall markers.")
+        def finalize_group(data_list, name):
+            if not data_list: return None
+            # Sort by Path to keep sequence
+            data_list.sort(key=lambda x: x[0])
+            pts = np.array([x[1] for x in data_list])
+            _, idx = np.unique(np.round(pts, 3), axis=0, return_index=True)
+            unique_pts = pts[np.sort(idx)]
+            # INCREASE RESOLUTION: 0.05m spacing for "Dense Walls"
+            interpolated = self._interpolate_path(unique_pts, resolution=0.05)
+            print(f"[TrackManager] Finalized {name}: {len(interpolated)} points.")
+            return interpolated
 
-        if w_data: 
-            w_data.sort(key=lambda x: x[0])
-            w_pts_sorted = np.array([x[1] for x in w_data])
-            _, unique_indices = np.unique(np.round(w_pts_sorted, 3), axis=0, return_index=True)
-            w_pts_unique = w_pts_sorted[np.sort(unique_indices)]
-            self.raw_white_pts = self._interpolate_path(w_pts_unique)
-            print(f"[TrackManager] Found {len(w_data)} white prims, generated {len(self.raw_white_pts)} wall markers.")
+        self.raw_yellow_pts = finalize_group(y_data, "Yellow")
+        self.raw_white_pts = finalize_group(w_data, "White")
 
-    def _interpolate_path(self, sorted_pts, resolution=0.1):
-        """Fills gaps between sorted path points."""
+    def _interpolate_path(self, sorted_pts, resolution=0.05):
         if len(sorted_pts) < 2: return sorted_pts
         dense_pts = []
         for i in range(len(sorted_pts) - 1):
             p1, p2 = sorted_pts[i], sorted_pts[i+1]
             dist = np.linalg.norm(p2 - p1)
             dense_pts.append(p1)
-            if 0.0 < dist < 2.0: # Only interpolate reasonable gaps (skip jumps between non-sequential prims)
+            # Only interpolate small gaps (< 0.5m) to avoid jumping across the map
+            if 0.0 < dist < 0.5:
                 num_steps = int(dist / resolution)
                 for step in range(1, num_steps):
                     dense_pts.append(p1 + (p2 - p1) * (step / num_steps))
@@ -128,85 +119,65 @@ class TrackManager:
         return np.array(dense_pts)
 
     def compute_marker_distances(self, pos: torch.Tensor):
-        """Returns distance to closest yellow and white markers (3D)."""
         self.ensure_synced()
-        
-        # Check all 3 axes (X, Y, Z) for high-fidelity boundary checks
+        # High-fidelity 3D check
         dist_y = torch.min(torch.cdist(pos[:, :3], self.yellow_tensor), dim=1)[0]
         dist_w = torch.min(torch.cdist(pos[:, :3], self.white_tensor), dim=1)[0]
-        
         return dist_y, dist_w
 
     def refresh_visuals(self):
-        # Use omni.debugDraw interface for guaranteed visibility in GUI
         try:
-            import omni.debugdraw
-            from pxr import Usd, UsdGeom
-            draw = omni.debugdraw.get_debug_draw_interface()
-            
+            from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
+            import isaaclab.sim as sim_utils
+            from pxr import UsdGeom, Gf, Usd
+            import omni.usd
             stage = omni.usd.get_context().get_stage()
             env0_prim = stage.GetPrimAtPath("/World/envs/env_0")
-            if not env0_prim.IsValid(): return
-            
-            xform = UsdGeom.Xformable(env0_prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
-            origin = xform.ExtractTranslation()
+            origin = UsdGeom.Xformable(env0_prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default()).ExtractTranslation() if env0_prim.IsValid() else Gf.Vec3d(0,0,0)
 
-            if self.raw_yellow_pts is not None:
-                pts = [(p[0]+origin[0], p[1]+origin[1], p[2]+origin[2]+0.1) for p in self.raw_yellow_pts]
-                draw.draw_points(pts, [(1,1,0,1)]*len(pts), [10]*len(pts)) 
-            if self.raw_white_pts is not None:
-                pts = [(p[0]+origin[0], p[1]+origin[1], p[2]+origin[2]+0.1) for p in self.raw_white_pts]
-                draw.draw_points(pts, [(1,1,1,1)]*len(pts), [10]*len(pts))
-        except Exception as e:
-            pass
+            def create_v(path, color, radius=0.05):
+                cfg = VisualizationMarkersCfg(prim_path=path, markers={"dot": sim_utils.SphereCfg(radius=radius, visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=color))})
+                return VisualizationMarkers(cfg)
+
+            def to_w(pts, z_off=0.1):
+                if pts is None: return None
+                w = torch.zeros((len(pts), 3), device=self.device)
+                w[:, 0], w[:, 1], w[:, 2] = torch.tensor(pts[:, 0], device=self.device) + origin[0], torch.tensor(pts[:, 1], device=self.device) + origin[1], torch.tensor(pts[:, 2], device=self.device) + origin[2] + z_off
+                return w
+
+            if self.visualizer_yellow is None: self.visualizer_yellow = create_v("/World/Visuals/YellowSpheres", (1.0, 1.0, 0.0))
+            if self.visualizer_white is None: self.visualizer_white = create_v("/World/Visuals/WhiteSpheres", (1.0, 1.0, 1.0))
+            if self.visualizer_waypoints is None: self.visualizer_waypoints = create_v("/World/Visuals/CyanPath", (0.0, 1.0, 1.0), radius=0.08)
+
+            if self.raw_yellow_pts is not None: self.visualizer_yellow.visualize(to_w(self.raw_yellow_pts))
+            if self.raw_white_pts is not None: self.visualizer_white.visualize(to_w(self.raw_white_pts))
+            if self.waypoints is not None:
+                # IMPORTANT: waypoints are [X, Y, Yaw]. Force Z=0 for visualization.
+                wp_np = self.waypoints.cpu().numpy()
+                wp_viz = np.zeros((len(wp_np), 3))
+                wp_viz[:, :2] = wp_np[:, :2]
+                wp_viz[:, 2] = 0.0 # Force ground level
+                self.visualizer_waypoints.visualize(to_w(wp_viz, z_off=0.15))
+        except: pass
 
     def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor, target_lane_offset: float = 0.30):
-        """
-        Returns distance to lane center and heading error using waypoints.
-        target_lane_offset: Offset from the waypoint (double yellow line) to the lane center.
-                           Negative is Right (for North-facing waypoints).
-        """
         self.ensure_synced()
-
-        # Find closest waypoints
         dists = torch.cdist(pos[:, :2], self.waypoints[:, :2])
         closest_idx = torch.argmin(dists, dim=1)
         closest_wp = self.waypoints[closest_idx]
-
-        # 1. Lateral Error
-        # Vector from waypoint to robot
         wp_to_robot = pos[:, :2] - closest_wp[:, :2]
-        
-        # Waypoint orientation
         wp_yaw = closest_wp[:, 2]
-        
-        # Normal vector to the path (rotate wp_yaw by +90 degrees)
-        # For a right-handed system, if forward is (cos(yaw), sin(yaw)), 
-        # left normal is (-sin(yaw), cos(yaw))
-        normal_x = -torch.sin(wp_yaw)
-        normal_y = torch.cos(wp_yaw)
-        
-        # Dot product with normal gives signed lateral error (positive = left of path)
+        normal_x, normal_y = -torch.sin(wp_yaw), torch.cos(wp_yaw)
         raw_lat_err = wp_to_robot[:, 0] * normal_x + wp_to_robot[:, 1] * normal_y
-        
-        # Apply lane offset (Shift target to center of right lane)
-        lat_err = raw_lat_err - target_lane_offset
-
-        # 2. Heading Error
-        head_err = yaw - wp_yaw
-        # Wrap to [-pi, pi]
+        lat_err, head_err = raw_lat_err - target_lane_offset, yaw - wp_yaw
         head_err = torch.atan2(torch.sin(head_err), torch.cos(head_err))
-        
-        # Handle bi-directional track (allow driving either way)
         import math
         head_err = torch.where(head_err > math.pi/2, head_err - math.pi, head_err)
         head_err = torch.where(head_err < -math.pi/2, head_err + math.pi, head_err)
-
         return lat_err, head_err
 
 _TRACK_MANAGER = None
 def get_track_manager(device: str = "cuda:0"):
     global _TRACK_MANAGER
-    if _TRACK_MANAGER is None:
-        _TRACK_MANAGER = TrackManager(device=device)
+    if _TRACK_MANAGER is None: _TRACK_MANAGER = TrackManager(device=device)
     return _TRACK_MANAGER
