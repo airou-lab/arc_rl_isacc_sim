@@ -197,6 +197,7 @@ def main():
             args_cli.checkpoint,
             env,
             verbose=1,
+            learning_rate=5e-5, # Explicitly override high checkpoint value
             tensorboard_log=os.path.join(log_dir, "tb"),
             seed=args_cli.seed,
             device="cuda"

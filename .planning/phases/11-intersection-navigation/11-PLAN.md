@@ -6,8 +6,8 @@ This plan details the migration of the `HierarchicalPathPlanningPolicy` (HPPP) f
 1.  **Zero-Rewrite Policy Swap**: Plug in the reference HPPP with no logic changes.
 2.  **Telemetry Alignment**: Update `mdp/observations.py` to match the Protocol v2 contract.
 3.  **Brake Support**: Implement `CombinedDriveAction` to handle the new [steer, throttle, brake] action space.
-4.  **Waypoint Supervision**: Hook up `WaypointTrackingWrapper` for auxiliary supervised loss.
-5.  **Robust Termination**: (NEW) Implement dense marker boundaries to prevent model "leakage" through divider lines.
+4.  **Robust Termination**: (NEW) Implement dense marker boundaries to prevent model "leakage" through divider lines.
+5.  **Intersection Navigation**: (NEW Wave 2) Implement semantic filtering and direction-aware resets to allow crossing intersection stop lines.
 
 ---
 
@@ -29,15 +29,16 @@ This plan details the migration of the `HierarchicalPathPlanningPolicy` (HPPP) f
 - [x] **Task 11-10-dense-wall**: Implement marker interpolation in `TrackManager` to create a solid boundary segment.
 - [x] **Task 11-11-normal-spawn**: Implement Raycast-based ground-normal alignment in `events.py` for stable robot spawning.
 - [x] **Task 11-12-centering-fix**: Recalibrate lane offset (0.30m) and spawn (X=-16.26) for optimal centering.
-- [/] **Task 11-14-production-run-v6**: (RUNNING) Current production run with stabilized 5e-5 learning rate.
+- [/] **Task 11-14-production-run-v8**: (RUNNING) Current production run from 3.0M checkpoint.
 
-## 5. Intersection Logic (Wave 2)
-- [ ] **Task 11-15-road-graph**: Implement `RoadGraph` class to handle multi-segment navigation.
-- [ ] **Task 11-16-segment-discovery**: Add auto-discovery of road segments from the USD stage tree.
+## 5. Intersection Navigation (Wave 2)
+- [ ] **Task 11-15-semantic-filtering**: Update `TrackManager.py` to distinguish between `lane_boundary` and `stop_line` based on USD prim attributes.
+- [ ] **Task 11-16-direction-aware-resets**: Modify `terminations.py` to ignore stop-line resets when the robot has forward velocity/intent.
+- [ ] **Task 11-17-road-graph**: Implement `RoadGraph` class to handle multi-segment navigation and segment auto-discovery.
 
 ---
 
 ## Verification Strategy
 - **Perception Check**: Visualise markers in the GUI to confirm `LatErr` matches reality.
-- **Control Check**: Verify that `brake=1.0` results in zero wheel velocity in the GUI telemetry.
-- **Boundary Check**: Use `test_straight_line.py` to confirm the robot resets at the lane edge.
+- **Intersection Check**: Confirm the robot can cross a horizontal white line at an intersection without resetting.
+- **Boundary Check**: Use `test_straight_line.py` to confirm the robot still resets at the side lane edges.
