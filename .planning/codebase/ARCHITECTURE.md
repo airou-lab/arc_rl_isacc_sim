@@ -27,6 +27,12 @@
 - Depends on: `torch`, `isaaclab`, `omni.usd`.
 - Used by: `arcproLab/arcpro_env_cfg.py`.
 
+**Policy Layer (Submodule):**
+- Purpose: Advanced policy architectures and hierarchical logic.
+- Location: `arcproLab/policy_stack/` (Git Submodule).
+- Contains: ROS2-ready inference servers, standalone `Worker-Driver` implementations, and reusable policy wrappers.
+- Note: This submodule is shared with the physical robot's deployment stack.
+
 **Asset Layer:**
 - Purpose: Provides the physical and visual representation of the world.
 - Location: `openStreetUSD/`, `arcproLab/assets/robot/`.

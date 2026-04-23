@@ -8,6 +8,12 @@
 - Service: Simulation engine for physics, rendering, and USD management.
 - SDK: `omni.isaac.core`, `omni.kit.app`.
 
+## Internal Submodules
+
+**ARCPro RL Policy Stack (`arcproLab/policy_stack`):**
+- Purpose: Shared repository for advanced policy logic, hierarchical architectures, and ROS2 deployment wrappers.
+- Syncing: Managed as a git submodule to ensure parity between simulation and physical hardware deployment.
+
 ## Data Storage
 
 **USD Framework (Primary Source of Truth):**
