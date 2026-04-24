@@ -60,3 +60,11 @@
   - Terminations are triggered if the robot center is < 0.1m from any marker point.
   - This removes all dependency on "centerline" or "lane" ordering math.
 - **Result**: Verified in GUI that the robot drives through the lane and only resets upon physical boundary contact.
+
+### 2026-04-24: Functional Intersection Navigation (Wave 2)
+- **Achievement**: Implemented "Permeable Gate" logic for intersections.
+- **Solution**: 
+    - **Semantic Filtering**: Refactored `TrackManager` to use `primvars:ds_type` from the USD to distinguish between solid walls and stop lines.
+    - **Intent Filtering**: Updated `terminations.py` to allow crossing stop lines ONLY if the robot has forward velocity (>0.1m/s) and correct alignment.
+    - **RoadGraph Bridge**: Created `RoadGraph` class to provide the `turn_token` (-1, 0, 1) and `go_signal` to the policy via `observations.py`.
+- **Result**: Verified via `test_intersection_crossing.py` that the robot can "punch through" intersection gates without resetting while still honoring lane boundaries.

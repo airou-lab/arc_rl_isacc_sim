@@ -32,9 +32,9 @@ This plan details the migration of the `HierarchicalPathPlanningPolicy` (HPPP) f
 - [/] **Task 11-14-production-run-v8**: (RUNNING) Current production run from 3.0M checkpoint.
 
 ## 5. Intersection Navigation (Wave 2)
-- [ ] **Task 11-15-semantic-filtering**: Update `TrackManager.py` to distinguish between `lane_boundary` and `stop_line` based on USD prim attributes.
-- [ ] **Task 11-16-direction-aware-resets**: Modify `terminations.py` to ignore stop-line resets when the robot has forward velocity/intent.
-- [ ] **Task 11-17-road-graph**: Implement `RoadGraph` class to handle multi-segment navigation and segment auto-discovery.
+- [x] **Task 11-15-semantic-filtering**: (COMPLETED) Update `TrackManager.py` to distinguish between `lane_boundary` and `stop_line` based on USD prim attributes.
+- [x] **Task 11-16-direction-aware-resets**: (COMPLETED) Modify `terminations.py` to ignore stop-line resets when the robot has forward velocity/intent.
+- [x] **Task 11-17-road-graph**: (COMPLETED) Implement `RoadGraph` class to handle multi-segment navigation and segment auto-discovery.
 
 ---
 

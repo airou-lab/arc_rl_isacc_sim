@@ -17,9 +17,9 @@ Achieved True 1.0x Metric Scale. Completed initial PPO retraining which identifi
 
 ## Active Todos (Queue)
 1. [/] **11-14-production-run-v8**: (PAUSED) Retraining HPPP.
-2. [ ] **11-15-wave-2-intersections**: (IN PROGRESS) Ground-locking fixed, but intersection classification and path continuity still need work.
-   - Status: Cyan spheres height fix applied; markers now dense (0.05m).
-3. [ ] **11-16-road-graph**: Implement `RoadGraph` for multi-segment navigation.
+2. [x] **11-15-wave-2-intersections**: (COMPLETED) Functional intersection crossing and RoadGraph bridge.
+3. [ ] **12-01-turning-mission**: (PLANNED) Execute first autonomous turn via RoadGraph token.
+4. [ ] **13-01-live-gui**: (PLANNED) Implement visual diagnostics dashboard.
 
 ## Active Issues
 None.
@@ -28,6 +28,7 @@ None.
 - [x] Phase 11: 1.0x Baseline Retraining & Perception Fixes.
 - [x] Phase 11: Hierarchical Policy Integration (Submodule, Protocol v2, Bridges).
 - [x] Phase 11: Core Perception Debug (Camera tilt/Heading math).
+- [x] Phase 11: Wave 2 Intersection Navigation (Permeable gates, Intent filtering).
 
 ## Blockers
 None.
