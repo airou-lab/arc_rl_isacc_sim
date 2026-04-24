@@ -33,7 +33,12 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     # Get heading error
     _, head_err = tm.compute_errors(asset.data.root_pos_w[:, :2] - env.scene.env_origins[:, :2], yaw)
     
-    # Only reset on Gate if alignment is poor (sliding into it)
+    # Speed/Intent check (Task 11-16)
+    # Only allow gate permeability if moving forward > 0.1m/s
+    speed = asset.data.root_lin_vel_b[:, 0]
+    moving_forward = speed > 0.1
+    
+    # Only reset on Gate if alignment is poor (sliding into it) OR if we are stationary
     # Alignment: cos(head_err) > 0.7 means robot is facing roughly forward/backward along the path
     # We also check sin(head_err) to allow 90 degree crossing (perpendicular gates in intersections)
     cos_err = torch.cos(head_err)
@@ -44,9 +49,9 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     # facing 90 or 270 (crossing perpendicular stop lines)
     aligned_lat = torch.abs(sin_err) > 0.707
     
-    alignment_ok = aligned_long | aligned_lat
+    alignment_ok = (aligned_long | aligned_lat) & moving_forward
     
-    # A gate hit is ONLY a termination if alignment is NOT okay
+    # A gate hit is ONLY a termination if alignment/intent is NOT okay
     gate_hit = gate_contact & (~alignment_ok)
     
     return boundary_hit | gate_hit

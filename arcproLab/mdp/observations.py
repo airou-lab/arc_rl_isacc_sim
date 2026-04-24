@@ -26,9 +26,14 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     env_origins = env.scene.env_origins
     local_pos = asset.data.root_pos_w - env_origins
 
-    # Indices 0-2: Navigation intent (Mocked for Phase 11)
-    obs[:, 0] = 0.0  # IDX_TURN_TOKEN (STRAIGHT)
-    obs[:, 1] = 1.0  # IDX_GO_SIGNAL (GO)
+    # Indices 0-2: Navigation intent (Task 11-17: RoadGraph)
+    from mdp.road_graph import get_road_graph
+    rg = get_road_graph(device=env.device)
+    rg.update(env)
+    turn_token, go_signal = rg.get_nav_commands()
+
+    obs[:, 0] = turn_token
+    obs[:, 1] = go_signal
     obs[:, 2] = 0.0  # IDX_GOAL_DIST
 
     # Index 3: Forward Speed (m/s) - Local X velocity
