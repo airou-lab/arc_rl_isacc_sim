@@ -15,6 +15,7 @@ parser = argparse.ArgumentParser(description="Verify the Hierarchical SB3 policy
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
 parser.add_argument("--max_steps", type=int, default=10000, help="Maximum number of simulation steps.")
 parser.add_argument("--checkpoint", type=str, required=True, help="Path to the SB3 checkpoint (.zip).")
+parser.add_argument("--debug", action="store_true", help="Enable debug visualizations for markers and track.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments

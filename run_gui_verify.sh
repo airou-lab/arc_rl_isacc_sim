@@ -28,4 +28,5 @@ export DISPLAY=:0
 # Run the verification script with GUI enabled
 $ISAACLAB_PATH -p "$PROJECT_DIR/arcproLab/scripts/verify_policy.py" \
     --checkpoint "$LATEST_CHECKPOINT" \
-    --num_envs 1
+    --num_envs 1 \
+    --debug
