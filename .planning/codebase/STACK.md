@@ -1,66 +1,66 @@
 # Technology Stack
 
-**Analysis Date:** 2025-05-21
+**Analysis Date:** 2024-04-23
 
 ## Languages
 
 **Primary:**
-- Python 3.10+ - All RL logic, environment configuration, and training scripts.
+- Python 3.10+ - Core environment, training scripts, and MDP logic. Used throughout `arcproLab/`.
+
+**Secondary:**
+- USDA/USD (Universal Scene Description) - Asset definition for robots and environments in `openStreetUSD/` and `arcproLab/assets/`.
 
 ## Runtime
 
 **Environment:**
-- NVIDIA Isaac Sim 4.0+ - Primary simulation engine.
-- NVIDIA Isaac Lab (formerly Orbit) - Framework for modular RL environments.
+- NVIDIA Isaac Sim 4.0+ / Isaac Lab - Robotics simulation platform and RL framework.
 
 **Package Manager:**
-- `pip` - Standard Python dependency management.
-- Conda/Mamba - Used to manage the Isaac Sim environment.
-- Lockfile: `requirements.txt` (present).
+- pip - Standard Python package management.
+- Lockfile: `requirements.txt` (present in project root).
 
 ## Frameworks
 
 **Core:**
-- PyTorch 2.0+ - Neural network backend for RL policies.
-- Stable Baselines3 (SB3) - Implementation of PPO for training.
+- Isaac Lab (formerly Orbit) - Manager-based RL framework used in `arcproLab/arcpro_env_cfg.py`.
+- PyTorch - Deep learning backend for RL policies.
 
-**Simulation:**
-- NVIDIA PhysX - Physics engine (configured for TGS solver, CCD enabled).
-- OpenUSD - Data format for assets and environment (`.usd`, `.usda`).
+**RL/Training:**
+- Stable Baselines 3 (SB3) - RL algorithm implementations.
+- SB3-Contrib - Used for `RecurrentPPO` in `arcproLab/scripts/train_policy.py`.
 
 **Build/Dev:**
-- `AppLauncher` (Isaac Lab) - Manages Isaac Sim process lifecycle.
+- NVIDIA Omniverse Kit - Underlying platform for Isaac Sim.
 
 ## Key Dependencies
 
 **Critical:**
-- `torch` - Vectorized math and neural networks.
-- `isaaclab` - Scene, Observation, Reward, and Action management.
-- `numpy` - Data processing for scripts.
+- `isaaclab` - Core environment and manager abstractions.
+- `stable-baselines3` - Policy training and execution.
+- `torch` - Tensor computations and neural networks.
+- `numpy` - Path processing and math utilities.
 
 **Infrastructure:**
-- `omni.usd` / `pxr.Usd` - Low-level manipulation of the simulation stage and marker discovery.
-- `PIL` (Pillow) - Image capture and verification.
+- `omni.usd` - Python API for manipulating USD stages (used in `arcproLab/mdp/track_manager.py`).
 
 ## Configuration
 
 **Environment:**
-- Isaac Sim Python App - Scripts must be launched via the Isaac Sim `python.sh` wrapper.
-- Environment variables: `ISAACSIM_PATH`, `OMNI_KIT_PATH`.
+- Configured via `ManagerBasedRLEnvCfg` and `@configclass` decorators.
+- Example: `arcproLab/arcpro_env_cfg.py`.
 
 **Build:**
-- `arcproLab/arcpro_env_cfg.py` - Core simulation and MDP configuration.
+- No explicit build step; Python scripts run directly within Isaac Sim environment.
 
 ## Platform Requirements
 
 **Development:**
-- Ubuntu 22.04+ (WSL2 supported).
-- NVIDIA GPU (RTX 3080+ recommended) with `nvidia-driver-535+`.
-- CUDA 12.1+.
+- Ubuntu 22.04 (standard for Isaac Sim).
+- NVIDIA GPU (RTX 3080+ recommended) with latest drivers.
 
 **Production:**
-- Headless training on Linux servers with GPU acceleration.
+- Isaac Sim Docker or local installation.
 
 ---
 
-*Stack analysis: 2025-05-21*
+*Stack analysis: 2024-04-23*

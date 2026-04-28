@@ -1,84 +1,82 @@
 # Coding Conventions
 
-**Analysis Date:** 2025-05-21
+**Analysis Date:** 2024-04-23
 
 ## Naming Patterns
 
 **Files:**
-- [snake_case.py]: All modules and scripts.
-- [snake_case_1x.usda]: Assets specifically scaled to 1.0x metric units.
+- Snake Case: `arcpro_env_cfg.py`, `track_manager.py`.
 
 **Functions:**
-- [snake_case]: `get_telemetry_vector()`, `white_line_contact()`, `compute_marker_distances()`.
+- Snake Case: `speed_reward(env, ...)`, `get_telemetry_vector(...)`.
 
 **Variables:**
-- [snake_case]: `dist_y`, `dist_w`, `marker_hit`, `local_pos`.
-- Legacy names like `lat_err` and `head_err` may still appear in `env.extras` for compatibility but are deprecated.
+- Snake Case: `lat_err`, `head_err`, `turn_token`.
 
 **Types:**
-- Use [CamelCase] for `@configclass` definitions: `ARCProEnvCfg`.
+- PascalCase for Config classes: `ARCProEnvCfg`, `ARCProSceneCfg`.
+- PascalCase for Managers: `TrackManager`, `RoadGraph`.
 
 ## Code Style
 
 **Formatting:**
-- Standard PEP8.
-- Indentation: 4 spaces.
+- Follows Isaac Lab standards (largely PEP8).
+- Copyright headers included in most core files.
 
 **Linting:**
-- Syntax verification via GitHub Actions.
+- Configured in `.github/workflows/ci.yml`.
+- Standard Python linting (flake8/black/isort usually assumed in Isaac projects).
 
 ## Import Organization
 
 **Order:**
-1. Standard library (`os`, `sys`, `math`).
-2. Third-party (`torch`, `numpy`).
-3. Omniverse/Isaac (`omni`, `pxr`, `isaaclab`).
-4. Internal modules (`mdp.*`, `arcpro_env_cfg`).
+1. Standard Library (`os`, `sys`, `math`).
+2. Major Frameworks (`torch`, `numpy`).
+3. Isaac Lab / Omniverse (`isaaclab.*`, `omni.*`).
+4. Project Local Modules (`arcpro_robot_cfg`, `mdp.*`).
 
 **Path Aliases:**
-- Use `sys.path.append(os.path.dirname(os.path.abspath(__file__)))` at the top of configuration files to allow local imports.
+- `mdp` is often imported as a local package within `arcproLab`.
+- `sys.path.append` is used in several scripts to ensure cross-package visibility (e.g., `arcproLab/arcpro_env_cfg.py`).
 
 ## Error Handling
 
 **Patterns:**
-- **Zero-Masking**: Always mask NaNs in observation tensors (`obs[nan_mask] = 0.0`).
-- **Vision-Only Masking**: Explicitly zero out telemetry indices 8 & 9 in `observations.py` to force vision reliance.
-- **Grace Periods**: Use `env.episode_length_buf > 20` to allow physics to settle before applying strict terminations.
+- **NaN Safeguards:** Mandatory in reward and observation functions to prevent policy divergence.
+- **Existence Checks:** `if not root_prim.IsValid(): ...` when interacting with the USD stage.
+- **Graceful Failures:** Scripts like `train_policy.py` use `try-except` blocks for non-critical components like action history.
 
 ## Logging
 
-**Framework:**
-- `print()` for real-time termination reasons (e.g., "[TERMINATION] Yellow Boundary Hit!").
-- `env.extras` for storing raw proximity data used by rewards and terminations.
+**Framework:** `console` and `Tensorboard`.
+
+**Patterns:**
+- **Debug Flags:** `TrackManager` uses a `--debug` CLI flag to toggle expensive visualization markers.
+- **Periodic Logging:** Telemetry debug prints in `observations.py` are throttled (e.g., `episode_length_buf[0] % 10 == 0`).
 
 ## Comments
 
 **When to Comment:**
-- Document termination thresholds (e.g., "Reset if robot center is within 0.1m of any marker").
-- Explain USD stage traversal logic in `TrackManager`.
+- Complexity: Explain geometric calculations (e.g., yaw from quaternion).
+- Calibration: Document scale changes (e.g., 8x to 1x camera offsets).
 
 **JSDoc/TSDoc:**
-- Use standard docstrings for all MDP functions.
+- Python Docstrings (`"""Docstring"""`) used for classes and main functions.
 
 ## Function Design
 
-**Size:**
-- Keep MDP functions (rewards, terminations) focused and under 50 lines.
+**Size:** Preference for small, focused functions in `mdp/`.
 
-**Parameters:**
-- Primary parameter is always `env: ManagerBasedRLEnv`.
+**Parameters:** Manager functions typically take `env: ManagerBasedRLEnv` as the first argument.
 
-**Return Values:**
-- MDP functions MUST return `torch.Tensor` of shape `(num_envs,)`.
+**Return Values:** MDP manager terms MUST return `torch.Tensor` of shape `(num_envs, ...)`.
 
 ## Module Design
 
-**Exports:**
-- Group functional logic in `arcproLab/mdp/`.
+**Exports:** Standard Python module exports.
 
-**Config Classes:**
-- Inheritance-based configuration using `replace()` for specific variations.
+**Barrel Files:** `arcproLab/mdp/__init__.py` used to aggregate MDP terms.
 
 ---
 
-*Convention analysis: 2025-05-21*
+*Convention analysis: 2024-04-23*
