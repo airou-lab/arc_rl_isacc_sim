@@ -222,32 +222,10 @@ def main():
         )
 
     # 8. Callbacks
-    class RewardLoggerCallback(BaseCallback):
-        def __init__(self, verbose: int = 0):
-            super().__init__(verbose)
-        
-        def _on_step(self) -> bool:
-            if self.n_calls % 1000 == 0:
-                info = self.locals.get("infos", [{}])[0]
-                ep_rew = info.get("episode", {}).get("r", 0.0)
-                ep_len = info.get("episode", {}).get("l", 0)
-                print(f"[PROGRESS] Step {self.n_calls} | EpRew: {ep_rew:.2f} | EpLen: {ep_len}")
-                sys.stdout.flush()
-            return True
-
-    class SaveVecNormalizeCallback(BaseCallback):
-        def __init__(self, save_path: str, save_freq: int, verbose: int = 0):
-            super().__init__(verbose)
-            self.save_path = save_path
-            self.save_freq = save_freq
-
-        def _on_step(self) -> bool:
-            if self.n_calls % self.save_freq == 0:
-                self.training_env.save(os.path.join(self.save_path, "vec_normalize.pkl"))
-            return True
-
-    checkpoint_callback = CheckpointCallback(save_freq=31250, save_path=log_dir, name_prefix="model")
-    vec_norm_callback = SaveVecNormalizeCallback(save_path=log_dir, save_freq=31250)
+    # save_freq is per vectorized step. 1M / num_envs = frequency.
+    save_freq = max(1, 1000000 // args_cli.num_envs)
+    checkpoint_callback = CheckpointCallback(save_freq=save_freq, save_path=log_dir, name_prefix="model")
+    vec_norm_callback = SaveVecNormalizeCallback(save_path=log_dir, save_freq=save_freq)
     reward_logger_callback = RewardLoggerCallback()
 
     # 9. Train

@@ -14,7 +14,7 @@ from isaaclab.app import AppLauncher
 parser = argparse.ArgumentParser(description="Verify the Hierarchical SB3 policy in the Isaac Lab environment.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
 parser.add_argument("--max_steps", type=int, default=10000, help="Maximum number of simulation steps.")
-parser.add_argument("--checkpoint", type=str, required=True, help="Path to the SB3 checkpoint (.zip).")
+parser.add_argument("--checkpoint", type=str, default=None, help="Path to the SB3 checkpoint (.zip).")
 parser.add_argument("--debug", action="store_true", help="Enable debug visualizations for markers and track.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -156,21 +156,27 @@ def main():
     env = HPPPDirectBridge(env)
     
     # 4. Load Normalization stats
-    checkpoint_dir = os.path.dirname(args_cli.checkpoint)
-    norm_file = os.path.join(checkpoint_dir, "vec_normalize.pkl")
-    if os.path.exists(norm_file):
-        print(f"Loading normalization stats from: {norm_file}")
-        env = VecNormalize.load(norm_file, env)
-        env.training = False
-        env.norm_reward = False
+    if args_cli.checkpoint:
+        checkpoint_dir = os.path.dirname(args_cli.checkpoint)
+        norm_file = os.path.join(checkpoint_dir, "vec_normalize.pkl")
+        if os.path.exists(norm_file):
+            print(f"Loading normalization stats from: {norm_file}")
+            env = VecNormalize.load(norm_file, env)
+            env.training = False
+            env.norm_reward = False
+        else:
+            print(f"Warning: No normalization stats found at {norm_file}. Using defaults.")
+            env = VecNormalize(env, norm_obs=True, norm_reward=False, clip_obs=10.)
+        
+        # 5. Load model
+        print(f"Loading Hierarchical SB3 policy from: {args_cli.checkpoint}")
+        model = RecurrentPPO.load(args_cli.checkpoint, env=env, device="cuda" if torch.cuda.is_available() else "cpu")
+        print("Policy loaded.")
     else:
-        print(f"Warning: No normalization stats found at {norm_file}. Using defaults.")
+        print("No checkpoint provided. Running with dummy policy only.")
+        model = None
+        # Still wrap in VecNormalize for observation consistency if needed, or just skip
         env = VecNormalize(env, norm_obs=True, norm_reward=False, clip_obs=10.)
-    
-    # 5. Load model
-    print(f"Loading Hierarchical SB3 policy from: {args_cli.checkpoint}")
-    model = RecurrentPPO.load(args_cli.checkpoint, env=env, device="cuda" if torch.cuda.is_available() else "cpu")
-    print("Policy loaded.")
     
     # 6. Reset environment
     print("Resetting environment...")
@@ -188,12 +194,18 @@ def main():
     try:
         while simulation_app.is_running() and count < max_steps:
             # Predict action with LSTM states
-            actions, lstm_states = model.predict(
-                obs, 
-                state=lstm_states, 
-                episode_start=episode_starts, 
-                deterministic=True
-            )
+            if model is not None:
+                actions, lstm_states = model.predict(
+                    obs, 
+                    state=lstm_states, 
+                    episode_start=episode_starts, 
+                    deterministic=True
+                )
+            else:
+                # Fallback dummy forward-crawl if no model is loaded
+                actions = np.zeros((args_cli.num_envs, 3), dtype=np.float32)
+                actions[:, 1] = 0.3 # Forward
+                lstm_states = None
             
             # Step environment
             obs, rewards, dones, infos = env.step(actions)

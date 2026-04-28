@@ -28,7 +28,7 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     final_pos = torch.zeros((len(env_ids), 3), device=env.device)
     final_pos[:, 0] = env_origins[:, 0] + local_spawn_x
     final_pos[:, 1] = env_origins[:, 1] + local_spawn_y
-    final_pos[:, 2] = env_origins[:, 2] + 0.14 # Clean drop height
+    final_pos[:, 2] = env_origins[:, 2] + 0.08 # Lower default drop height
 
     # 2. Base rotation (Facing South)
     quats = torch.zeros((len(env_ids), 4), device=env.device)
@@ -46,7 +46,7 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
 
         if hit["hit"]:
             # Snap Z to road
-            final_pos[i, 2] = hit["position"][2] + 0.08
+            final_pos[i, 2] = hit["position"][2] + 0.04 # Lower snap height
             
             # Align orientation to ground normal
             normal = hit["normal"]

@@ -99,21 +99,6 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         data_types=["rgb"], width=160, height=90,
     )
 
-    # Camera Visual Helper (Invisible to sensors, visible in GUI)
-    camera_cone = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraVisualCone",
-        spawn=sim_utils.ConeCfg(
-            func=arcpro_spawner.spawn_guide_cone,
-            radius=0.03,
-            height=0.1,
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 1.0), opacity=0.5),
-        ),
-        init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.35, 0.0, 0.16), # Slightly in front of camera lens
-            rot=(0.7071, 0.0, 0.7071, 0.0) # Point along X-axis (Forward)
-        ),
-    )
-
     # Contact Sensor: Detect chassis collisions (crashes)
     contact_forces = ContactSensorCfg(
         prim_path="{ENV_REGEX_NS}/Robot/Chassis",
