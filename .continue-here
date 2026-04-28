@@ -1,0 +1,4 @@
+Execute Phase 13: Live Policy GUI (Task 13-01: Shared Memory Bridge).
+
+The user wants to implement a graph view to see the rewards, learning over time, and policy thought processes. The plan is outlined in `.planning/phases/13-live-policy-gui/13-PLAN.md`.
+We are ready to start coding `arcproLab/mdp/visual_analytics.py` to add the `multiprocessing.shared_memory` data pipe for Phase 13.

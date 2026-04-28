@@ -1,0 +1,11 @@
+services:
+  tensorboard:
+    build: .
+    container_name: arcpro-tensorboard
+    restart: unless-stopped
+    ports:
+      - "6006:6006"
+    volumes:
+      # Mount the logs directory relative to this docker-compose file (one level up)
+      - ../logs:/logs:ro
+    command: ["--logdir", "/logs", "--host", "0.0.0.0", "--reload_multifile=true", "--reload_interval=15"]
