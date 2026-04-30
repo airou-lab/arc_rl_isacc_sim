@@ -1,6 +1,6 @@
 # Codebase Structure
 
-**Analysis Date:** 2024-04-23
+**Analysis Date:** 2026-04-29
 
 ## Directory Layout
 
@@ -23,6 +23,9 @@ arcpro_rl_isacc_sim/
 ├── logs/                   # Training logs and checkpoints
 ├── docs/                   # Project documentation
 └── .planning/              # Project planning and codebase maps
+    ├── codebase/           # Architecture and codebase maps
+    ├── research/           # Long-form research documents
+    └── todos/              # Targeted tasks and associated research
 ```
 
 ## Directory Purposes
@@ -34,7 +37,7 @@ arcpro_rl_isacc_sim/
 
 **arcproLab/mdp/:**
 - Purpose: "Brain" of the environment dynamics and observation space.
-- Contains: Logic for calculating rewards, errors, and intent.
+- Contains: Logic for calculating rewards, errors, and intent. Tracks boundaries and paths (potentially caching `.npy` files for performance).
 - Key files: `track_manager.py`, `observations.py`.
 
 **arcproLab/scripts/:**
@@ -49,6 +52,11 @@ arcpro_rl_isacc_sim/
 **policy_stack/:**
 - Purpose: High-level policy architecture.
 - Contains: Hierarchical PPO implementations and feature extractors.
+
+**.planning/todos/:**
+- Purpose: Individual tasks for project execution and specific sub-tasks mapping to research.
+- Contains: `.md` tasks and associated `*-RESEARCH.md` investigations.
+- Key files: `14-01-RESEARCH.md`, `14-02-RESEARCH.md`, `14-03-RESEARCH.md`.
 
 ## Key File Locations
 
@@ -98,4 +106,4 @@ arcpro_rl_isacc_sim/
 
 ---
 
-*Structure analysis: 2024-04-23*
+*Structure analysis: 2026-04-29*

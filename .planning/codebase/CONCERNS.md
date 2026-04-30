@@ -1,26 +1,28 @@
 # Codebase Concerns
 
-**Analysis Date:** 2024-04-23
+**Analysis Date:** 2026-04-29
 
 ## Tech Debt
 
-**USD Scaling Hack:**
+**USD Scaling Hack (Tracked: 14-01):**
 - Issue: The track USD is scaled by `0.125` in the environment config to match the 1.0x metric robot. This implies the original USD was authored at 8x scale.
-- Files: `arcproLab/arcpro_env_cfg.py`
+- Files: `arcproLab/arcpro_env_cfg.py`, `openStreetUSD/no_graph_sim_clean_1x.usda`
 - Impact: Confusion regarding "true" metric units. If the USD is ever re-exported at 1.0x, the environment will break.
-- Fix approach: Flatten the track USD to 1.0x scale and remove the config-level scaling.
+- Fix approach: Flatten the track USD to natively be 1.0x metric scale and remove the config-level scaling `scale=(0.125, 0.125, 0.125)`.
+- Reference: `.planning/todos/14-01-RESEARCH.md`
+
+**Telemetry Vector Placeholders (Tracked: 14-03):**
+- Issue: Index 10 (Curvature/Kappa) is hardcoded to 0.0.
+- Files: `arcproLab/mdp/observations.py`, `arcproLab/mdp/track_manager.py`
+- Impact: Policy lacks awareness of upcoming track geometry, limiting proactive steering on turns.
+- Fix approach: Implement curvature calculation (`kappa = d_theta / d_s`) in `TrackManager` using a ~2.0m lookahead over track waypoints.
+- Reference: `.planning/todos/14-03-RESEARCH.md`
 
 **RoadGraph Placeholder:**
 - Issue: `RoadGraph` currently returns a constant "Straight" intent.
 - Files: `arcproLab/mdp/road_graph.py`
 - Impact: Robot cannot navigate intersections or follow missions.
 - Fix approach: Implement the trigger-based decision logic as planned in Phase 11.
-
-**Telemetry Vector Placeholders:**
-- Issue: Index 10 (Curvature/Kappa) is hardcoded to 0.0.
-- Files: `arcproLab/mdp/observations.py`
-- Impact: Policy lacks awareness of upcoming track geometry.
-- Fix approach: Implement curvature calculation in `TrackManager`.
 
 ## Known Bugs
 
@@ -41,11 +43,12 @@
 
 ## Performance Bottlenecks
 
-**TrackManager Boundary Collection:**
-- Problem: Collecting 10k+ points from USD stage on startup.
+**TrackManager Boundary Collection (Tracked: 14-02):**
+- Problem: Collecting 10k+ points from USD stage on startup causes a 5-10 second blocking delay.
 - Files: `arcproLab/mdp/track_manager.py`
-- Cause: Iterating through every mesh vertex in the track.
-- Improvement path: Cache the boundary tensors to `.pt` or `.npy` files instead of re-calculating on every run.
+- Cause: Iterating through every mesh vertex in the track USD.
+- Improvement path: Cache the extracted boundaries and gates to `.npy` files instead of re-calculating on every run, using a `--rebuild_track_cache` mechanism.
+- Reference: `.planning/todos/14-02-RESEARCH.md`
 
 **Marker Visualization:**
 - Problem: Drawing 1000s of spheres in the GUI.
@@ -88,4 +91,4 @@
 
 ---
 
-*Concerns audit: 2024-04-23*
+*Concerns audit: 2026-04-29*

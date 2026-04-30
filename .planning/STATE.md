@@ -19,6 +19,9 @@ Completed Phase 11 Intersection Logic (Wave 2) and researched Phase 12 Decentral
 2. [ ] **13-02-policy-dashboard**: (PLANNED) Build `policy_dashboard.py` to render the Graph View.
 3. [ ] **12-01-turning-mission**: (PAUSED) Execute first autonomous turn via RoadGraph token.
 4. [ ] **update-log-paths**: (PLANNED) Update script file paths to route all new `.log` outputs to the root `logs/` directory.
+5. [ ] **14-01-usd-asset-flattening**: (PLANNED) Remove the 0.125 scaling hack from the USD track asset.
+6. [ ] **14-02-trackmanager-caching**: (PLANNED) Cache TrackManager boundary points to .npy files to fix startup performance bottleneck.
+7. [ ] **14-03-telemetry-curvature**: (PLANNED) Implement path curvature (Kappa) calculation for the observation vector.
 
 ## Active Issues
 None.
