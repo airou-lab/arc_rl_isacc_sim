@@ -68,3 +68,11 @@
     - **Intent Filtering**: Updated `terminations.py` to allow crossing stop lines ONLY if the robot has forward velocity (>0.1m/s) and correct alignment.
     - **RoadGraph Bridge**: Created `RoadGraph` class to provide the `turn_token` (-1, 0, 1) and `go_signal` to the policy via `observations.py`.
 - **Result**: Verified via `test_intersection_crossing.py` that the robot can "punch through" intersection gates without resetting while still honoring lane boundaries.
+
+### 2026-04-29: Episode Logging Display Bug (EpRew/EpLen = 0.00)
+- **Problem**: During training, the console output continuously displayed `EpRew: 0.00 | EpLen: 0`, giving the false impression that the robot was failing instantly without accumulating rewards.
+- **Root Cause**: The Stable Baselines 3 (SB3) `RewardLoggerCallback` relies on the `episode` dictionary key being present within the environment's `info` array. This key is specifically injected by SB3's `Monitor` wrapper (or `VecMonitor` for vectorized environments) upon episode completion. Because we were wrapping our custom `HPPPDirectBridge` with `VecNormalize` but omitted `VecMonitor`, the statistics were never injected into the `info` dict.
+- **Solution**: 
+    - Imported `VecMonitor` from `stable_baselines3.common.vec_env`.
+    - Wrapped the environment `env = VecMonitor(env)` immediately after the `HPPPDirectBridge` instantiation and before `VecNormalize`.
+- **Result**: `EpRew` and `EpLen` are now correctly calculated and populated in the console during the training run.
