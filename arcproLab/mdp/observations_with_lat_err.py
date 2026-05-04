@@ -50,7 +50,7 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     from mdp.track_manager import get_track_manager
     tm = get_track_manager(device=env.device)
 
-    lat_err, head_err = tm.compute_errors(local_pos, yaw)    
+    lat_err, head_err, _ = tm.compute_errors(local_pos, yaw)    
     
     # Distance Tracking
     if "distance" not in env.extras:

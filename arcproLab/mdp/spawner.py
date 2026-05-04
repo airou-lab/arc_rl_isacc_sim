@@ -47,10 +47,17 @@ def spawn_f1tenth(
             # print(f"[Spawner] Checking child: {child_name}")
             for pattern, mass in mass_overrides.items():
                 if re.match(pattern, child_name):
-                    # Apply mass to this specific prim
+                    # Apply mass override
                     mass_cfg = sim_utils.MassPropertiesCfg(mass=mass)
                     schemas.define_mass_properties(str(child.GetPath()), mass_cfg, stage)
-                    # print(f"[Spawner] SUCCESS: Applied mass {mass} to {child.GetPath()}")
+                    
+                    # Lower Center of Mass to make the robot bottom-heavy and prevent flipping
+                    from pxr import UsdPhysics, Gf
+                    mass_api = UsdPhysics.MassAPI.Apply(child)
+                    # Move CoM down by 5cm relative to the prim origin
+                    mass_api.CreateCenterOfMassAttr().Set(Gf.Vec3f(0.0, 0.0, -0.05))
+                    
+                    # print(f"[Spawner] SUCCESS: Applied mass {mass} and lowered CoM for {child.GetPath()}")
                     break
                     
     return prim

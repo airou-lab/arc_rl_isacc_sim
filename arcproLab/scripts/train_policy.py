@@ -47,7 +47,7 @@ if POLICY_STACK_DIR not in sys.path:
 
 from sb3_contrib import RecurrentPPO
 from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
-from stable_baselines3.common.vec_env import VecNormalize, VecEnv
+from stable_baselines3.common.vec_env import VecNormalize, VecEnv, VecMonitor
 
 from isaaclab.envs import ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
@@ -90,9 +90,11 @@ class HPPPDirectBridge(VecEnv):
         
         self.render_mode = None
         self.metadata = {"render_modes": []}
+        self.prev_action = torch.zeros((self.num_envs, 3), device=self.device)
 
     def reset(self):
         obs_dict, info = self.venv.reset()
+        self.prev_action.zero_()
         return self._process_obs(obs_dict)
 
     def step_async(self, actions):
@@ -100,8 +102,15 @@ class HPPPDirectBridge(VecEnv):
 
     def step_wait(self):
         actions_torch = torch.from_numpy(self._async_actions).to(self.device)
+        
+        # Store prev_action for the reward function (in env.extras)
+        self.venv.extras["prev_action"] = self.prev_action.clone()
+        
         obs_dict, rewards, terminated, truncated, info = self.venv.step(actions_torch)
         dones = (terminated | truncated).cpu().numpy()
+        
+        # Update prev_action for next step
+        self.prev_action.copy_(actions_torch)
         
         # SB3 expects info to be a list of dicts, one for each env
         infos = [{} for _ in range(self.num_envs)]
@@ -163,6 +172,9 @@ def main():
     # 4. Bridge to SB3 and HPPP Contract
     env = HPPPDirectBridge(env)
     
+    # 4.5. Monitor Episode Statistics
+    env = VecMonitor(env)
+    
     # 5. Add Normalization
     env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.)
 
@@ -207,14 +219,14 @@ def main():
             HierarchicalPathPlanningPolicy,
             env,
             verbose=1,
-            learning_rate=5e-5,
-            n_steps=1024,
-            batch_size=64,
+            learning_rate=2e-5, # Reduced from 5e-5 for stability
+            n_steps=2048,      # Increased from 1024 for better gradient estimates
+            batch_size=128,    # Increased from 64
             n_epochs=10,
             gamma=0.99,
             gae_lambda=0.95,
             clip_range=0.2,
-            ent_coef=0.01,
+            ent_coef=0.02,     # Increased from 0.01 to encourage smoother exploration
             tensorboard_log=os.path.join(log_dir, "tb"),
             seed=args_cli.seed,
             device="cuda",
@@ -222,6 +234,45 @@ def main():
         )
 
     # 8. Callbacks
+    class RewardLoggerCallback(BaseCallback):
+        def __init__(self, verbose: int = 0):
+            super().__init__(verbose)
+            os.makedirs("debug_frames", exist_ok=True)
+        
+        def _on_step(self) -> bool:
+            if self.n_calls % 1000 == 0:
+                info = self.locals.get("infos", [{}])[0]
+                ep_rew = info.get("episode", {}).get("r", 0.0)
+                ep_len = info.get("episode", {}).get("l", 0)
+                print(f"[PROGRESS] Step {self.n_calls} | EpRew: {ep_rew:.2f} | EpLen: {ep_len}")
+                sys.stdout.flush()
+
+                # Periodic Visual Verification
+                if self.n_calls % 5000 == 0:
+                    try:
+                        import numpy as np
+                        from PIL import Image
+                        obs = self.locals.get("new_obs", {})
+                        if isinstance(obs, dict) and "visual" in obs:
+                            img_tensor = obs["visual"][0] # Env 0
+                            img_np = img_tensor.cpu().numpy()
+                            # Convert to PIL and save
+                            Image.fromarray(img_np.astype(np.uint8)).save("debug_frames/live_train_frame.png")
+                    except Exception as e:
+                        print(f"[WARN] Failed to save debug frame: {e}")
+            return True
+
+    class SaveVecNormalizeCallback(BaseCallback):
+        def __init__(self, save_path: str, save_freq: int, verbose: int = 0):
+            super().__init__(verbose)
+            self.save_path = save_path
+            self.save_freq = save_freq
+
+        def _on_step(self) -> bool:
+            if self.n_calls % self.save_freq == 0:
+                self.training_env.save(os.path.join(self.save_path, "vec_normalize.pkl"))
+            return True
+
     # save_freq is per vectorized step. 1M / num_envs = frequency.
     save_freq = max(1, 1000000 // args_cli.num_envs)
     checkpoint_callback = CheckpointCallback(save_freq=save_freq, save_path=log_dir, name_prefix="model")

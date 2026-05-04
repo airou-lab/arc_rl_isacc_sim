@@ -33,18 +33,17 @@ def main():
     # ActionManager flattens them. 
     # steering: joints 0,1. throttle: joints 2,3,4,5.
     
-    action = torch.zeros((1, 6), device=env.device)
-    action[0, 2:] = 1.0 # Max throttle to all drive joints
+    action = torch.zeros((1, 3), device=env.device)
+    action[0, 1] = 1.0 # Max throttle
     
-    print("Applying +1.0 throttle (+40 rad/s)...")
+    print("Applying +1.0 throttle...")
     
-    for i in range(100):
+    for i in range(1000):
         obs, reward, terminated, truncated, info = env.step(action)
         
-        if i % 20 == 0:
+        if i % 50 == 0:
             lin_vel = env.scene["robot"].data.root_lin_vel_b[0, 0].item()
-            joint_vels = env.scene["robot"].data.joint_vel[0, 2:].cpu().numpy()
-            print(f"Step {i:3d} | Body Vel X: {lin_vel:7.4f} | Wheel Vels: {joint_vels}")
+            print(f"Step {i:4d} | Body Vel X: {lin_vel:7.4f}")
 
     final_vel = env.scene["robot"].data.root_lin_vel_b[0, 0].item()
     print("-"*60)

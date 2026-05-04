@@ -25,6 +25,7 @@ class TrackManager:
         self.visualizer_white = None
         self.visualizer_gate = None
         self.visualizer_waypoints = None
+        self.visualizer_target = None
         
         # Point groups
         self.raw_yellow_pts = None 
@@ -33,19 +34,27 @@ class TrackManager:
         self.yellow_tensor = None  
         self.white_tensor = None   
         self.gate_tensor = None
+        self.curvature_tensor = None
         
         self.sync_attempts = 0
         self.max_sync_attempts = 10 
         self.wp_path = os.path.join(os.path.dirname(__file__), "track_centerline_1x.npy")
+        self.cache_path = os.path.join(os.path.dirname(__file__), "track_boundaries_1x.npz")
 
-    def ensure_synced(self):
+    def ensure_synced(self, target_lane_offset: float = 0.11):
         if self.yellow_tensor is not None and self.sync_attempts >= self.max_sync_attempts:
             return
 
         if self.sync_attempts == 0:
-            print(f"[TrackManager] Building high-fidelity boundary markers...")
-            self.collect_raw_marker_points()
+            # TRY LOADING CACHE FIRST
+            if self.load_cache():
+                print(f"[TrackManager] Loaded boundaries from cache: {self.cache_path}")
+            else:
+                print(f"[TrackManager] Building high-fidelity boundary markers from USD (slow)...")
+                self.collect_raw_marker_points()
+                self.save_cache()
             
+            # Convert to Tensors
             if self.raw_yellow_pts is not None:
                 self.yellow_tensor = torch.tensor(self.raw_yellow_pts, device=self.device, dtype=torch.float32)
             if self.raw_white_pts is not None:
@@ -54,17 +63,60 @@ class TrackManager:
                 self.gate_tensor = torch.tensor(self.raw_gate_pts, device=self.device, dtype=torch.float32)
             
             if os.path.exists(self.wp_path):
-                self.waypoints = torch.tensor(np.load(self.wp_path), device=self.device, dtype=torch.float32)
+                wp_np = np.load(self.wp_path)
+                self.waypoints = torch.tensor(wp_np, device=self.device, dtype=torch.float32)
+                
+                # Pre-calculate Curvature (Kappa = dYaw / ds)
+                # wp_np: [N, 3] -> [X, Y, Yaw]
+                n_wps = len(wp_np)
+                kappa = np.zeros(n_wps)
+                for i in range(n_wps):
+                    i1 = (i + 1) % n_wps
+                    dyaw = wp_np[i1, 2] - wp_np[i, 2]
+                    # Handle yaw wrap-around
+                    while dyaw > np.pi: dyaw -= 2 * np.pi
+                    while dyaw < -np.pi: dyaw += 2 * np.pi
+                    
+                    ds = np.linalg.norm(wp_np[i1, :2] - wp_np[i, :2])
+                    if ds > 0:
+                        kappa[i] = dyaw / ds
+                
+                self.curvature_tensor = torch.tensor(kappa, device=self.device, dtype=torch.float32)
+                print(f"[TrackManager] Calculated curvature for {n_wps} waypoints.")
             else:
                 self.waypoints = torch.tensor([[-16.25, 5.56, -1.57]], device=self.device)
+                self.curvature_tensor = torch.zeros(1, device=self.device)
 
         # Persistent visuals for GUI (Only if --debug is set)
         if self.debug and self.sync_attempts < 1000:
-            self.refresh_visuals()
+            self.refresh_visuals(target_lane_offset=target_lane_offset)
             self.sync_attempts += 1
         else:
             # Still increment sync_attempts to stop building the tensor repeatedly
             self.sync_attempts += 1
+
+    def load_cache(self):
+        if not os.path.exists(self.cache_path): return False
+        try:
+            data = np.load(self.cache_path)
+            self.raw_yellow_pts = data['yellow']
+            self.raw_white_pts = data['white']
+            self.raw_gate_pts = data['gate']
+            return True
+        except Exception as e:
+            print(f"[TrackManager] Cache load failed: {e}")
+            return False
+
+    def save_cache(self):
+        try:
+            # Ensure we don't save None objects
+            y = self.raw_yellow_pts if self.raw_yellow_pts is not None else np.array([])
+            w = self.raw_white_pts if self.raw_white_pts is not None else np.array([])
+            g = self.raw_gate_pts if self.raw_gate_pts is not None else np.array([])
+            np.savez(self.cache_path, yellow=y, white=w, gate=g)
+            print(f"[TrackManager] Saved boundaries to cache: {self.cache_path}")
+        except Exception as e:
+            print(f"[TrackManager] Cache save failed: {e}")
 
     def collect_raw_marker_points(self):
         import omni.usd
@@ -138,6 +190,9 @@ class TrackManager:
         # 2. Now traverse meshes in env_0 and categorize
         meshes_found_in_gates = 0
         for prim in Usd.PrimRange(root_prim):
+            # CRITICAL FIX: Skip the robot itself!
+            if "Robot" in str(prim.GetPath()): continue
+            
             if not prim.IsA(UsdGeom.Mesh): continue
             
             path_str = str(prim.GetPath())
@@ -168,7 +223,7 @@ class TrackManager:
                         break
 
             # CATEGORIZATION LOGIC:
-            # 1. Explicit names
+            # 1. Explicit names for Gates
             if "lanegate" in path_str.lower() or "lane_gate" in path_str.lower() or "stop_line" in path_str.lower():
                 is_gate = True
             # 2. White marks very close to logical gate markers
@@ -182,10 +237,15 @@ class TrackManager:
                 meshes_found_in_gates += 1
                 continue
 
-            if "yellow" in search_str: 
-                y_data.append((path_str, mesh_info))
-            elif "white" in search_str: 
-                w_data.append((path_str, mesh_info))
+            # CRITICAL FIX: Only pick up road markings, not the road itself.
+            # We look for 'roadmarks' or 'paint' in the path, and ensure it's not the main asphalt.
+            is_marking = "roadmarks" in path_str or "paint" in path_str or "marking" in path_str.lower()
+            
+            if is_marking:
+                if "yellow" in search_str: 
+                    y_data.append((path_str, mesh_info))
+                elif "white" in search_str: 
+                    w_data.append((path_str, mesh_info))
 
         self.raw_yellow_pts = finalize_group(y_data, "Yellow")
         self.raw_white_pts = finalize_group(w_data, "White")
@@ -210,7 +270,7 @@ class TrackManager:
         return dist_y, dist_w, dist_g
 
 
-    def refresh_visuals(self):
+    def refresh_visuals(self, target_lane_offset: float = -0.238):
         try:
             from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
             import isaaclab.sim as sim_utils
@@ -220,11 +280,11 @@ class TrackManager:
             env0_prim = stage.GetPrimAtPath("/World/envs/env_0")
             origin = UsdGeom.Xformable(env0_prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default()).ExtractTranslation() if env0_prim.IsValid() else Gf.Vec3d(0,0,0)
 
-            def create_v(path, color, radius=0.05):
+            def create_v(path, color, radius=0.02):
                 cfg = VisualizationMarkersCfg(prim_path=path, markers={"dot": sim_utils.SphereCfg(radius=radius, visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=color))})
                 return VisualizationMarkers(cfg)
 
-            def to_w(pts, z_off=0.1):
+            def to_w(pts, z_off=0.05):
                 if pts is None: return None
                 w = torch.zeros((len(pts), 3), device=self.device)
                 w[:, 0], w[:, 1], w[:, 2] = torch.tensor(pts[:, 0], device=self.device) + origin[0], torch.tensor(pts[:, 1], device=self.device) + origin[1], torch.tensor(pts[:, 2], device=self.device) + origin[2] + z_off
@@ -232,28 +292,45 @@ class TrackManager:
 
             if self.visualizer_yellow is None: self.visualizer_yellow = create_v("/World/Visuals/YellowSpheres", (1.0, 1.0, 0.0))
             if self.visualizer_white is None: self.visualizer_white = create_v("/World/Visuals/WhiteSpheres", (1.0, 1.0, 1.0))
-            if self.visualizer_gate is None: self.visualizer_gate = create_v("/World/Visuals/GateSpheres", (0.0, 1.0, 0.0), radius=0.1)
-            if self.visualizer_waypoints is None: self.visualizer_waypoints = create_v("/World/Visuals/CyanPath", (0.0, 1.0, 1.0), radius=0.08)
+            if self.visualizer_gate is None: self.visualizer_gate = create_v("/World/Visuals/GateSpheres", (0.0, 1.0, 0.0))
+            if self.visualizer_waypoints is None: self.visualizer_waypoints = create_v("/World/Visuals/CyanPath", (0.0, 1.0, 1.0))
+            if self.visualizer_target is None: self.visualizer_target = create_v("/World/Visuals/TargetLane", (1.0, 0.0, 1.0))
 
             if self.raw_yellow_pts is not None: self.visualizer_yellow.visualize(to_w(self.raw_yellow_pts))
             if self.raw_white_pts is not None: self.visualizer_white.visualize(to_w(self.raw_white_pts))
             if self.raw_gate_pts is not None: self.visualizer_gate.visualize(to_w(self.raw_gate_pts, z_off=0.15))
+            
             if self.waypoints is not None:
-                # IMPORTANT: waypoints are [X, Y, Yaw]. Force Z=0 for visualization.
                 wp_np = self.waypoints.cpu().numpy()
+                
+                # 1. Visualize Centerline (Cyan)
                 wp_viz = np.zeros((len(wp_np), 3))
                 wp_viz[:, :2] = wp_np[:, :2]
-                wp_viz[:, 2] = 0.0 # Force ground level
+                wp_viz[:, 2] = 0.0
                 self.visualizer_waypoints.visualize(to_w(wp_viz, z_off=0.15))
+                
+                # 2. Visualize Target Offset Path (Magenta)
+                # Offset waypoints along their normals: [X, Y] + offset * [-sin(yaw), cos(yaw)]
+                yaws = wp_np[:, 2]
+                normals = np.stack([-np.sin(yaws), np.cos(yaws)], axis=1)
+                target_pts = wp_np[:, :2] + target_lane_offset * normals
+                target_viz = np.zeros((len(wp_np), 3))
+                target_viz[:, :2] = target_pts
+                target_viz[:, 2] = 0.0
+                self.visualizer_target.visualize(to_w(target_viz, z_off=0.18))
         except: pass
 
-    def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor, target_lane_offset: float = 0.238):
+    def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor, target_lane_offset: float = -0.238):
         self.ensure_synced()
         dists = torch.cdist(pos[:, :2], self.waypoints[:, :2])
         closest_idx = torch.argmin(dists, dim=1)
         closest_wp = self.waypoints[closest_idx]
         wp_to_robot = pos[:, :2] - closest_wp[:, :2]
         wp_yaw = closest_wp[:, 2]
+        
+        # Curvature at closest waypoint
+        kappa = self.curvature_tensor[closest_idx]
+        
         normal_x, normal_y = -torch.sin(wp_yaw), torch.cos(wp_yaw)
         raw_lat_err = wp_to_robot[:, 0] * normal_x + wp_to_robot[:, 1] * normal_y
         lat_err, head_err = raw_lat_err - target_lane_offset, yaw - wp_yaw
@@ -261,7 +338,7 @@ class TrackManager:
         import math
         head_err = torch.where(head_err > math.pi/2, head_err - math.pi, head_err)
         head_err = torch.where(head_err < -math.pi/2, head_err + math.pi, head_err)
-        return lat_err, head_err
+        return lat_err, head_err, kappa
 
 _TRACK_MANAGER = None
 def get_track_manager(device: str = "cuda:0"):

@@ -63,11 +63,11 @@ def action_rate_smoothness_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     # Current vs Previous actions
     current_action = env.action_manager.action
     
-    # Check if prev_action is available
-    if not hasattr(env.action_manager, "prev_action") or env.action_manager.prev_action is None:
+    # Check if prev_action is available in extras
+    if "prev_action" not in env.extras:
         return torch.zeros(env.num_envs, device=env.device)
         
-    prev_action = env.action_manager.prev_action
+    prev_action = env.extras["prev_action"]
     
     # Penalize the squared difference (heavier penalty for large jumps)
     # Focus mainly on steering (index 0)

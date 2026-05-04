@@ -69,7 +69,7 @@ class ARCProSceneCfg(InteractiveSceneCfg):
 
 
     
-    # Robot (1.0x Metric Scale)
+    # Robot (1.0x scale on 1.0x track = Large world proportions)
     robot = ARCPRO_ROBOT_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=ARCPRO_ROBOT_CFG.spawn.replace(
@@ -77,24 +77,22 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             scale=(1.0, 1.0, 1.0), # Revert to 1.0x
         ),
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
-            # Fixed Spawn Point: Lane Center (Exact match to waypoint at X=-16.198)
-            pos=(-16.198, 5.45, 0.14),
+            # Fixed Spawn Point from main
+            pos=(-16.25, 5.65, 0.10),
             rot=(0.7071, 0.0, 0.0, -0.7071) # Face South
         ),
 
  
     )
     
-    # Camera (Standard offset for 1x robot)
+    # Camera (Standard offset)
     tiled_camera = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraSensor",
         update_period=0.0,
         spawn=sim_utils.PinholeCameraCfg(
-            horizontal_aperture=2.65, # Approx 69 deg FOV
+            horizontal_aperture=2.65, 
             focal_length=1.93,
         ),
-        # 8x pos: (2.24, 0.0, 1.28) -> 1x pos: (0.28, 0.0, 0.16)
-        # rot: [0.985, 0.0, 0.174, 0.0] is ~20 deg tilt down around Y
         offset=TiledCameraCfg.OffsetCfg(pos=(0.28, 0.0, 0.16), rot=(0.985, 0.0, 0.174, 0.0), convention="parent"),
         data_types=["rgb"], width=160, height=90,
     )
@@ -128,24 +126,24 @@ class ActionCfg:
     drive = arcpro_actions.CombinedDriveActionCfg(
         asset_name="robot", 
         joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
-        scale=60.0,
+        scale=15.0,
         offset=0.0
     )
 
 @configclass
 class RewardCfg:
-    speed = RewTerm(func=mdp_rew.speed_reward, weight=5.0) # Increased from 1.0
-    # Moderate lateral error penalty (Speed reward now competitive with staying on track)
-    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=5.0)
-    # Discourage staying still (increased to prevent creeping)
-    stationary = RewTerm(
-        func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.5, -5.0, 0.0),
-        weight=1.0
-    )
-    # Prevent 180s
-    heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
-    # Smoothness Calibration: Penalize steering wiggles
-    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=1.0)
+        speed = RewTerm(func=mdp_rew.speed_reward, weight=10.0)
+        # Moderate lateral error penalty (Speed reward now competitive with staying on track)
+        lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=5.0)
+        # Discourage staying still (Lower threshold for 5kg/1x scale)
+        stationary = RewTerm(
+            func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.1, -10.0, 0.0),
+            weight=10.0
+        )
+        # Prevent 180s
+        heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
+        # Smoothness Calibration: Heavier penalty to stop the jitter
+        smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=10.0)
 
 @configclass
 class TerminationCfg:
@@ -180,7 +178,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
         device="cuda:0",
         physx=sim_utils.PhysxCfg(
             solver_type=1, # TGS
-            max_position_iteration_count=16, # Increased from 8
+            max_position_iteration_count=16, 
             max_velocity_iteration_count=4, 
             bounce_threshold_velocity=0.5, 
             enable_ccd=True, 

@@ -36,6 +36,7 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     obs[:, 1] = go_signal
     obs[:, 2] = 0.0  # IDX_GOAL_DIST
 
+
     # Index 3: Forward Speed (m/s) - Local X velocity
     # Metric scale: 1.0 = 1m/s
     obs[:, 3] = asset.data.root_lin_vel_b[:, 0]
@@ -55,12 +56,20 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     from mdp.track_manager import get_track_manager
     tm = get_track_manager(device=env.device)
 
-    lat_err, head_err = tm.compute_errors(local_pos, yaw)    
+    lat_err, head_err, kappa = tm.compute_errors(local_pos, yaw)    
     
-    # Distance Tracking
+    # Distance Tracking (Accumulated)
     if "distance" not in env.extras:
         env.extras["distance"] = torch.zeros(env.num_envs, device=env.device)
     
+    # Reset distance for environments that just reset
+    reset_buf = getattr(env, "reset_buf", None)
+    if reset_buf is not None:
+        env.extras["distance"] = torch.where(reset_buf, torch.zeros_like(env.extras["distance"]), env.extras["distance"])
+    elif env.num_envs == 1 and env.episode_length_buf[0] == 0:
+        # Fallback for initialization
+        env.extras["distance"].zero_()
+
     # Calculate distance moved in this step (Forward velocity * dt)
     # We use local X velocity * environment dt (0.05s)
     env.extras["distance"] += asset.data.root_lin_vel_b[:, 0] * 0.05
@@ -73,8 +82,8 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     obs[:, 8] = lat_err
     obs[:, 9] = head_err
     
-    # Index 10: Path Curvature (Kappa - Placeholder)
-    obs[:, 10] = 0.0
+    # Index 10: Path Curvature (Kappa)
+    obs[:, 10] = kappa
 
     # Index 11: Total Distance (Accumulated)
     if "distance" in env.extras:

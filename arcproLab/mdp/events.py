@@ -9,15 +9,16 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 import omni.physx
 from pxr import UsdGeom, Usd, Gf
+import math
 
 def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")):
     """
     Event to reset the robot to a FIXED starting waypoint, aligned to the ground normal.
+    Exactly as in 'main' branch to ensure physical stability.
     """
     asset = env.scene[asset_cfg.name]
     
-    # Target Waypoint: Lane Center
-    # Moved North to Y=5.65 to ensure front wheels are on the road mesh
+    # Target Waypoint: Lane Center (Original Coordinates)
     local_spawn_x, local_spawn_y = -16.2616, 5.65
     spawn_yaw = -1.5708 # Face South
     
@@ -28,11 +29,10 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     final_pos = torch.zeros((len(env_ids), 3), device=env.device)
     final_pos[:, 0] = env_origins[:, 0] + local_spawn_x
     final_pos[:, 1] = env_origins[:, 1] + local_spawn_y
-    final_pos[:, 2] = env_origins[:, 2] + 0.08 # Lower default drop height
+    final_pos[:, 2] = env_origins[:, 2] + 0.14 # Clean drop height
 
     # 2. Base rotation (Facing South)
     quats = torch.zeros((len(env_ids), 4), device=env.device)
-    import math
     
     # 3. Ground Alignment (Raycast for Normal)
     query = omni.physx.get_physx_scene_query_interface()
@@ -45,8 +45,8 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
         q_final = Gf.Quatd(math.cos(half_yaw), Gf.Vec3d(0, 0, math.sin(half_yaw)))
 
         if hit["hit"]:
-            # Snap Z to road
-            final_pos[i, 2] = hit["position"][2] + 0.04 # Lower snap height
+            # Snap Z to road (8cm offset from main)
+            final_pos[i, 2] = hit["position"][2] + 0.08
             
             # Align orientation to ground normal
             normal = hit["normal"]

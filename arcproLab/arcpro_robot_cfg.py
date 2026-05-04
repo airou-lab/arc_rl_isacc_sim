@@ -14,8 +14,8 @@ import mdp.spawner as arcpro_spawner
 def spawn_f1tenth_preset(prim_path, cfg, translation=None, orientation=None):
     """Preset spawner that includes mass overrides for F1Tenth."""
     mass_overrides = {
-        "Chassis": 20.0,
-        "Wheel_.*": 1.0,
+        "Chassis": 5.0,
+        "Wheel_.*": 0.2,
         "Knuckle_.*": 0.1,
     }
     return arcpro_spawner.spawn_f1tenth(prim_path, cfg, translation, orientation, mass_overrides=mass_overrides)
@@ -55,17 +55,18 @@ class ArcProRobotCfg(ArticulationCfg):
     actuators: dict = {
         "steering": ImplicitActuatorCfg(
             joint_names_expr=["Joint_Steer_.*"],
-            effort_limit_sim=5.0, # Lowered from 100.0
+            effort_limit_sim=10.0, 
             velocity_limit_sim=10.0,
-            stiffness=20.0, # Lowered from 1000.0
-            damping=2.0, # Lowered from 50.0
+            stiffness=20.0, 
+            damping=2.0, 
         ),
         "throttle": ImplicitActuatorCfg(
             joint_names_expr=["Joint_Drive_.*"], 
-            effort_limit_sim=5.0, # Lowered from 100.0
+            effort_limit_sim=2.0, 
             velocity_limit_sim=100.0,
             stiffness=0.0,
-            damping=1.0, # Lowered from 10.0
+            damping=2.0, 
+            armature=0.01,
         ),
     }
 
