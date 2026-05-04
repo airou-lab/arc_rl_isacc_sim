@@ -10,12 +10,14 @@
 Completed Phase 11 Intersection Logic (Wave 2) and researched Phase 12 Decentralized V2I. We are now shifting focus to Phase 13 (Live Policy GUI) to visualize live rewards, learning over time, and policy state (action heatmaps) via a shared memory sidecar GUI, before executing the Phase 12 decentralized turning missions.
 
 ## Recent Activity
+- **Phase 09 Completion**: Successfully migrated to 5kg realistic physics at 1.0x metric scale. Resolved spawn-death loops and wheel 'explosions'.
+- **Production Training**: 32-env production run is currently active at 179 FPS.
 - **Phase 11 Completion**: Finalized Wave 2 Intersection Navigation (Permeable gates, Intent filtering).
 - **Phase 12 Research**: Documented decentralized V2I architecture (Edge Modules) and Sim2Real constraints.
-- **Phase 13 Research**: Outlined the architecture for a Shared Memory Sidecar GUI (PyQt5/OpenCV) to render policy heatmaps and live reward graphs without blocking the 115 FPS simulation loop.
 
 ## Active Todos (Queue)
-1. [ ] **13-01-shared-memory-bridge**: (NEXT) Create the shared memory data pipe in `visual_analytics.py` for frames, rewards, and distributions.
+1. [ ] **12-01-dt-alignment**: (CRITICAL) Resolve the mismatch between `ARCProEnvCfg` (20Hz) and `WaypointTrackingWrapper` (50Hz) to fix hierarchical loss degradation.
+2. [ ] **13-01-shared-memory-bridge**: (NEXT) Create the shared memory data pipe in `visual_analytics.py`.
 2. [ ] **13-02-policy-dashboard**: (PLANNED) Build `policy_dashboard.py` to render the Graph View.
 3. [ ] **12-01-turning-mission**: (PAUSED) Execute first autonomous turn via RoadGraph token.
 4. [ ] **update-log-paths**: (PLANNED) Update script file paths to route all new `.log` outputs to the root `logs/` directory.
