@@ -19,7 +19,7 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     asset = env.scene[asset_cfg.name]
     
     # Target Waypoint: Lane Center (Original Coordinates)
-    local_spawn_x, local_spawn_y = -16.2616, 5.65
+    local_spawn_x, local_spawn_y = -16.1500, 5.65
     spawn_yaw = -1.5708 # Face South
     
     # Get environment origins
@@ -29,7 +29,7 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     final_pos = torch.zeros((len(env_ids), 3), device=env.device)
     final_pos[:, 0] = env_origins[:, 0] + local_spawn_x
     final_pos[:, 1] = env_origins[:, 1] + local_spawn_y
-    final_pos[:, 2] = env_origins[:, 2] + 0.14 # Clean drop height
+    final_pos[:, 2] = env_origins[:, 2]  # Clean drop height
 
     # 2. Base rotation (Facing South)
     quats = torch.zeros((len(env_ids), 4), device=env.device)
@@ -45,8 +45,15 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
         q_final = Gf.Quatd(math.cos(half_yaw), Gf.Vec3d(0, 0, math.sin(half_yaw)))
 
         if hit["hit"]:
+
             # Snap Z to road (8cm offset from main)
-            final_pos[i, 2] = hit["position"][2] + 0.08
+            spawn_z = hit["position"][2] + 0.08
+            
+            # Sanity check: Ensure we don't spawn below the world
+            if spawn_z < 0.05:
+
+                spawn_z = 0.05
+            final_pos[i, 2] = spawn_z
             
             # Align orientation to ground normal
             normal = hit["normal"]
@@ -59,6 +66,9 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
             # Combine Yaw + Tilt
             yaw_rot = Gf.Rotation(Gf.Vec3d(0, 0, 1), math.degrees(spawn_yaw))
             q_final = (yaw_rot * tilt_rot).GetQuat()
+
+        else:
+
             
         # Update tensor (WXYZ)
         quats[i, 0] = q_final.GetReal()
