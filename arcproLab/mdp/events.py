@@ -67,9 +67,7 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
             yaw_rot = Gf.Rotation(Gf.Vec3d(0, 0, 1), math.degrees(spawn_yaw))
             q_final = (yaw_rot * tilt_rot).GetQuat()
 
-        else:
 
-            
         # Update tensor (WXYZ)
         quats[i, 0] = q_final.GetReal()
         quats[i, 1] = q_final.GetImaginary()[0]
