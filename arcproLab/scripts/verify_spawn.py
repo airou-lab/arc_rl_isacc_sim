@@ -25,6 +25,7 @@ simulation_app = app_launcher.app
 
 import torch
 import numpy as np
+from PIL import Image
 from isaaclab.envs import ManagerBasedRLEnv
 import sys
 import os
@@ -50,6 +51,20 @@ def main():
     # reset environment
     obs, _ = env.reset()
     
+    # Save camera frame for verification
+    if "visual" in obs:
+        # obs["visual"] is a tensor of shape (num_envs, H, W, C)
+        img_tensor = obs["visual"][0] # (H, W, 3)
+        # Check if normalized (0-1) and convert to 0-255
+        if img_tensor.max() <= 1.0:
+            img_np = (img_tensor.cpu().numpy() * 255).astype(np.uint8)
+        else:
+            img_np = img_tensor.cpu().numpy().astype(np.uint8)
+            
+        img = Image.fromarray(img_np)
+        img.save("debug_spawn.png")
+        print(f"[Verify] Saved camera frame to debug_spawn.png (Shape: {img_np.shape})")
+
     # check robot positions
     robot_pos = env.scene["robot"].data.root_pos_w
     print(f"[Verify] Initial Robot Position (Env 0): {robot_pos[0].cpu().numpy()}")
@@ -59,9 +74,11 @@ def main():
     q = env.scene["robot"].data.root_quat_w
     yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
     
-    lat_err, head_err = tm.compute_errors(robot_pos, yaw)
+    lat_err, head_err, kappa = tm.compute_errors(robot_pos, yaw)
     print(f"[Verify] Lateral Error (Env 0): {lat_err[0].item():.4f}m")
     print(f"[Verify] Heading Error (Env 0): {head_err[0].item():.4f} rad")
+    print(f"[Verify] Local Curvature (Env 0): {kappa[0].item():.4f}")
+
     
     # run a few steps of simulation to check for falling/clipping
     print("[Verify] Running 50 steps of simulation...")

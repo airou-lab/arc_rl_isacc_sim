@@ -1,83 +1,68 @@
-import argparse
-from isaaclab.app import AppLauncher
+import omni.kit
+from omni.isaac.kit import SimulationApp
 
-parser = argparse.ArgumentParser(description="Apply global scale to a USD file.")
-parser.add_argument("input", type=str, help="Input USD file.")
-parser.add_argument("output", type=str, help="Output USD file.")
-parser.add_argument("--scale", type=float, default=0.125, help="Scale factor.")
-AppLauncher.add_app_launcher_args(parser)
-args_cli = parser.parse_args()
-
-app_launcher = AppLauncher(args_cli)
-simulation_app = app_launcher.app
+# Start simulation app
+simulation_app = SimulationApp({"headless": True})
 
 import omni.usd
 from pxr import Usd, UsdGeom, Gf
+import os
+import numpy as np
 
-def main():
-    stage = Usd.Stage.Open(args_cli.input)
+def scale_mesh_vertices(usd_path, scale_factor=0.125):
+    print(f"Opening stage: {usd_path}")
+    stage = Usd.Stage.Open(usd_path)
     if not stage:
-        print(f"Failed to open {args_cli.input}")
+        print("Failed to open stage.")
         return
 
-    # To avoid compounding, we only scale the "entry points" of the hierarchy
-    # which are either root-level prims OR prims that author references.
-    
-def main():
-    stage = Usd.Stage.Open(args_cli.input)
-    if not stage:
-        print(f"Failed to open {args_cli.input}")
-        return
-
-    # Remove unwanted prims (Grass, fences, etc as requested)
-    unwanted = ["/World/grass", "/World/foliage", "/World/fences"]
-    for path in unwanted:
-        prim = stage.GetPrimAtPath(path)
-        if prim.IsValid():
-            print(f"Removing {path}...")
-            stage.RemovePrim(path)
-
-    # Scale everything in World to 0.125
+    # 1. Iterate over all Mesh prims
     for prim in stage.Traverse():
-        if prim.IsA(UsdGeom.Xformable):
-            # Use XformCommonAPI to set absolute scale
-            common_api = UsdGeom.XformCommonAPI(prim)
-            # This sets the scale of the prim. 
-            # Note: This might overwrite existing translate/rotate if not careful, 
-            # but usually it adds to the stack.
-            # Actually, let's just use the scale op directly but ENSURE it's 0.125
+        if prim.IsA(UsdGeom.Mesh):
+            mesh = UsdGeom.Mesh(prim)
+            points_attr = mesh.GetPointsAttr()
+            points = points_attr.Get()
             
+            if points:
+                # Multiply every vertex by the scale factor
+                scaled_points = [p * scale_factor for p in points]
+                points_attr.Set(scaled_points)
+                print(f"  Scaled {len(points)} vertices for mesh: {prim.GetPath()}")
+            
+            # 2. Also scale any local translations (to keep positions correct)
             xform = UsdGeom.Xformable(prim)
-            scale_op = None
             for op in xform.GetOrderedXformOps():
-                if op.GetOpType() == UsdGeom.XformOp.TypeScale:
-                    scale_op = op
-                    break
-            
-            if not scale_op:
-                scale_op = xform.AddScaleOp()
-            
-            # If it's a child of /World, we want it to be 0.125 total.
-            # Inheritance: scale_world * scale_child = 0.125
-            # If we set scale_world = 0.125 and scale_child = 1.0, we get 0.125.
-            # If child already has 8.0, we MUST override it to 1.0 or 0.125.
-            
-            path = str(prim.GetPath())
-            if path == "/World":
-                scale_op.Set(Gf.Vec3f(args_cli.scale, args_cli.scale, args_cli.scale))
-                print(f"Scaled /World to {args_cli.scale}")
-            elif path.startswith("/World/"):
-                # Reset children to 1.0 so they inherit World's 0.125
-                scale_op.Set(Gf.Vec3f(1.0, 1.0, 1.0))
-                # print(f"Reset child scale: {path}")
-    
-    output_path = args_cli.output
-    if not output_path.endswith(".usda"):
-        output_path = output_path.replace(".usd", ".usda")
-    
-    stage.GetRootLayer().Export(output_path)
-    print(f"Saved to {output_path}")
-    simulation_app.close()
+                if op.GetOpType() == UsdGeom.XformOp.TypeTranslate:
+                    val = op.Get()
+                    if val:
+                        op.Set(val * scale_factor)
+                elif op.GetOpType() == UsdGeom.XformOp.TypeScale:
+                    # Reset scale to 1.0 (since we've baked it into vertices)
+                    op.Set(Gf.Vec3f(1.0, 1.0, 1.0))
+
+    # 3. Handle Xform prims (non-mesh parents)
+    for prim in stage.Traverse():
+        if prim.IsA(UsdGeom.Xform):
+            xform = UsdGeom.Xformable(prim)
+            for op in xform.GetOrderedXformOps():
+                if op.GetOpType() == UsdGeom.XformOp.TypeTranslate:
+                    val = op.Get()
+                    if val:
+                        op.Set(val * scale_factor)
+                elif op.GetOpType() == UsdGeom.XformOp.TypeScale:
+                    op.Set(Gf.Vec3f(1.0, 1.0, 1.0))
+
+    # 4. Handle Scope/other prims with custom transforms if any
+    # (Simplified for this use case as most geometry is in Xforms/Meshes)
+
+    # Save as a new file
+    new_path = usd_path.replace(".usda", "_flattened.usda")
+    stage.GetRootLayer().Export(new_path)
+    print(f"Flattened asset saved to: {new_path}")
+    return new_path
 
 if __name__ == "__main__":
-    main()
+    usd_dir = "/home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim/openStreetUSD"
+    usd_file = os.path.join(usd_dir, "no_graph_sim_clean_1x.usda")
+    scale_mesh_vertices(usd_file)
+    simulation_app.close()
