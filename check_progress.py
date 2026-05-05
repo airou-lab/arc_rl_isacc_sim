@@ -42,11 +42,13 @@ if __name__ == "__main__":
     
     # Get the latest directory based on name (timestamped)
     latest_dir = max(dirs)
-    log_dir = os.path.join(latest_dir, "PPO_1")
+    log_dir = os.path.join(latest_dir, "tb", "RecurrentPPO_1")
     
     if not os.path.exists(log_dir):
-        # Check if there's no PPO_1 subfolder (some versions differ)
-        log_dir = latest_dir
+        # Fallback for older structures
+        log_dir = os.path.join(latest_dir, "tb")
+        if not os.path.exists(log_dir):
+            log_dir = latest_dir
 
     files = [f for f in os.listdir(log_dir) if "tfevents" in f]
     if files:
