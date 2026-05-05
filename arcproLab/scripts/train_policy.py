@@ -27,6 +27,7 @@ import torch
 import warnings
 import numpy as np
 import gymnasium as gym
+import cv2
 from datetime import datetime
 
 # Silence gym warnings
@@ -247,19 +248,24 @@ def main():
                 print(f"[PROGRESS] Step {self.n_calls} | EpRew: {ep_rew:.2f} | EpLen: {ep_len}")
                 sys.stdout.flush()
 
-                # Periodic Visual Verification
-                if self.n_calls % 5000 == 0:
-                    try:
-                        import numpy as np
-                        from PIL import Image
-                        obs = self.locals.get("new_obs", {})
-                        if isinstance(obs, dict) and "visual" in obs:
-                            img_tensor = obs["visual"][0] # Env 0
-                            img_np = img_tensor.cpu().numpy()
-                            # Convert to PIL and save
-                            Image.fromarray(img_np.astype(np.uint8)).save("debug_frames/live_train_frame.png")
-                    except Exception as e:
-                        print(f"[WARN] Failed to save debug frame: {e}")
+            # Save debug frames every 50 steps (if single env)
+            if args_cli.num_envs == 1 and self.n_calls % 50 == 0:
+                try:
+                    # Get unnormalized observations from VecNormalize
+                    raw_obs = self.training_env.get_original_obs()
+                    # In HPPPDirectBridge, the raw obs is in 'image' key and is (B, C, H, W)
+                    if isinstance(raw_obs, dict) and "image" in raw_obs:
+                        img_np = raw_obs["image"][0] # (C, H, W)
+                        # Convert from CHW to HWC for cv2
+                        img_hwc = np.transpose(img_np, (1, 2, 0))
+                        # It's [0, 1] float, convert to [0, 255] uint8
+                        img_uint8 = (img_hwc * 255).clip(0, 255).astype(np.uint8)
+                        # Convert RGB to BGR for cv2
+                        img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
+                        cv2.imwrite(f"debug_frames/train_frame_{self.n_calls}.png", img_bgr)
+                        print(f"  [DEBUG] Saved camera frame {self.n_calls} to debug_frames/train_frame_{self.n_calls}.png")
+                except Exception as e:
+                    print(f"[WARN] Failed to save debug frame: {e}")
             return True
 
     class SaveVecNormalizeCallback(BaseCallback):

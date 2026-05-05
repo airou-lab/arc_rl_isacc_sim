@@ -60,8 +60,8 @@ class ARCProSceneCfg(InteractiveSceneCfg):
     track = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Track",
         spawn=sim_utils.UsdFileCfg(
-            usd_path=os.path.join(USD_DIR, "no_graph_sim_clean_1x.usda"),
-            scale=(0.125, 0.125, 0.125), # Shrink world to match 1.0x robot
+            usd_path=os.path.join(USD_DIR, "no_graph_sim_clean_1x_flattened.usda"),
+            scale=(1.0, 1.0, 1.0), # Resized physically in Phase 14-01
         ),
         # Use origin position to match USD world coordinates
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
@@ -93,8 +93,9 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             horizontal_aperture=2.65, 
             focal_length=1.93,
         ),
-        offset=TiledCameraCfg.OffsetCfg(pos=(0.28, 0.0, 0.16), rot=(0.985, 0.0, 0.174, 0.0), convention="parent"),
+        offset=TiledCameraCfg.OffsetCfg(pos=(0.4, 0.0, 0.2), rot=(0.985, 0.0, 0.174, 0.0), convention="parent"),
         data_types=["rgb"], width=160, height=90,
+        debug_vis=True,
     )
 
     # Contact Sensor: Detect chassis collisions (crashes)

@@ -1,7 +1,7 @@
 #!/bin/bash
 PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 ISAACLAB_PATH="/home/arika/IsaacLab/isaaclab.sh"
-LOG_FILE="$PROJECT_DIR/training_recovery.log"
+LOG_FILE="$PROJECT_DIR/logs/training_recovery.log"
 CHECKPOINT="$PROJECT_DIR/logs/ppo/20260502-170607/model_1000000_steps.zip"
 
 echo "Launching recovery training from 1M checkpoint at $(date)" > "$LOG_FILE"

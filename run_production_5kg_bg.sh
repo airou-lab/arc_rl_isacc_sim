@@ -1,7 +1,7 @@
 #!/bin/bash
 PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 ISAACLAB_PATH="/home/arika/IsaacLab/isaaclab.sh"
-LOG_FILE="$PROJECT_DIR/training_production_5kg_fresh.log"
+LOG_FILE="$PROJECT_DIR/logs/training_production_5kg_fresh.log"
 
 echo "Launching 5kg REALISTIC fresh training at $(date)" > "$LOG_FILE"
 # Clean sweep of any ghost processes

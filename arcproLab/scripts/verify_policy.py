@@ -218,17 +218,19 @@ def main():
             if count % 5 == 0:
                 print(f"  [ACT] Step {count:4d} | Steer: {steer:6.3f} | Throttle: {throttle:6.3f} | Brake: {brake:6.3f}")
 
-            # Save debug frames for the first 5 steps
-            if count < 5:
+            # Save debug frames every 50 steps (if single env)
+            if args_cli.num_envs == 1 and count % 50 == 0:
                 debug_dir = "debug_frames"
                 os.makedirs(debug_dir, exist_ok=True)
+                # Get unnormalized observations
+                raw_obs = env.get_original_obs()
                 # obs is from VecNormalize -> HPPPDirectBridge
                 # obs["image"] is (B, C, H, W). We want the first env [0]
-                img_np = obs["image"][0] # (C, H, W)
+                img_np = raw_obs["image"][0] # (C, H, W)
                 # Convert from CHW to HWC for cv2
                 img_hwc = np.transpose(img_np, (1, 2, 0))
-                # It's normalized [0, 1] float, convert to [0, 255] uint8
-                img_uint8 = (img_hwc * 255).astype(np.uint8)
+                # It's [0, 1] float, convert to [0, 255] uint8
+                img_uint8 = (img_hwc * 255).clip(0, 255).astype(np.uint8)
                 # Convert RGB to BGR for cv2
                 img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
                 cv2.imwrite(os.path.join(debug_dir, f"frame_{count}.png"), img_bgr)

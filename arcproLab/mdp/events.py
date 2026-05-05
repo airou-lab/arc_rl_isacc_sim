@@ -45,27 +45,21 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
         q_final = Gf.Quatd(math.cos(half_yaw), Gf.Vec3d(0, 0, math.sin(half_yaw)))
 
         if hit["hit"]:
-
             # Snap Z to road (8cm offset from main)
-            spawn_z = hit["position"][2] + 0.08
+            spawn_z = hit["position"][2] - 0.01
             
             # Sanity check: Ensure we don't spawn below the world
             if spawn_z < 0.05:
-
                 spawn_z = 0.05
             final_pos[i, 2] = spawn_z
             
-            # Align orientation to ground normal
-            normal = hit["normal"]
-            normal_vec = Gf.Vec3d(normal[0], normal[1], normal[2])
-            
-            # Rotation from world-up (0,0,1) to ground-normal
-            up_vec = Gf.Vec3d(0, 0, 1)
-            tilt_rot = Gf.Rotation(up_vec, normal_vec)
-            
-            # Combine Yaw + Tilt
-            yaw_rot = Gf.Rotation(Gf.Vec3d(0, 0, 1), math.degrees(spawn_yaw))
-            q_final = (yaw_rot * tilt_rot).GetQuat()
+            # Ground alignment DISABLED - robot will spawn flat
+            # normal = hit["normal"]
+            # normal_vec = Gf.Vec3d(normal[0], normal[1], normal[2])
+            # up_vec = Gf.Vec3d(0, 0, 1)
+            # tilt_rot = Gf.Rotation(up_vec, normal_vec)
+            # yaw_rot = Gf.Rotation(Gf.Vec3d(0, 0, 1), math.degrees(spawn_yaw))
+            # q_final = (yaw_rot * tilt_rot).GetQuat()
 
 
         # Update tensor (WXYZ)
