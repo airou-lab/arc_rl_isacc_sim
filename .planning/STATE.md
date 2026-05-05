@@ -13,17 +13,24 @@ Completed Phase 11 Intersection Logic (Wave 2) and researched Phase 12 Decentral
 - **Phase 09 Completion**: Successfully migrated to 5kg realistic physics at 1.0x metric scale. Resolved spawn-death loops and wheel 'explosions'.
 - **Production Training**: 32-env production run is currently active at 179 FPS.
 - **Phase 11 Completion**: Finalized Wave 2 Intersection Navigation (Permeable gates, Intent filtering).
-- **Phase 12 Research**: Documented decentralized V2I architecture (Edge Modules) and Sim2Real constraints.
+- **Phase 12 Progress**: (NEW) Implemented Turn Token Randomization (-1, 0, 1) in `RoadGraph.py` to condition the policy for navigation commands.
+- **Maintenance**: Verified TrackManager caching is active (5-10s startup fix) and Telemetry Curvature (Kappa) is correctly piped to the policy observation vector.
 
 ## Active Todos (Queue)
 1. [ ] **12-01-dt-alignment**: (CRITICAL) Resolve the mismatch between `ARCProEnvCfg` (20Hz) and `WaypointTrackingWrapper` (50Hz) to fix hierarchical loss degradation.
-2. [ ] **13-01-shared-memory-bridge**: (NEXT) Create the shared memory data pipe in `visual_analytics.py`.
-2. [ ] **13-02-policy-dashboard**: (PLANNED) Build `policy_dashboard.py` to render the Graph View.
-3. [ ] **12-01-turning-mission**: (PAUSED) Execute first autonomous turn via RoadGraph token.
-4. [ ] **update-log-paths**: (PLANNED) Update script file paths to route all new `.log` outputs to the root `logs/` directory.
-5. [ ] **14-01-usd-asset-flattening**: (PLANNED) Remove the 0.125 scaling hack from the USD track asset.
-6. [ ] **14-02-trackmanager-caching**: (PLANNED) Cache TrackManager boundary points to .npy files to fix startup performance bottleneck.
-7. [ ] **14-03-telemetry-curvature**: (PLANNED) Implement path curvature (Kappa) calculation for the observation vector.
+2. [ ] **12-01-turning-mission**: (NEXT) Implement the proximity-based RoadGraph triggers for intersection decision-making.
+3. [ ] **13-01-shared-memory-bridge**: (PAUSED) Create the shared memory data pipe in `visual_analytics.py`.
+4. [ ] **13-02-policy-dashboard**: (PAUSED) Build `policy_dashboard.py` to render the Graph View.
+5. [ ] **14-01-usd-asset-flattening**: (PAUSED) Remove the 0.125 scaling hack from the USD track asset (waiting for training run to finish).
+6. [ ] **update-log-paths**: (COMPLETED) All script log paths updated to `logs/`.
+
+## Completed
+- [x] Phase 11: 1.0x Baseline Retraining & Perception Fixes.
+- [x] Phase 11: Hierarchical Policy Integration (Submodule, Protocol v2, Bridges).
+- [x] Phase 11: Core Perception Debug (Camera tilt/Heading math).
+- [x] Phase 11: Wave 2 Intersection Navigation (Permeable gates, Intent filtering).
+- [x] Maintenance: 14-02-trackmanager-caching (Verified).
+- [x] Maintenance: 14-03-telemetry-curvature (Verified).
 
 ## Active Issues
 None.

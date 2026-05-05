@@ -1,161 +1,143 @@
-# Phase 12: Autonomous Intersection Navigation - Research
+# Phase 12: Autonomous Navigation (RoadGraph Triggers) - Research
 
-**Researched:** 2025-05-15
-**Domain:** V2I Decentralized Coordination & USD Topology
+**Researched:** 2024-05-04
+**Domain:** Autonomous Navigation & RoadGraph
 **Confidence:** HIGH
 
 ## Summary
-This research defines the implementation strategy for Task 12-02 (Edge Module Spawning). We shift from a centralized RoadGraph to a decentralized V2I architecture where "Smart Junction Modules" are spawned based on USD `DSIntersection` prims. Each module handles its own FSM state and robot handshakes.
 
-**Primary recommendation:** Use `torch.cdist` for high-performance spatial lookup of junctions and implement a `JunctionModule` class that validates the robot's `PlanarPath` against its local intersection topology.
+This phase implements trigger-based decision logic in `arcproLab/mdp/road_graph.py` to provide navigation tokens (Left/Straight/Right) to the policy. The logic relies on detecting proximity to intersection gates (Stop Lines) and extracting the `SignalTurnRelation` attribute from the USD stage.
 
-<user_constraints>
+**Primary recommendation:** Extend `RoadGraph` to parse `DSLaneGate` prims once at initialization and use a vectorized `torch.cdist` lookup in the `update()` loop to set `turn_token` based on the nearest gate's relation.
+
 ## User Constraints (from CONTEXT.md)
 
 ### Locked Decisions
-- Use Decentralized V2I (Edge Modules) instead of a central planner.
-- Intersections must be physically tied to `DSIntersection` prims.
-- Robots must provide `PlanarPath` to the module for validation.
-
-### the agent's Discretion
-- Implementation of spatial lookup (Hashing vs. Tensors).
-- Junction Module internal FSM state logic.
-- PlanarPath validation heuristics.
-
-</user_constraints>
-
-<phase_requirements>
-## Phase Requirements
-
-| ID | Description | Research Support |
-|----|-------------|------------------|
-| NAV-01 | USD Topology Mapping | Analysis of `DSIntersection` and `DSLaneGate` attributes provides the linking mechanism. |
-| NAV-02 | Edge Module Spawning | Class structure for `JunctionModule` and `JunctionManager` defined. |
-| NAV-03 | Decentralized Lookup | `torch.cdist` confirmed as high-performance solution. |
-| NAV-04 | Path Handshake | `PlanarPath` integration with `JunctionModule` handshake protocol defined. |
-</phase_requirements>
+- Logic must reside in `arcproLab/mdp/road_graph.py`.
+- Must handle 24 gates detected in the `no_graph_sim_clean_1x.usda` scene.
+- Observations must carry tokens to the policy (already supported in `observations.py`).
+- Must not break the "Loop" mission (default to Straight when no trigger is active).
 
 ## Standard Stack
 
 ### Core
 | Library | Version | Purpose | Why Standard |
 |---------|---------|---------|--------------|
-| torch | 2.10.0+cu128 | Spatial math & Vectorization | Required by Isaac Lab and Policy Stack. |
-| pxr (USD) | 23.11 | USD Scene Parsing | Standard for NVIDIA Omniverse/Isaac Sim. |
-| numpy | 1.26.4 | Data manipulation | Supporting library for coordinate transforms. |
+| torch | 2.x | Vectorized Math | Native for Isaac Lab and Policy Stack. |
+| pxr (USD) | 23.11 | Scene Parsing | Standard for NVIDIA Omniverse/Isaac Sim. |
+
+### Supporting
+| Library | Version | Purpose | When to Use |
+|---------|---------|---------|--------------|
+| numpy | 1.24+ | Data Handling | Used for initial coordinate extraction. |
 
 ## Architecture Patterns
 
 ### Recommended Project Structure
 ```
 arcproLab/mdp/
-├── junction_manager.py    # Singleton managing all modules
-├── junction_module.py     # Class definition for Edge Modules
-└── road_graph.py          # Updated to delegate to JunctionManager
+├── road_graph.py          # Implement trigger logic here
+└── track_manager.py       # Source of gate positions (optional dependency)
 ```
 
-### Pattern: Smart Edge Module (V2I)
-**What:** Each intersection is an independent actor with its own state.
-**When to use:** Decentralized coordination scenarios.
-**Example:**
-```python
-# Extracting Junctions from USD
-intersections = {}
-for prim in Usd.PrimRange(stage.GetPseudoRoot()):
-    if prim.GetAttribute("primvars:ds_type").Get() == "DSIntersection":
-        id = prim.GetAttribute("IntersectionID").Get()
-        pos = prim.GetAttribute("xformOp:transform").Get().ExtractTranslation()
-        gates = prim.GetAttribute("primvars:gates").Get() # List of GateIDs
-        intersections[id] = JunctionModule(id, pos, gates)
-```
+### Pattern: Proximity-Based Intent Trigger
+**What:** A spatial trigger that activates when the robot is within a specific radius of a gate.
+**When to use:** When the high-level mission is known (e.g., "Loop") and the track layout provides explicit decision points (Gates).
+**Example Logic:**
+1. **At Start:** Find all `DSLaneGate` prims. Store `(X, Y)` and `RelationValue`.
+2. **Each Step:** 
+   - Compute `dist = min(dist(robot, all_gates))`.
+   - If `dist < 2.5m`: `turn_token = nearest_gate.relation`.
+   - Else: `turn_token = 0.0` (Straight).
+
+## Gate Mapping Strategy
+
+| USD Relation | Token Value | Description |
+|--------------|-------------|-------------|
+| "Straight"   | `0.0`       | Maintain current lane/heading through junction. |
+| "Left"       | `-1.0`      | Prepare for left turn. |
+| "Right"      | `1.0`       | Prepare for right turn. |
+
+**Observation Vector Integration:**
+The token is passed to `obs[:, 0]` in `get_telemetry_vector`. The policy uses this to adjust its internal steering/speed behavior.
 
 ## Don't Hand-Roll
 
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
-| Spatial Lookup | Custom KD-Tree | `torch.cdist` | Torch is already on GPU; cdist is highly optimized for M:N distances. |
-| Path Planning | New Spline Gen | `PlanarPathPlanner` | Already implemented in `policy_stack` worker layer. |
-
-## USD Topology Mapping (Implementation Details)
-
-### Junction Extraction
-Each `DSIntersection` prim in `openStreetUSD/no_graph_sim_clean_1x.usda` serves as a container for junction logic.
-- **Coordinates**: Use `xformOp:transform` (matrix4d) or `AnalyticalPos` (float3) attribute to extract world-space XY.
-- **Linking**: The `primvars:gates` attribute (type `string[]`) contains the `GateID`s of all associated `DSLaneGate` prims.
-- **Logical Mapping**: `DSLaneGate` prims provide the `ODMapLaneID` (the lane segment it guards) and `SignalTurnRelation` (Straight/Left/Right).
-
-## Junction Module Design
-
-### Class Structure
-```python
-class JunctionModule:
-    """Represents a standalone V2I edge module for a single intersection."""
-    def __init__(self, junction_id: str, position: torch.Tensor, gates_metadata: dict):
-        self.id = junction_id
-        self.pos = position # World XY Tensor
-        self.gates = gates_metadata # Dict: GateID -> {pos, lane_id, relation}
-        self.state = "GREEN" # Simple FSM: GREEN, YELLOW, RED
-        self.radius_trigger = 3.0
-        self.radius_commit = 1.5
-        
-    def get_commands(self, robot_pos: torch.Tensor, intent_lane_id: str):
-        """
-        Calculates turn_token and go_signal.
-        - Maps intent_lane_id to SignalTurnRelation.
-        - Checks self.state for go_signal.
-        """
-        pass
-```
-
-## Decentralized Lookup
-
-### High-Performance Spatial Query
-- **Method**: Vectorized Distance Matrix.
-- **Implementation**: 
-    1. Collect all `JunctionModule.pos` into a single `(M, 2)` tensor.
-    2. Compute `distances = torch.cdist(robot_pos[:, :2], junction_tensor)`.
-    3. `nearest_idx = torch.argmin(distances, dim=1)`.
-- **Complexity**: $O(N \times M)$ where $N$ is robots and $M$ is junctions. For $N=100, M=100$, this is negligible in Torch.
-
-## Integration with PlanarPath
-
-### Handshake Protocol
-- **Input**: The `JunctionModule` accepts a `(5, 2)` tensor representing the `PlanarPath` from the policy's planner.
-- **Validation**: 
-    1. Check if the path's terminal waypoint matches the exit lane's gate position.
-    2. (Future) Check for spatial overlaps with other agents' paths for collision avoidance.
-- **Flow**: `observations.py` calls `JunctionManager.update(robot_pos, planar_paths)`, which delegates to the nearest modules.
+| Nearest Neighbor | Loop through list | `torch.cdist` | Massively parallel on GPU; handles 32+ environments efficiently. |
+| Coordinate Transform | Custom Math | `UsdGeom.Xformable` | Handles nested scaling and offsets correctly. |
 
 ## Common Pitfalls
 
-### Pitfall 1: Coordinate System Mismatch
-**What goes wrong:** USD coordinates extracted in Local Xform instead of World Xform.
-**How to avoid:** Always use `UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())` to get the world matrix.
+### Pitfall 1: Coordinate Scaling
+**What goes wrong:** The track is scaled by `0.125` in `arcpro_env_cfg.py`. Extracting gate positions from the raw USD might ignore this scale.
+**How to avoid:** Use `ComputeLocalToWorldTransform` on the prim after it has been spawned, or relative to the environment origin (consistent with `TrackManager`).
 
-### Pitfall 2: Batch Size mismatch
-**What goes wrong:** `JunctionManager` assumes a fixed number of robots.
-**How to avoid:** Dynamically resize tensors if `env.num_envs` changes or use batch-aware broadcasting.
+### Pitfall 2: Flapping Decisions
+**What goes wrong:** At the edge of the 2.5m trigger, the decision might flicker.
+**How to avoid:** Implement a small hysteresis or simply rely on the fact that the robot is moving towards the gate, so it will stay within the radius once it enters.
 
-## Environment Availability
+### Pitfall 3: Gate Misalignment
+**What goes wrong:** Multiple gates at one junction are close together. The robot might trigger the "Left" gate while in the "Straight" lane.
+**How to avoid:** The gates are usually placed *in* the specific lanes. As long as the robot follows the lane, it will be significantly closer to its own lane's gate.
 
-| Dependency | Required By | Available | Version | Fallback |
-|------------|------------|-----------|---------|----------|
-| Torch | Spatial Math | ✓ | 2.10.0+cu128 | — |
-| PXR (USD) | Scene Parsing | ✓ | 23.11 | — |
-| Isaac Lab | Simulation | ✓ | — | — |
+## Code Examples
+
+### Parsing Gates with Relations
+```python
+from pxr import Usd, UsdGeom
+import torch
+
+def get_gate_map(stage, env_origin):
+    gate_data = []
+    for prim in Usd.PrimRange(stage.GetPseudoRoot()):
+        if prim.HasAttribute("primvars:ds_type"):
+            if prim.GetAttribute("primvars:ds_type").Get() == ["DSLaneGate"]:
+                # Get World Position
+                xform = UsdGeom.Xformable(prim)
+                world_transform = xform.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+                pos = world_transform.ExtractTranslation()
+                
+                # Get Relation
+                rel = prim.GetAttribute("SignalTurnRelation").Get()
+                val = 0.0 # Default
+                if rel == "Left": val = -1.0
+                elif rel == "Right": val = 1.0
+                
+                # Adjust for environment origin
+                gate_data.append([pos[0] - env_origin[0], pos[1] - env_origin[1], val])
+    
+    return torch.tensor(gate_data, device="cuda:0")
+```
+
+## Validation Architecture
+
+### Test Framework
+| Property | Value |
+|----------|-------|
+| Framework | pytest |
+| Quick run command | `pytest arcproLab/policy_stack/test_all_so_far.py` |
+
+### Phase Requirements → Test Map
+| Req ID | Behavior | Test Type | Automated Command |
+|--------|----------|-----------|-------------------|
+| NAV-TR-01 | Token is 0.0 when far from gates | Unit | `python3 arcproLab/scripts/verify_policy.py --debug` |
+| NAV-TR-02 | Token changes to Relation when < 2.5m | Unit | `python3 arcproLab/scripts/verify_policy.py --debug` |
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- `openStreetUSD/no_graph_sim_clean_1x.usda` - Verified `DSIntersection` and `DSLaneGate` structure.
-- `arcproLab/mdp/track_manager.py` - Verified pattern for spatial tensor management.
-- `arcproLab/mdp/observations.py` - Verified telemetry vector structure.
+- `arcproLab/mdp/road_graph.py` - Current implementation placeholder.
+- `arcproLab/mdp/observations.py` - Verified telemetry mapping.
+- `dump_gates_env.py` (Ad-hoc) - Confirmed 24 gates and their relations in the scene.
 
 ## Metadata
-**Confidence breakdown:**
-- Standard stack: HIGH - Core project dependencies.
-- Architecture: HIGH - Follows existing Isaac Lab / ARCPro patterns.
-- Pitfalls: MEDIUM - Based on common USD/Torch integration issues.
 
-**Research date:** 2025-05-15
-**Valid until:** 2025-06-15
+**Confidence breakdown:**
+- Standard stack: HIGH
+- Architecture: HIGH
+- Pitfalls: MEDIUM
+
+**Research date:** 2024-05-04
+**Valid until:** 2024-06-04

@@ -1,70 +1,74 @@
 # External Integrations
 
-**Analysis Date:** 2024-04-23
+**Analysis Date:** 2025-01-24
 
 ## APIs & External Services
 
-**Simulation:**
-- NVIDIA Isaac Sim - Primary simulation engine for physics and visuals.
-  - SDK: `isaaclab`, `omni.isaac.*`
-  - Integration: `arcproLab/arcpro_env_cfg.py`
+**Robotics Middleware:**
+- ROS2 (Robot Operating System 2) - Used for real-time communication between the RL policy and the robot (simulated or physical).
+  - SDK/Client: `rclpy`
+  - Topics: `/camera/image_raw`, `/vehicle_state`, `/ackermann_cmd`, `/imu`
 
-**RL Algorithms:**
-- Stable Baselines 3 - Provides PPO and RecurrentPPO algorithms.
-  - Integration: `arcproLab/scripts/train_policy.py`
+**Simulation Platform:**
+- NVIDIA Isaac Sim / Isaac Lab - High-fidelity physics simulation and synthetic data generation.
+  - SDK: `isaaclab`
 
 ## Data Storage
 
-**Assets:**
-- USD (Universal Scene Description) - Local files containing 3D meshes and physics properties.
-  - Track: `openStreetUSD/no_graph_sim_clean_1x.usda`
-  - Robot: `arcproLab/assets/robot/F1Tenth_Metric.usd`
+**3D Assets:**
+- Universal Scene Description (USD) - Used for robot models and track environments.
+  - Location: `arcproLab/assets/` and `openStreetUSD/`
 
-**Weights & Logs:**
-- Tensorboard - Used for monitoring training progress.
-  - Logs location: `logs/sb3/` (generated during training)
-- PyTorch Models - Stored as `.zip` (SB3 format) or `.pth` (raw weights).
-  - Example: `arcproLab/models/road_following_model.pth`
+**Trained Models:**
+- PyTorch / Stable Baselines 3 Checkpoints - `.zip` and `.pth` files.
+  - Location: `arcproLab/models/`
+
+**Calibration & Ground Truth:**
+- NPZ files - Used for track boundaries and waypoint data.
+  - Example: `arcproLab/mdp/track_boundaries_1x.npz`
 
 ## Authentication & Identity
 
 **Auth Provider:**
-- None / Local - The system runs entirely in a local or containerized environment without external auth requirements.
+- Custom / None - Local ROS2 communication and Isaac Sim do not require external auth providers in this setup.
 
 ## Monitoring & Observability
 
-**Error Tracking:**
-- None - Standard Python traceback and simulation console logs.
+**Metrics Visualization:**
+- Tensorboard - Used for monitoring RL training progress (loss, rewards, etc.).
+  - Implementation: Docker-based setup in `tensorboard_view_docker/`.
 
-**Logs:**
-- Console Output - Detailed logs from Isaac Lab and SB3.
-- Tensorboard - Visualizes reward curves and environment metrics.
+**Logging:**
+- Python `logging` and ROS2 `node.get_logger()` - Used throughout the codebase for telemetry and debug info.
 
 ## CI/CD & Deployment
 
 **Hosting:**
-- Local workstations or GPU-enabled servers.
+- Local hardware / NVIDIA GPU workstations.
 
 **CI Pipeline:**
-- GitHub Actions - `.github/workflows/ci.yml` present for code linting/testing.
+- GitHub Actions - Configured in `.github/workflows/ci.yml`.
 
 ## Environment Configuration
 
 **Required env vars:**
-- `ISAAC_SIM_PATH` - Path to the Isaac Sim installation.
-- `DISPLAY` - Required for GUI mode.
+- `MUJOCO_GL` (optional, for gym renders)
+- `DISPLAY` (required for Isaac Sim GUI)
+- `PYTHONPATH` (often adjusted to include `arcproLab`)
 
 **Secrets location:**
-- Not applicable - No external API keys used.
+- Not detected (No external cloud APIs found requiring secrets).
 
 ## Webhooks & Callbacks
 
-**Incoming:**
-- None
+**Incoming (ROS2 Subscriptions):**
+- `/camera/image_raw` - RGB camera feed.
+- `/vehicle_state` - Current vehicle telemetry (AckermannDriveStamped).
+- `/imu` - IMU sensor data for yaw rate.
 
-**Outgoing:**
-- None
+**Outgoing (ROS2 Publications):**
+- `/ackermann_cmd` - Drive commands (speed, steering, acceleration).
 
 ---
 
-*Integration audit: 2024-04-23*
+*Integration audit: 2025-01-24*

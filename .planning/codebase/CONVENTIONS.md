@@ -1,82 +1,87 @@
 # Coding Conventions
 
-**Analysis Date:** 2024-04-23
+**Analysis Date:** 2025-01-23
 
 ## Naming Patterns
 
 **Files:**
-- Snake Case: `arcpro_env_cfg.py`, `track_manager.py`.
+- snake_case for all source files (e.g., `observations.py`, `track_manager.py`).
+- Test files prefixed with `test_` (e.g., `test_track_manager.py`).
 
 **Functions:**
-- Snake Case: `speed_reward(env, ...)`, `get_telemetry_vector(...)`.
+- snake_case for all functions (e.g., `get_telemetry_vector()`, `compute_marker_distances()`).
 
 **Variables:**
-- Snake Case: `lat_err`, `head_err`, `turn_token`.
+- snake_case for local variables and parameters (e.g., `asset_cfg`, `env_origins`).
 
 **Types:**
-- PascalCase for Config classes: `ARCProEnvCfg`, `ARCProSceneCfg`.
-- PascalCase for Managers: `TrackManager`, `RoadGraph`.
+- PascalCase for classes (e.g., `TrackManager`, `AgentNode`, `WorkerNode`).
+- UPPER_SNAKE_CASE for constants and index definitions (e.g., `TELEMETRY_INDICES`, `IDX_LAT_ERR`).
 
 ## Code Style
 
 **Formatting:**
-- Follows Isaac Lab standards (largely PEP8).
-- Copyright headers included in most core files.
+- Standard Python (PEP 8) style is followed.
+- Indentation: 4 spaces.
 
 **Linting:**
-- Configured in `.github/workflows/ci.yml`.
-- Standard Python linting (flake8/black/isort usually assumed in Isaac projects).
+- Not explicitly configured in the root, but `arcproLab/policy_stack/pytest.ini` disables several ament/colcon linting plugins, suggesting a ROS2 environment might be involved but suppressed for core tests.
 
 ## Import Organization
 
 **Order:**
-1. Standard Library (`os`, `sys`, `math`).
-2. Major Frameworks (`torch`, `numpy`).
-3. Isaac Lab / Omniverse (`isaaclab.*`, `omni.*`).
-4. Project Local Modules (`arcpro_robot_cfg`, `mdp.*`).
+1. Standard library imports (e.g., `import os`, `import sys`).
+2. Major external dependencies (e.g., `import torch`, `import numpy as np`).
+3. Isaac Lab / Isaac Sim specific imports (e.g., `from isaaclab.managers import SceneEntityCfg`).
+4. Internal project imports (e.g., `from mdp.road_graph import get_road_graph`).
 
 **Path Aliases:**
-- `mdp` is often imported as a local package within `arcproLab`.
-- `sys.path.append` is used in several scripts to ensure cross-package visibility (e.g., `arcproLab/arcpro_env_cfg.py`).
+- `sys.path.insert(0, ...)` is frequently used in scripts and tests to ensure `arcproLab` or local directories are discoverable.
 
 ## Error Handling
 
 **Patterns:**
-- **NaN Safeguards:** Mandatory in reward and observation functions to prevent policy divergence.
-- **Existence Checks:** `if not root_prim.IsValid(): ...` when interacting with the USD stage.
-- **Graceful Failures:** Scripts like `train_policy.py` use `try-except` blocks for non-critical components like action history.
+- `torch.isnan(reward)` checks in reward functions to ensure stability.
+- `try-except` blocks for optional imports (e.g., `HAS_TORCH` checks in `test_all_so_far.py`).
+- Existence checks for files and directories using `os.path.exists()` before loading data.
 
 ## Logging
 
-**Framework:** `console` and `Tensorboard`.
+**Framework:** `print()`
 
 **Patterns:**
-- **Debug Flags:** `TrackManager` uses a `--debug` CLI flag to toggle expensive visualization markers.
-- **Periodic Logging:** Telemetry debug prints in `observations.py` are throttled (e.g., `episode_length_buf[0] % 10 == 0`).
+- Prefixed print statements for component-level logging: `[TrackManager]`, `[DIAGNOSTIC]`.
+- Conditional logging based on debug flags or random sampling (e.g., `if torch.rand(1).item() < 0.05:`).
 
 ## Comments
 
 **When to Comment:**
-- Complexity: Explain geometric calculations (e.g., yaw from quaternion).
-- Calibration: Document scale changes (e.g., 8x to 1x camera offsets).
+- Complexity: Mathematical formulas (e.g., yaw from quaternion) are commented with the formula.
+- Protocols: Index mappings for telemetry are documented in docstrings.
 
 **JSDoc/TSDoc:**
-- Python Docstrings (`"""Docstring"""`) used for classes and main functions.
+- Triple-quoted docstrings are used for functions and classes, often providing usage examples or parameter descriptions.
 
 ## Function Design
 
-**Size:** Preference for small, focused functions in `mdp/`.
+**Size:**
+- Generally small and focused on a single task (e.g., one function per reward or termination criteria).
 
-**Parameters:** Manager functions typically take `env: ManagerBasedRLEnv` as the first argument.
+**Parameters:**
+- Heavily use type hinting (e.g., `env: ManagerBasedRLEnv`, `asset_cfg: SceneEntityCfg`).
+- Default parameters are common for configuration objects.
 
-**Return Values:** MDP manager terms MUST return `torch.Tensor` of shape `(num_envs, ...)`.
+**Return Values:**
+- Most RL-related functions (rewards, observations, terminations) return `torch.Tensor` for GPU acceleration.
 
 ## Module Design
 
-**Exports:** Standard Python module exports.
+**Exports:**
+- Standard Python module exports.
 
-**Barrel Files:** `arcproLab/mdp/__init__.py` used to aggregate MDP terms.
+**Barrel Files:**
+- `__init__.py` files are used to organize subpackages like `mdp/`.
 
 ---
 
-*Convention analysis: 2024-04-23*
+*Convention analysis: 2025-01-23*

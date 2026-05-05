@@ -1,4 +1,15 @@
-Execute Phase 13: Live Policy GUI (Task 13-01: Shared Memory Bridge).
+# RESUME HERE
 
-The user wants to implement a graph view to see the rewards, learning over time, and policy thought processes. The plan is outlined in `.planning/phases/13-live-policy-gui/13-PLAN.md`.
-We are ready to start coding `arcproLab/mdp/visual_analytics.py` to add the `multiprocessing.shared_memory` data pipe for Phase 13.
+## Project Context
+- **Milestone:** Milestone 1: Physical Fidelity & Policy Foundation (v1.2)
+- **Phase:** Phase 13: Live Policy GUI (Planning/Infrastructure Bridge)
+- **Status:** SUCCESSFULLY MIGRATED to 5kg realistic physics and 20Hz temporal alignment. 32-env production training is ACTIVE in the background at 179 FPS.
+
+## Next Sub-Phase: 13-01 Shared Memory Bridge
+- **Next Todo:** Implement the shared memory data pipe in `visual_analytics.py` for frames, rewards, and distributions.
+- **Rationale:** Now that the physics are stable and training is fast, we need a high-performance, non-blocking way to visualize the 179 FPS data stream without crashing the simulation.
+
+## Technical Context for /clear
+- **Active Log:** `training_production_5kg_fresh.log`
+- **Active Physics:** 5kg Chassis, 0.2kg Wheels, 15.0 Drive Scale, 16 Solver Iterations.
+- **Critical Sync:** Environment DT is 0.05 (20Hz). WaypointTrackingWrapper is synced.

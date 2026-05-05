@@ -1,66 +1,72 @@
 # Technology Stack
 
-**Analysis Date:** 2024-04-23
+**Analysis Date:** 2025-01-24
 
 ## Languages
 
 **Primary:**
-- Python 3.10+ - Core environment, training scripts, and MDP logic. Used throughout `arcproLab/`.
+- Python 3.10+ - Core logic for RL training, environment configuration, and ROS2 deployment.
 
 **Secondary:**
-- USDA/USD (Universal Scene Description) - Asset definition for robots and environments in `openStreetUSD/` and `arcproLab/assets/`.
+- Universal Scene Description (USD/USDA) - 3D scene representation, asset modeling, and physics configuration for NVIDIA Isaac Sim.
 
 ## Runtime
 
 **Environment:**
-- NVIDIA Isaac Sim 4.0+ / Isaac Lab - Robotics simulation platform and RL framework.
+- NVIDIA Isaac Sim / Isaac Lab - Primary simulation and physics environment.
+- ROS2 (Robot Operating System) - Distributed communication middleware for deployment and hardware integration.
+- CUDA - GPU acceleration for both simulation physics (PhysX) and neural network computations.
 
 **Package Manager:**
-- pip - Standard Python package management.
-- Lockfile: `requirements.txt` (present in project root).
+- pip - Python package management.
+- Lockfile: missing (using `requirements.txt`).
 
 ## Frameworks
 
 **Core:**
-- Isaac Lab (formerly Orbit) - Manager-based RL framework used in `arcproLab/arcpro_env_cfg.py`.
-- PyTorch - Deep learning backend for RL policies.
+- NVIDIA Isaac Lab - High-level framework for Reinforcement Learning on Isaac Sim.
+- PyTorch - Deep learning backend for RL policies and inference.
+- ROS2 (rclpy) - Communication layer for the `IsaacROS2Env` deployment environment.
 
-**RL/Training:**
-- Stable Baselines 3 (SB3) - RL algorithm implementations.
-- SB3-Contrib - Used for `RecurrentPPO` in `arcproLab/scripts/train_policy.py`.
+**Testing:**
+- pytest - Testing framework used in `arcproLab/policy_stack/pytest.ini`.
 
 **Build/Dev:**
-- NVIDIA Omniverse Kit - Underlying platform for Isaac Sim.
+- Docker - Used for containerized services like Tensorboard (`tensorboard_view_docker/`).
 
 ## Key Dependencies
 
 **Critical:**
-- `isaaclab` - Core environment and manager abstractions.
-- `stable-baselines3` - Policy training and execution.
-- `torch` - Tensor computations and neural networks.
-- `numpy` - Path processing and math utilities.
+- `torch` - Neural network training and tensor operations.
+- `isaaclab` - RL environment management and Isaac Sim utilities.
+- `stable-baselines3` / `sb3_contrib` - RL algorithms, specifically `RecurrentPPO` for sequential decision making.
+- `gymnasium` - Standard API for Reinforcement Learning environments.
 
 **Infrastructure:**
-- `omni.usd` - Python API for manipulating USD stages (used in `arcproLab/mdp/track_manager.py`).
+- `rclpy` - ROS2 Python client library.
+- `numpy` - Numerical data processing for observations and telemetry.
+- `opencv-python` (cv2) - Computer vision for lane detection and image resizing.
+- `cv_bridge` - Bridge between ROS2 image messages and OpenCV.
 
 ## Configuration
 
 **Environment:**
-- Configured via `ManagerBasedRLEnvCfg` and `@configclass` decorators.
-- Example: `arcproLab/arcpro_env_cfg.py`.
+- Configured via Python `@configclass` decorators in `arcproLab/arcpro_env_cfg.py` and `arcproLab/arcpro_robot_cfg.py`.
+- ROS2 topics and parameters configured via `IsaacROS2Config` dataclass in `arcproLab/policy_stack/isaac_ros2_env.py`.
 
 **Build:**
-- No explicit build step; Python scripts run directly within Isaac Sim environment.
+- GitHub Actions workflows in `.github/workflows/ci.yml`.
 
 ## Platform Requirements
 
 **Development:**
-- Ubuntu 22.04 (standard for Isaac Sim).
-- NVIDIA GPU (RTX 3080+ recommended) with latest drivers.
+- NVIDIA GPU with CUDA support.
+- Ubuntu 20.04/22.04 (standard for Isaac Sim and ROS2).
+- Isaac Sim installation.
 
 **Production:**
-- Isaac Sim Docker or local installation.
+- ARCPro / F1TENTH hardware or Isaac Sim for high-fidelity verification.
 
 ---
 
-*Stack analysis: 2024-04-23*
+*Stack analysis: 2025-01-24*

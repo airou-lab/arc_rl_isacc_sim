@@ -1,94 +1,104 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-04-29
+**Analysis Date:** 2024-04-14
 
 ## Tech Debt
 
-**USD Scaling Hack (Tracked: 14-01):**
-- Issue: The track USD is scaled by `0.125` in the environment config to match the 1.0x metric robot. This implies the original USD was authored at 8x scale.
-- Files: `arcproLab/arcpro_env_cfg.py`, `openStreetUSD/no_graph_sim_clean_1x.usda`
-- Impact: Confusion regarding "true" metric units. If the USD is ever re-exported at 1.0x, the environment will break.
-- Fix approach: Flatten the track USD to natively be 1.0x metric scale and remove the config-level scaling `scale=(0.125, 0.125, 0.125)`.
-- Reference: `.planning/todos/14-01-RESEARCH.md`
+**USD-Based Marker Categorization:**
+- Issue: `TrackManager` and `RoadGraph` rely on traversing the USD stage and matching prim names/materials (e.g., "yellow", "white", "laneGate") to build logical boundaries and navigation intents.
+- Files: `arcproLab/mdp/track_manager.py`, `arcproLab/mdp/road_graph.py`
+- Impact: Brittle. If USD asset names change or material paths vary, the simulation logic fails to detect track boundaries or navigation gates.
+- Fix approach: Implement a more robust tagging system (e.g., USD Attributes/Semantics) or move boundary definitions to a dedicated configuration file/map format.
 
-**Telemetry Vector Placeholders (Tracked: 14-03):**
-- Issue: Index 10 (Curvature/Kappa) is hardcoded to 0.0.
-- Files: `arcproLab/mdp/observations.py`, `arcproLab/mdp/track_manager.py`
-- Impact: Policy lacks awareness of upcoming track geometry, limiting proactive steering on turns.
-- Fix approach: Implement curvature calculation (`kappa = d_theta / d_s`) in `TrackManager` using a ~2.0m lookahead over track waypoints.
-- Reference: `.planning/todos/14-03-RESEARCH.md`
+**Hardcoded Simulation Offsets:**
+- Issue: Numerous hardcoded values for lane offsets, marker distances, and geometry.
+- Files: `arcproLab/mdp/track_manager.py` (line 173), `arcproLab/mdp/rewards.py`, `arcproLab/mdp/terminations.py`
+- Impact: Difficult to generalize to different track layouts or robot dimensions without manual code changes.
+- Fix approach: Centralize geometry-dependent constants in `ArcProEnvCfg` or load them from the track USD metadata.
 
-**RoadGraph Placeholder:**
-- Issue: `RoadGraph` currently returns a constant "Straight" intent.
-- Files: `arcproLab/mdp/road_graph.py`
-- Impact: Robot cannot navigate intersections or follow missions.
-- Fix approach: Implement the trigger-based decision logic as planned in Phase 11.
+**Stateful Observation Function:**
+- Issue: `get_telemetry_vector` performs updates to `RoadGraph` and `env.extras["distance"]`, meaning the observation gathering has side effects.
+- Files: `arcproLab/mdp/observations.py`
+- Impact: Violates the functional expectation of observation gathering. Could lead to double-counting if observations are requested multiple times per step (e.g., for logging or visualization).
+- Fix approach: Move state updates (distance accumulation, road graph updates) to an `ActionManager` or a dedicated `StepHook`.
 
 ## Known Bugs
 
-**Inverted Speeds (Potential):**
-- Issue: Debug logic in `observations.py` checks for "action/speed inversion".
-- Symptoms: Robot might accelerate backwards when given forward throttle.
-- Files: `arcproLab/mdp/observations.py`
-- Trigger: Incorrect actuator joint expression or motor direction in USD.
-- Workaround: Monitored via telemetry debug prints.
+**NaN Propagation in Rewards/Observations:**
+- Issue: Explicit `torch.isnan` checks and zero-filling are present in multiple MDP files.
+- Files: `arcproLab/mdp/rewards.py`, `arcproLab/mdp/observations.py`
+- Symptoms: Occasional zeroing of rewards or observations when physics or math (atan2/cdist) produces NaNs.
+- Trigger: Likely extreme physics states or collisions at 1.0x metric scale.
+- Workaround: Zero-filling keeps training running but hides underlying physics instability.
 
 ## Security Considerations
 
-**Simulation Escape:**
-- Risk: Robot falling into the void if `ground_plane` is removed (which it was in latest config).
-- Files: `arcproLab/arcpro_env_cfg.py`
-- Current mitigation: Robust termination logic in `terminations.py` to reset on fall.
-- Recommendations: Keep a visual ground plane at low Z for visual reference even if collisions are disabled.
+**Unrestricted Shell Execution in `TrackManager`:**
+- Risk: `TrackManager` checks `sys.argv` for `--debug` to enable visuals.
+- Files: `arcproLab/mdp/track_manager.py`
+- Current mitigation: None.
+- Recommendations: Use a proper configuration system rather than raw `sys.argv` to control simulation features.
 
 ## Performance Bottlenecks
 
-**TrackManager Boundary Collection (Tracked: 14-02):**
-- Problem: Collecting 10k+ points from USD stage on startup causes a 5-10 second blocking delay.
-- Files: `arcproLab/mdp/track_manager.py`
-- Cause: Iterating through every mesh vertex in the track USD.
-- Improvement path: Cache the extracted boundaries and gates to `.npy` files instead of re-calculating on every run, using a `--rebuild_track_cache` mechanism.
-- Reference: `.planning/todos/14-02-RESEARCH.md`
+**Iterative USD Stage Traversal:**
+- Problem: Building boundary tensors from USD meshes is extremely slow on startup.
+- Files: `arcproLab/mdp/track_manager.py` (`collect_raw_marker_points`)
+- Cause: Traverses every prim in the stage to find markings.
+- Improvement path: Optimize the `save_cache`/`load_cache` mechanism and use `omni.usd` query APIs instead of a full `Usd.PrimRange` traversal.
 
-**Marker Visualization:**
-- Problem: Drawing 1000s of spheres in the GUI.
-- Files: `arcproLab/mdp/track_manager.py`
-- Cause: Individual sphere markers for lane lines.
-- Improvement path: Only enabled via `--debug` flag; use `PointInstancer` or `VisualizationMarkers` more efficiently.
+**Distance Calculations (cdist):**
+- Problem: `compute_marker_distances` performs `torch.cdist` against dense marker tensors every step.
+- Files: `arcproLab/mdp/track_manager.py`, `arcproLab/mdp/terminations.py`
+- Cause: Dense point clouds for boundaries (Yellow/White/Gate) lead to large distance matrices.
+- Improvement path: Use a spatial hash or KD-Tree (ideally GPU-accelerated) for proximity checks.
 
 ## Fragile Areas
 
-**Implicit Actuators:**
-- Files: `arcproLab/arcpro_robot_cfg.py`
-- Why fragile: Gains (stiffness/damping) are extremely sensitive to scaling. 1.0x metric scale requires much lower gains than legacy 8x or 100x scales.
-- Safe modification: Use `verify_drive.py` and `audit_wheels.py` after any change to actuator configs.
-- Test coverage: Low (manual verification).
+**Low-Mass Physics Stability:**
+- Files: `arcproLab/arcpro_robot_cfg.py`, `arcproLab/mdp/spawner.py`
+- Why fragile: Reducing robot mass to 5kg at 1.0x scale (metric) pushes the PhysX solver limits. Small mass ratios between joints and high actuator gains lead to numerical "jitter."
+- Safe modification: Follow scaling laws for motor parameters and maintain high solver iterations (16-32) and `armature`.
+- Test coverage: Gaps in automated physics validation scripts.
+
+**Gate Permeability Logic:**
+- Files: `arcproLab/mdp/terminations.py` (`white_line_contact`)
+- Why fragile: Logic determines if a "Gate" (Stop Line) is a wall or permeable based on robot heading and speed. This heuristic might fail during complex maneuvers or at high slip angles.
+- Safe modification: Tie gate permeability to `RoadGraph` intent (e.g., if intent is 'Straight', the 'Straight' gate is permeable).
 
 ## Scaling Limits
 
-**Metric Scale:**
-- Current capacity: 1.0x metric.
-- Limit: Floating point precision in PhysX for very small objects (e.g., 0.01m).
-- Scaling path: Maintain 1.0x but use smaller simulation timesteps if instability occurs.
-
-## Missing Critical Features
-
-**Intersection Logic:**
-- Problem: No mechanism to select lanes at a junction.
-- Blocks: Autonomous navigation through the full `no_graph_sim` environment.
-
-**Dynamic Obstacles:**
-- Problem: Env only supports a single ego-robot.
-- Blocks: Multi-agent training.
+**Metric Scale Precision:**
+- Current capacity: 1.0x scale (meters).
+- Limit: Numerical precision issues in PhysX when handling small collisions (0.01m) at high speeds.
+- Scaling path: Maintain high frequency `dt=0.002` (500Hz) and TGS solver.
 
 ## Test Coverage Gaps
 
-**Actuator Physics:**
-- What's not tested: Real-world torque/velocity matching.
-- Files: `arcproLab/arcpro_robot_cfg.py`
-- Risk: Policy learns "sim-only" physics that doesn't transfer to hardware (Reality Gap).
-- Priority: High.
+**MDP Core Logic:**
+- What's not tested: Reward functions, observation vector correctness, termination triggers.
+- Files: `arcproLab/mdp/rewards.py`, `arcproLab/mdp/observations.py`, `arcproLab/mdp/terminations.py`
+- Risk: Regression in RL performance or subtle bugs in error calculation (lateral/heading) that are hard to debug from training curves.
+- Priority: High
+
+**Asset Spawning:**
+- What's not tested: Correctness of mass overrides and link properties after spawning.
+- Files: `arcproLab/mdp/spawner.py`
+- Risk: Robot might be simulated with default masses (30kg) if the override logic fails silently.
+- Priority: Medium
+
+## Missing Critical Features
+
+**Stagnation Detection:**
+- Problem: Policies can learn to sit still to avoid penalties if the speed reward is not balanced.
+- Blocks: Efficient training and reliable resets.
+- Files: `arcproLab/mdp/terminations.py` (stubbed `stagnation_termination`)
+
+**Route Following:**
+- Problem: `RoadGraph` is currently a random intent generator. It does not follow a predefined global path or mission.
+- Blocks: Phase 12+ (Autonomous Navigation).
+- Files: `arcproLab/mdp/road_graph.py`
 
 ---
 
-*Concerns audit: 2026-04-29*
+*Concerns audit: 2024-04-14*

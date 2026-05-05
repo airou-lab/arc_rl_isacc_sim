@@ -1,97 +1,130 @@
 # Testing Patterns
 
-**Analysis Date:** 2024-04-23
+**Analysis Date:** 2025-01-23
 
 ## Test Framework
 
 **Runner:**
-- `pytest` for unit tests.
-- Manual execution for simulation verification scripts.
+- `pytest` (Configured in `arcproLab/policy_stack/pytest.ini`)
+- Custom smoke test runner: `arcproLab/policy_stack/test_all_so_far.py`
 
 **Assertion Library:**
-- `assert` (standard Python).
-- `torch.testing` for tensor comparisons.
+- Standard Python `assert` statements.
+- `torch.allclose()` and `np.allclose()` for numerical/tensor comparisons.
 
 **Run Commands:**
 ```bash
-pytest tests/                          # Run unit tests
-./arcproLab/scripts/verify_metric.sh   # Verify sim scaling
-./run_gui_verify.sh                    # Run GUI-based visual audit
+pytest tests/                          # Run standard pytest suite
+python arcproLab/policy_stack/test_all_so_far.py  # Run comprehensive smoke test suite
 ```
 
 ## Test File Organization
 
 **Location:**
-- Unit tests: `tests/` directory.
-- Verification scripts: `arcproLab/scripts/` (for simulation-in-the-loop tests).
+- Separate `tests/` directory (e.g., `tests/test_track_manager.py`).
+- Integrated tests within subpackages (e.g., `arcproLab/policy_stack/test_all_so_far.py`).
 
 **Naming:**
-- Unit tests: `test_*.py`.
-- Verification scripts: `verify_*.py` or `audit_*.py`.
+- `test_*.py` for standard tests.
+- Scripts prefixed with `test_` in `arcproLab/scripts/` (e.g., `test_sb3_wrapper.py`).
+
+**Structure:**
+```
+[project-root]/
+├── tests/                 # Dedicated test directory
+└── arcproLab/
+    ├── policy_stack/
+    │   └── test_all_so_far.py # Monolithic smoke test
+    └── scripts/
+        └── test_*.py      # Utility/Verification scripts
+```
 
 ## Test Structure
 
-**Verification Script Pattern:**
+**Suite Organization:**
 ```python
-# arcproLab/scripts/verify_metric.py
-def main():
-    # 1. Launch App
-    # 2. Setup Env
-    # 3. Step Simulation
-    # 4. Assert Geometric Properties (e.g., track width == 3.5m)
+# From tests/test_track_manager.py
+@pytest.fixture
+def mock_track_manager():
+    # Setup
+    tm = TrackManager(device="cpu")
+    return tm
+
+def test_feature(mock_track_manager):
+    # Action
+    result = mock_track_manager.do_something()
+    # Assertion
+    assert result == expected
 ```
 
 **Patterns:**
-- **Scene Audit:** Scripts that spawn the environment and print dimensions to verify USD scaling.
-- **Physics Audit:** Scripts that apply forces and measure resulting velocity to verify mass/friction.
+- **Setup pattern:** Use `@pytest.fixture` for reusable components.
+- **Teardown pattern:** Use `with tempfile.TemporaryDirectory()` for file-based tests.
+- **Assertion pattern:** Direct equality for scalars, `allclose` for tensors/arrays.
 
 ## Mocking
 
-**Framework:** None observed; Tests typically use the live Isaac Sim environment or simple NumPy/Torch mocks for math.
+**Framework:** `unittest.mock.MagicMock`
+
+**Patterns:**
+```python
+# Mocking heavy dependencies to run tests without Isaac Sim
+import sys
+from unittest.mock import MagicMock
+sys.modules["omni"] = MagicMock()
+sys.modules["omni.usd"] = MagicMock()
+sys.modules["pxr"] = MagicMock()
+```
 
 **What to Mock:**
-- Environment state in `TrackManager` unit tests.
+- Isaac Sim / Omniverse modules (`omni`, `pxr`).
+- Hardware/Environment interactions when testing core logic.
 
 **What NOT to Mock:**
-- Physics interactions (always use Isaac Sim for these).
+- Mathematical models (Ackermann, Planar planner).
+- Configuration objects.
 
 ## Fixtures and Factories
 
 **Test Data:**
-- `track_centerline_1x.npy`: Reference path for `TrackManager` tests.
+```python
+# Synthetic waypoints for testing TrackManager
+wps = np.zeros((10, 3))
+wps[:, 0] = np.linspace(0, 9, 10)
+tm.waypoints = torch.tensor(wps)
+```
 
 **Location:**
-- `arcproLab/mdp/` (for tracking data).
+- Defined within the test files as fixtures or helper functions (e.g., `_create_synthetic_dataset`).
 
 ## Coverage
 
-**Requirements:** No formal coverage target enforced.
-
-**View Coverage:**
-- Not configured.
+**Requirements:** Not explicitly enforced via config, but `test_all_so_far.py` performs a "Syntax check all files" to ensure no major breakage.
 
 ## Test Types
 
 **Unit Tests:**
-- Geometric calculations in `TrackManager`.
-- Reward function logic (isolated from sim).
+- Mathematics and geometry (Ackermann, Planar planner).
+- Configuration loading/saving.
 
-**Verification Tests (System):**
-- **Spawn Verification:** Ensures robot lands on the track without falling through.
-- **Marker Verification:** Ensures boundary markers align with visual lines.
-- **Metric Verification:** Ensures 1 unit in Sim == 1 meter in reality.
+**Integration Tests:**
+- `WorkerNode` interaction with `IntersectionGraph`.
+- `WorkerScheduler` conflict detection.
 
-**Policy Verification:**
-- Inference tests using `verify_policy.py` to check for model performance and regressions.
+**Smoke Tests:**
+- `test_all_so_far.py` runs a "Mini training loop" to verify the whole stack.
+
+**Syntax Checks:**
+- Automated `ast.parse()` check on all critical files in `test_all_so_far.py`.
 
 ## Common Patterns
 
-**Async Testing:** Not used (Simulation is synchronous).
+**Async Testing:**
+- Not observed; Isaac Sim tests generally wait for the simulation step to complete.
 
 **Error Testing:**
-- Manual checks for NaNs in logs.
-- Unit tests for edge cases in geometric calculations (e.g., division by zero in curvature).
+- `pytest.raises` or `try-except` in custom runners to verify expected failures or handle environment-specific skips.
 
 ---
 
-*Testing analysis: 2024-04-23*
+*Testing analysis: 2025-01-23*

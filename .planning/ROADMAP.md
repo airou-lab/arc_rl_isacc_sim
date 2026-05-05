@@ -21,8 +21,8 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 *Focus: Graph-based routing, intersection logic, and multi-agent coordination.*
 
 - [x] **Phase 11: Retraining & Intersection logic** - (COMPLETED) Retrained policy at 1x and implemented alignment-aware intersection gate permeability.
-- [ ] **Phase 12: Hierarchical Policy Migration** - Port the `Worker-Driver` architecture from the sibling folder and refactor for the physics.
-- [x] **Phase 13: Environment Scale Alignment** - (COMPLETED via Phase 10) Scaled USD road assets to match the robot scale.
+- [ ] **Phase 12: Autonomous Navigation** - Implement turning missions and proximity-based RoadGraph triggers for intersection decision-making.
+- [ ] **Phase 13: Live Policy GUI** - Develop a standalone dashboard to stream telemetry, vision debugging, and policy transparency.
 
 ## Progress
 
@@ -33,13 +33,12 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 | 6-8   | M1 | COMPLETE | 2026-04-05 |
 | 9     | M1 | COMPLETE | 2026-04-11 |
 | 10    | M1 | COMPLETE | 2026-04-12 |
-| 13    | M2 | COMPLETE | 2026-04-12 |
-| 11    | M2 | ACTIVE   | - |
+| 11    | M2 | COMPLETE | 2026-04-24 |
 | 12    | M2 | Planned  | - |
-| 13    | M3 | Planned  | - |
+| 13    | M3 | ACTIVE   | - |
 | 14-17 | M4 | Planned  | - |
 
-## Milestone 3: Real-Time Visualization & Diagnostics (v2.5) - PLANNED
+## Milestone 3: Real-Time Visualization & Diagnostics (v2.5) - ACTIVE
 *Focus: Live telemetry, vision debugging, and policy transparency.*
 
 - [ ] **Phase 13: Live Policy GUI** - Develop a standalone dashboard to stream the robot's camera feed and real-time PPO action distributions (steering/throttle) alongside the simulation.
