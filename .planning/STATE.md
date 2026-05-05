@@ -11,10 +11,10 @@ Completed Phase 11 Intersection Logic (Wave 2) and researched Phase 12 Decentral
 
 ## Recent Activity
 - **Phase 09 Completion**: Successfully migrated to 5kg realistic physics at 1.0x metric scale. Resolved spawn-death loops and wheel 'explosions'.
-- **Production Training**: 32-env production run is currently active at 179 FPS.
+- **Bug Fix (2026-05-05)**: Resolved critical "stuck robot" issue. Fixed `WaypointTrackingWrapper` to correctly use the `policy` observation key for dead-reckoning. 
+- **Production Training**: 16-env production run is currently active with the fixed wrapper.
+- **Spawn Tuning**: Set stable spawn Z-offset to **0.1m** and height termination to **-0.5m**.
 - **Phase 11 Completion**: Finalized Wave 2 Intersection Navigation (Permeable gates, Intent filtering).
-- **Phase 12 Progress**: (NEW) Implemented Turn Token Randomization (-1, 0, 1) in `RoadGraph.py` to condition the policy for navigation commands.
-- **Maintenance**: Verified TrackManager caching is active (5-10s startup fix) and Telemetry Curvature (Kappa) is correctly piped to the policy observation vector.
 
 ## Active Todos (Queue)
 1. [ ] **12-01-dt-alignment**: (CRITICAL) Resolve the mismatch between `ARCProEnvCfg` (20Hz) and `WaypointTrackingWrapper` (50Hz) to fix hierarchical loss degradation.

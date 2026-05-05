@@ -75,4 +75,10 @@
 - **Solution**: 
     - Imported `VecMonitor` from `stable_baselines3.common.vec_env`.
     - Wrapped the environment `env = VecMonitor(env)` immediately after the `HPPPDirectBridge` instantiation and before `VecNormalize`.
-- **Result**: `EpRew` and `EpLen` are now correctly calculated and populated in the console during the training run.
+### 2026-05-05: WaypointTrackingWrapper Observation Key Bug
+- **Problem**: During training, the robot appeared "stuck" outputting full brake and max steer. Evaluation showed the policy was predicting nonsensical waypoints (all zeros), leading to safe-but-stagnant behavior.
+- **Root Cause**: The `WaypointTrackingWrapper` (responsible for dead-reckoning the trajectory used in auxiliary loss) was hardcoded to look for the `vec` key in the observation dictionary. However, the Isaac Lab environment configuration uses the `policy` key for the telemetry vector. This caused the dead-reckoning logic to fail silently, feeding zeros into the auxiliary loss and corrupting the policy's spatial understanding.
+- **Solution**: 
+    - Updated `WaypointTrackingWrapper.py` to check for both `policy` and `vec` keys when extracting speed and yaw rate.
+    - Adjusted the Z-spawn offset to **0.1m** and lowered the height termination to **-0.5m** to improve initial physics stability.
+- **Result**: Trajectory integration is now functional, and training has been restarted to recover from the corrupted "zero-movement" baseline.
