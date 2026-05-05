@@ -22,12 +22,12 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     
     # Standard boundaries (Always reset if hitting the edge)
     # White (Edge) or Yellow (Center)
-    boundary_hit = (dist_w < 0.17) | (dist_y < 0.17)
+    boundary_hit = (dist_w < 0.13) | (dist_y < 0.13)
     
     # DEBUG: Loud diagnostic for Env 0
     if torch.rand(1).item() < 0.05: # Sample 5% of steps
         step_count = env.unwrapped.episode_length_buf[0].item()
-        print(f"[DIAGNOSTIC] Env 0 | Step: {step_count} | DistW: {dist_w[0].item():.4f} | Hit: {boundary_hit[0].item()}")
+        print(f"[DIAGNOSTIC] Env 0 | Step: {step_count} | DistW: {dist_w[0].item():.4f} | DistY: {dist_y[0].item():.4f} | Hit: {boundary_hit[0].item()}")
     
     # Gates (Permeable if aligned)
     gate_contact = dist_g < 0.12
@@ -69,7 +69,7 @@ def height_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     """Terminates if the robot flips or falls."""
     asset = env.scene[asset_cfg.name]
     height = asset.data.root_pos_w[:, 2]
-    term = (height < -0.1) | (height > 5.0)
+    term = (height < -0.5) | (height > 5.0)
     if term[0].item() and torch.rand(1).item() < 0.1:
         print(f"[DIAGNOSTIC] Env 0 Height Term! H: {height[0].item():.4f}")
     return term
