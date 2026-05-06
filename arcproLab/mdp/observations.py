@@ -93,12 +93,6 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     env.extras["raw_lat_err"] = lat_err
     env.extras["raw_speed"] = asset.data.root_lin_vel_b[:, 0]
     
-    # TELEMETRY DEBUG: Check for action/speed inversion
-    if env.num_envs == 1 and env.episode_length_buf[0] % 10 == 0:
-        throttle_action = env.action_manager.action[0, 1].item() # Index 1 is throttle
-        actual_speed = env.extras["raw_speed"][0].item()
-        print(f"[DEBUG] Throttle Cmd: {throttle_action:.3f} | Local X Speed: {actual_speed:.3f}")
-    
     # Final verification for NaNs
     nan_mask = torch.isnan(obs)
     if nan_mask.any():

@@ -41,12 +41,13 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 ## Milestone 3: Real-Time Visualization & Diagnostics (v2.5) - ACTIVE
 *Focus: Live telemetry, vision debugging, and policy transparency.*
 
-- [ ] **Phase 13: Live Policy GUI** - Develop a standalone dashboard to stream the robot's camera feed and real-time PPO action distributions (steering/throttle) alongside the simulation.
+- [x] **Phase 14-01: USD Asset Flattening** - (COMPLETED) Physically scaled USD geometry to 1x and refreshed boundary cache.
+- [ ] **Phase 13: Live Policy GUI** - Develop a standalone dashboard to stream the robot's camera feed and real-time PPO action distributions.
 
 ## Milestone 4: Multi-Agent Urban Coordination (v3.0) - PLANNED
 *Focus: Smart intersections, multi-car coordination, and multi-agent RL (MARL).*
 
-- [ ] **Phase 14: Multi-Agent Environment Refactor** - Adapt `ManagerBasedRLEnv` to handle multiple robot instances with independent observation/action streams.
+- [ ] **Phase 14-02: Multi-Agent Environment Refactor** - Adapt `ManagerBasedRLEnv` to handle multiple robot instances with independent observation/action streams.
 - [ ] **Phase 15: Smart Intersection Infrastructure** - Implement intersection controllers (V2I/V2V) and dynamic traffic signaling in the USD.
 - [ ] **Phase 16: Coordination & Yielding Logic** - Develop social-norm based navigation (e.g., yielding at stop signs, 4-way stop logic) between Two Cars.
 - [ ] **Phase 17: MARL Training & Evaluation** - Train collaborative policies (MAPPO/IPPO) for high-density intersection throughput.

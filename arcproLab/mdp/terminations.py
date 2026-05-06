@@ -22,8 +22,8 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     
     # Standard boundaries (Always reset if hitting the edge)
     # White (Edge) or Yellow (Center)
-    # 0.15m allows for wheel width on the 1.0x metric scale
-    boundary_hit = (dist_w < 0.15) | (dist_y < 0.15)
+    # 0.12m allows for wheel overlap on the 1.0x metric scale (Proposed in Phase 14-01)
+    boundary_hit = (dist_w < 0.12) | (dist_y < 0.12)
     
     # DEBUG: Loud diagnostic for Env 0
     if torch.rand(1).item() < 0.05: # Sample 5% of steps
@@ -70,10 +70,7 @@ def height_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     """Terminates if the robot flips or falls."""
     asset = env.scene[asset_cfg.name]
     height = asset.data.root_pos_w[:, 2]
-    term = (height < -0.5) | (height > 5.0)
-    if term[0].item() and torch.rand(1).item() < 0.1:
-        print(f"[DIAGNOSTIC] Env 0 Height Term! H: {height[0].item():.4f}")
-    return term
+    return (height < -0.5) | (height > 5.0)
 
 def stagnation_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)

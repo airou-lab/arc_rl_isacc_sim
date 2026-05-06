@@ -1,15 +1,24 @@
-# Project: IsaacLab Lane Follower
+# Project: ARCPro RL Isaac Lab Migration
 
-## Vision
-A self-driving mobile robot that autonomously navigates between lanes and across complex intersections in a high-fidelity, true-to-scale Isaac Sim environment.
+## What This Is
+A high-fidelity reinforcement learning environment for autonomous mobile robots, built on NVIDIA Isaac Lab. It facilitates the development and validation of self-driving policies in complex, true-to-scale urban environments.
+
+## Core Value
+To provide a physically accurate, high-performance simulation bridge that minimizes sim-to-real gap for ARCPro autonomous systems through 1.0x metric scaling, realistic multi-body physics, and graph-based navigation.
 
 ## Goals
-- **v1.0 (MVP):** Single-track autonomous lane centering using SB3.
-- **v1.1 (Graph Nav):** Multi-segment navigation across intersections using graph-based route planning.
-- **v1.2 (True Physics):** High-fidelity simulation with 1.0x metric scaling, removed workarounds, and improved sim-to-real transferability.
-- **v2.0 (Custom & Real):** Transition to custom ARCPro robot assets and physical Sim2Real deployment.
+- **v1.2 (Foundation):** Stabilized 1.0x metric scaling and hierarchical policy stack.
+- **v2.0 (Navigation):** Graph-based intersection crossing and random mission generation.
+- **v2.5 (Visibility):** Real-time telemetry visualization and policy diagnostics.
+- **v3.0 (Multi-Agent):** Collaborative multi-robot coordination and smart infrastructure.
 
 ## Context
-- **Framework:** NVIDIA IsaacLab / Isaac Sim.
-- **Target:** Autonomous navigation in complex environments.
-- **Key Files:** `arcproLab/arcpro_env_cfg.py`, `arcproLab/mdp/road_graph.py` (Planned).
+- **Framework:** NVIDIA Isaac Lab / Isaac Sim 5.x.
+- **Target Platform:** F1Tenth (Scaling to custom ARCPro hardware).
+- **Control Rate:** 20Hz (DT=0.05s).
+- **Physics Solver:** TGS (16 iterations).
+
+## Technical Requirements
+- **Hardware:** NVIDIA RTX GPU (8GB+ VRAM recommended).
+- **Software:** Ubuntu 22.04+, Isaac Lab, Stable Baselines 3 Contrib.
+- **Scale:** Native 1.0x metric (1 unit = 1 meter).
