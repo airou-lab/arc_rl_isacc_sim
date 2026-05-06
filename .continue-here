@@ -1,15 +1,17 @@
 # RESUME HERE
 
 ## Project Context
-- **Milestone:** Milestone 1: Physical Fidelity & Policy Foundation (v1.2)
-- **Phase:** Phase 13: Live Policy GUI (Planning/Infrastructure Bridge)
-- **Status:** SUCCESSFULLY MIGRATED to 5kg realistic physics and 20Hz temporal alignment. 32-env production training is ACTIVE in the background at 179 FPS.
+- **Milestone:** Milestone 3: Real-Time Visualization & Diagnostics (v2.5)
+- **Phase:** Phase 14: Multi-Agent Environment Refactor (Scaling)
+- **Status:** SUCCESSFULLY MIGRATED to 5kg realistic physics and 20Hz temporal alignment. Phase 12 (Random Intersection Decision) implementation verified, AWAITING POLICY VALIDATION.
 
-## Next Sub-Phase: 13-01 Shared Memory Bridge
-- **Next Todo:** Implement the shared memory data pipe in `visual_analytics.py` for frames, rewards, and distributions.
-- **Rationale:** Now that the physics are stable and training is fast, we need a high-performance, non-blocking way to visualize the 179 FPS data stream without crashing the simulation.
+## Next Sub-Phase: 32-Env Production Scaling
+- **Next Todo:** Scale training to 32 environments to verify 1.0x stability at higher throughput.
+- **Rationale:** 16-env runs are stable; 32-env is the target for final policy refinement before multi-agent work.
 
 ## Technical Context for /clear
-- **Active Log:** `training_production_5kg_fresh.log`
+- **Active Log:** `logs/production_training_32_v11.log`
 - **Active Physics:** 5kg Chassis, 0.2kg Wheels, 15.0 Drive Scale, 16 Solver Iterations.
 - **Critical Sync:** Environment DT is 0.05 (20Hz). WaypointTrackingWrapper is synced.
+- **Steering:** IMPLEMENTED Ackermann Steering Action (v11).
+- **Training Goal:** 5 million timesteps.

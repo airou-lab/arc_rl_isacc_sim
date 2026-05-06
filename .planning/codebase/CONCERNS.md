@@ -102,3 +102,18 @@
 ---
 
 *Concerns audit: 2024-04-14*
+
+## Observed Behaviors (2026-05-05)
+
+### Steering Geometry Mismatch (Ackermann vs Parallel)
+- **Problem**: The `IsaacDirectEnv` uses an `AckermannComputer` to calculate different angles for inner/outer wheels. The `ManagerBasedRLEnv` (via `GroupedJointPositionAction`) forces both `Joint_Steer_L` and `Joint_Steer_R` to the exact same angle.
+- **Impact**: Forcing parallel steering on a vehicle with Ackermann-aligned physical joints causes "scrubbing" and fighting against the PhysX solver. This is a primary suspect for the "wiggling wheels" and jitter observed during training.
+- **Fix approach**: Implement an `AckermannJointPositionAction` in `mdp/actions.py` that replicates the `AckermannComputer` logic.
+
+### Jitter and Steering Failure
+- **Symptom**: Robot "wiggles" its wheels (high-frequency steering jitter) and fails at road bends.
+- **Manual Verification**: Moving the robot forward manually works fine until a bend, but the policy fails to navigate curves.
+- **Potential Causes**:
+    - **Steering Gain**: The steering joint scale (1.0) might be too high for the 1.0x metric joints.
+    - **Camera Alignment**: `TiledCamera` horizontal aperture or offset might be misaligned.
+    - **CNN Convergence**: ResNet18 might not be extracting curve-specific features from 160x90 input.

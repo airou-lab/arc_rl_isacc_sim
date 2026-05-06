@@ -22,7 +22,8 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     
     # Standard boundaries (Always reset if hitting the edge)
     # White (Edge) or Yellow (Center)
-    boundary_hit = (dist_w < 0.13) | (dist_y < 0.13)
+    # 0.15m allows for wheel width on the 1.0x metric scale
+    boundary_hit = (dist_w < 0.15) | (dist_y < 0.15)
     
     # DEBUG: Loud diagnostic for Env 0
     if torch.rand(1).item() < 0.05: # Sample 5% of steps

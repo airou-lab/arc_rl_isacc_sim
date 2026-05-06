@@ -1,28 +1,24 @@
-# Project State: ARCPro RL v1.2-dev
+# Project State: ARCPro RL v2.5-dev
 
 ## Current Milestone
-**Milestone 1: Physical Fidelity & Policy Foundation** (ACTIVE)
+**Milestone 3: Real-Time Visualization & Diagnostics** (ACTIVE)
 
 ## Current Phase
-**Phase 13: Live Policy GUI** (ACTIVE)
+**Phase 14: Multi-Agent Environment Refactor (Scaling)** (ACTIVE)
 
 ## Summary
-Completed Phase 11 Intersection Logic (Wave 2) and researched Phase 12 Decentralized V2I. We are now shifting focus to Phase 13 (Live Policy GUI) to visualize live rewards, learning over time, and policy state (action heatmaps) via a shared memory sidecar GUI, before executing the Phase 12 decentralized turning missions.
+Completed Phase 11 Intersection Logic. Phase 12 Random Turning Missions implementation is verified but AWAITING POLICY VALIDATION. Physics (5kg) and DT (20Hz) are fully stabilized. We are now scaling to 32-env production training (5M timesteps) before moving into multi-agent coordination. Phase 13 (GUI) is temporarily deprioritized.
 
 ## Recent Activity
-- **Phase 09 Completion**: Successfully migrated to 5kg realistic physics at 1.0x metric scale. Resolved spawn-death loops and wheel 'explosions'.
-- **Bug Fix (2026-05-05)**: Resolved critical "stuck robot" issue. Fixed `WaypointTrackingWrapper` to correctly use the `policy` observation key for dead-reckoning. 
-- **Production Training**: 16-env production run is currently active with the fixed wrapper.
-- **Spawn Tuning**: Set stable spawn Z-offset to **0.1m** and height termination to **-0.5m**.
-- **Phase 11 Completion**: Finalized Wave 2 Intersection Navigation (Permeable gates, Intent filtering).
+- **Phase 12 Implementation**: Verified random gate selection per episode for intersection decision-making. Awaiting confirmation from trained policy.
+- **Bug Fix (2026-05-05)**: Resolved critical "stuck robot" issue in `WaypointTrackingWrapper`.
+- **Production Training**: Scaling from 16-env to 32-env.
 
 ## Active Todos (Queue)
-1. [ ] **12-01-dt-alignment**: (CRITICAL) Resolve the mismatch between `ARCProEnvCfg` (20Hz) and `WaypointTrackingWrapper` (50Hz) to fix hierarchical loss degradation.
-2. [ ] **12-01-turning-mission**: (NEXT) Implement the proximity-based RoadGraph triggers for intersection decision-making.
-3. [ ] **13-01-shared-memory-bridge**: (PAUSED) Create the shared memory data pipe in `visual_analytics.py`.
-4. [ ] **13-02-policy-dashboard**: (PAUSED) Build `policy_dashboard.py` to render the Graph View.
-5. [ ] **14-01-usd-asset-flattening**: (PAUSED) Remove the 0.125 scaling hack from the USD track asset (waiting for training run to finish).
-6. [ ] **update-log-paths**: (COMPLETED) All script log paths updated to `logs/`.
+1. [ ] **12-01-turning-mission**: (AWAITING CONFIRMATION) Random gate selection implemented; verify with policy.
+2. [ ] **32-env-scaling**: (ACTIVE) Run production training with 32 environments.
+1. [ ] **14-01-multi-agent-scaffolding**: Refactor `ManagerBasedRLEnv` to support N robots interacting in the *same* environment instance (Smart Intersection testing).
+
 
 ## Completed
 - [x] Phase 11: 1.0x Baseline Retraining & Perception Fixes.
