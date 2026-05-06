@@ -40,8 +40,8 @@ class ArcProRobotCfg(ArticulationCfg):
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=False,
-            solver_position_iteration_count=8, 
-            solver_velocity_iteration_count=4, 
+            solver_position_iteration_count=16, 
+            solver_velocity_iteration_count=8, 
             fix_root_link=False, 
         ),
     )
@@ -62,10 +62,10 @@ class ArcProRobotCfg(ArticulationCfg):
         ),
         "throttle": ImplicitActuatorCfg(
             joint_names_expr=["Joint_Drive_.*"], 
-            effort_limit_sim=2.0, 
+            effort_limit_sim=10.0, 
             velocity_limit_sim=100.0,
             stiffness=0.0,
-            damping=2.0, 
+            damping=0.5, 
             armature=0.01,
         ),
     }

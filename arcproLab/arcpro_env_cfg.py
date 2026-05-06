@@ -49,12 +49,11 @@ class ARCProSceneCfg(InteractiveSceneCfg):
     )
 
     # Ground Plane (Visual + Safety Backup)
-    # REMOVED: User wants robot to fall into void
-    # ground_plane = AssetBaseCfg(
-    #     prim_path="/World/defaultGroundPlane",
-    #     spawn=sim_utils.GroundPlaneCfg(),
-    #     init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -0.1)),
-    # )
+    ground_plane = AssetBaseCfg(
+        prim_path="/World/defaultGroundPlane",
+        spawn=sim_utils.GroundPlaneCfg(),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -0.05)),
+    )
 
     # Track from no_graph_sim.usd (Clean 1x version: No grass/foliage/fences)
     track = AssetBaseCfg(
@@ -123,7 +122,13 @@ import mdp.actions as arcpro_actions
 
 @configclass
 class ActionCfg:
-    steering = arcpro_actions.GroupedJointPositionActionCfg(asset_name="robot", joint_names=["Joint_Steer_L", "Joint_Steer_R"], scale=1.0)
+    steering = arcpro_actions.AckermannSteeringActionCfg(
+        asset_name="robot",
+        joint_names=["Joint_Steer_L", "Joint_Steer_R"], 
+        wheelbase=0.33, 
+        track_width=0.28, 
+        max_steering_angle=0.5
+    )
     drive = arcpro_actions.CombinedDriveActionCfg(
         asset_name="robot", 
         joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
