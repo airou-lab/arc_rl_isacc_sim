@@ -26,9 +26,10 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     boundary_hit = (dist_w < 0.12) | (dist_y < 0.12)
     
     # DEBUG: Loud diagnostic for Env 0
-    if torch.rand(1).item() < 0.05: # Sample 5% of steps
+    if False: # Disabled for high FPS production run
         step_count = env.unwrapped.episode_length_buf[0].item()
-        print(f"[DIAGNOSTIC] Env 0 | Step: {step_count} | DistW: {dist_w[0].item():.4f} | DistY: {dist_y[0].item():.4f} | Hit: {boundary_hit[0].item()}")
+        speed = asset.data.root_lin_vel_b[0, 0].item()
+        print(f"[DIAGNOSTIC] Env 0 | Step: {step_count} | Speed: {speed:.4f} | DistW: {dist_w[0].item():.4f} | DistY: {dist_y[0].item():.4f} | Hit: {boundary_hit[0].item()}")
     
     # Gates (Permeable if aligned)
     gate_contact = dist_g < 0.12

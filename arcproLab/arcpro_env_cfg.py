@@ -138,12 +138,12 @@ class ActionCfg:
 
 @configclass
 class RewardCfg:
-        speed = RewTerm(func=mdp_rew.speed_reward, weight=10.0)
+        speed = RewTerm(func=mdp_rew.speed_reward, weight=20.0)
         # Moderate lateral error penalty (Speed reward now competitive with staying on track)
         lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=5.0)
         # Discourage staying still (Lower threshold for 5kg/1x scale)
         stationary = RewTerm(
-            func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.1, -10.0, 0.0),
+            func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.2, -20.0, 0.0),
             weight=10.0
         )
         # Prevent 180s

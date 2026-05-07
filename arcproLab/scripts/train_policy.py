@@ -238,7 +238,6 @@ def main():
     class RewardLoggerCallback(BaseCallback):
         def __init__(self, verbose: int = 0):
             super().__init__(verbose)
-            os.makedirs("debug_frames", exist_ok=True)
         
         def _on_step(self) -> bool:
             if self.n_calls % 1000 == 0:
