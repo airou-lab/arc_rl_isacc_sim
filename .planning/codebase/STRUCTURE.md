@@ -1,102 +1,94 @@
 # Codebase Structure
 
-**Analysis Date:** 2024-05-18
+**Analysis Date:** 2024-11-20
 
 ## Directory Layout
 
 ```
 arc_rl_isacc_sim/
-├── arcproLab/              # Main package for Isaac Lab environment
-│   ├── assets/             # Robot USD assets and models
-│   ├── mdp/                # Markov Decision Process logic (rewards, observations, etc.)
-│   ├── policy_stack/       # Policy architecture and agent training logic
-│   ├── scripts/            # Training, verification, and utility scripts
-│   ├── arcpro_env_cfg.py   # Main environment configuration
-│   └── arcpro_robot_cfg.py # Robot articulation and actuator configuration
-├── docs/                   # Project documentation and specifications
-├── openStreetUSD/          # Simulation track USD files and artifacts
-├── .planning/              # Project planning and codebase analysis
-└── tests/                  # Unit tests for core components
+├── arcproLab/              # Main source code
+│   ├── assets/             # Robot and environment assets
+│   ├── mdp/                # MDP components (Observations, Rewards, etc.)
+│   ├── models/             # Saved policy models (.pth)
+│   ├── policy_stack/       # RL algorithm and policy implementations
+│   └── scripts/            # Training, verification, and utility scripts
+├── docs/                   # Project documentation
+├── logs/                   # Training logs and telemetry
+├── openStreetUSD/          # Simulation scene files (.usda)
+├── tensorboard_view_docker/# Visualization infrastructure
+└── trash/                  # Deprecated or temporary files
 ```
 
 ## Directory Purposes
 
-**arcproLab/:**
-- Purpose: Root package for the RL environment implementation.
-- Contains: Environment configurations and sub-packages for MDP and Policy.
-- Key files: `arcpro_env_cfg.py`, `arcpro_robot_cfg.py`.
-
 **arcproLab/mdp/:**
-- Purpose: Contains modular components for the Reward, Observation, and Termination managers.
-- Contains: logic for track management, road graphs, and spawner overrides.
-- Key files: `track_manager.py`, `road_graph.py`, `rewards.py`, `terminations.py`.
+- Purpose: Defines the Markov Decision Process interface.
+- Contains: Action/Observation/Reward/Termination terms.
+- Key files: `track_manager.py`, `road_graph.py`, `observations.py`.
 
 **arcproLab/policy_stack/:**
-- Purpose: Implementation of the RL agent's brain and training wrappers.
-- Contains: Custom policies, feature extractors, and environment bridges.
-- Key files: `policies/hierarchical_policy.py`, `wrappers/waypoint_tracking_wrapper.py`.
+- Purpose: Custom RL framework and policy architectures.
+- Contains: Agents, policies, wrappers, and tests.
+- Key files: `train_policy_ros2.py`, `isaac_direct_env.py`.
 
 **arcproLab/scripts/:**
-- Purpose: Operational scripts for the lifecycle of the RL agent.
-- Contains: Training, manual drive verification, and USD asset audits.
-- Key files: `train_policy.py`, `verify_policy.py`, `verify_drive.py`.
+- Purpose: Operational scripts for the project.
+- Contains: Training entry points and extensive verification tools.
+- Key files: `train_policy.py`, `verify_policy.py`, `verify_metric.py`.
 
 **openStreetUSD/:**
-- Purpose: Storage for the 3D environments (tracks).
-- Contains: `.usd` and `.usda` files used as the simulation stage.
+- Purpose: 3D assets and scene definitions for Isaac Sim.
+- Contains: USD/USDA files.
 - Key files: `no_graph_sim_clean_1x_flattened.usda`.
 
 ## Key File Locations
 
 **Entry Points:**
-- `arcproLab/scripts/train_policy.py`: Main entry point for training the hierarchical policy.
-- `arcproLab/scripts/verify_policy.py`: Evaluates a trained checkpoint.
-- `arcproLab/scripts/verify_drive.py`: Teleoperation script for manual environment testing.
+- `arcproLab/scripts/train_policy.py`: Primary training script.
+- `arcproLab/scripts/verify_policy.py`: Policy evaluation script.
 
 **Configuration:**
-- `arcproLab/arcpro_env_cfg.py`: Defines physics, sensors, and MDP manager bindings.
-- `arcproLab/arcpro_robot_cfg.py`: Defines the F1Tenth robot's physical properties and actuators.
+- `arcproLab/arcpro_env_cfg.py`: Environment configuration.
+- `arcproLab/arcpro_robot_cfg.py`: Robot asset and actuator configuration.
 
 **Core Logic:**
-- `arcproLab/mdp/track_manager.py`: Handles road-relative geometric calculations.
-- `arcproLab/policy_stack/policies/hierarchical_policy.py`: The core HPPP neural network architecture.
+- `arcproLab/mdp/track_manager.py`: Handles track geometry and boundaries.
+- `arcproLab/mdp/road_graph.py`: Manages road connectivity and intersections.
 
 **Testing:**
-- `tests/test_track_manager.py`: Unit tests for the track manager logic.
+- `arcproLab/policy_stack/tests/`: Unit tests for policy components.
+- `arcproLab/scripts/verify_*.py`: Simulation-based functional tests.
 
 ## Naming Conventions
 
 **Files:**
-- Python files: Snake case (e.g., `track_manager.py`).
-- USD files: Snake case, often with scale or status suffixes (e.g., `no_graph_sim_clean_1x.usda`).
+- Snake_case: `track_manager.py`, `train_policy.py`.
 
 **Directories:**
-- Python packages: Snake case (e.g., `policy_stack`).
+- Snake_case or CamelCase (e.g., `arcproLab`, `openStreetUSD`).
 
 ## Where to Add New Code
 
-**New Feature (RL Logic):**
-- Primary code: `arcproLab/mdp/` (add a new module for the feature and register it in `arcpro_env_cfg.py`).
-- Tests: `tests/` (create a corresponding `test_*.py` file).
+**New Feature (e.g., Obstacle Avoidance):**
+- Primary code: `arcproLab/mdp/observations.py`, `arcproLab/mdp/rewards.py`.
+- Tests: `arcproLab/policy_stack/tests/` (if unit testable) or `arcproLab/scripts/verify_obstacles.py`.
 
-**New Component/Module (Policy):**
-- Implementation: `arcproLab/policy_stack/policies/` or `arcproLab/policy_stack/wrappers/`.
+**New Component/Module:**
+- Implementation: `arcproLab/mdp/` for simulation-related logic, `arcproLab/policy_stack/` for learning-related logic.
 
 **Utilities:**
-- Shared helpers: `arcproLab/scripts/` if it's a tool, or a new module in `arcproLab/mdp/` if it's runtime-related.
+- Shared helpers: `arcproLab/mdp/` (for geometry/sim) or `arcproLab/scripts/` (for CLI tools).
 
 ## Special Directories
 
-**logs/:**
-- Purpose: Contains training logs, Tensorboard data, and checkpoints.
-- Generated: Yes
-- Committed: No (mostly)
+**trash/:**
+- Purpose: Contains deprecated scripts and temporary debug files to keep the main directories clean.
+- Committed: Yes.
 
-**arcproLab/debug_frames/:**
-- Purpose: Contains visual debug snapshots saved during training.
-- Generated: Yes
-- Committed: No
+**logs/:**
+- Purpose: Contains Tensorboard event files and training telemetry.
+- Committed: No (typically ignored by `.gitignore`).
 
 ---
 
-*Structure analysis: 2024-05-18*
+*Structure analysis: 2024-11-20*

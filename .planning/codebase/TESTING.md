@@ -1,130 +1,92 @@
 # Testing Patterns
 
-**Analysis Date:** 2025-01-23
+**Analysis Date:** 2024-11-20
 
 ## Test Framework
 
 **Runner:**
-- `pytest` (Configured in `arcproLab/policy_stack/pytest.ini`)
-- Custom smoke test runner: `arcproLab/policy_stack/test_all_so_far.py`
+- pytest
+- Config: `arcproLab/policy_stack/pytest.ini`
 
 **Assertion Library:**
-- Standard Python `assert` statements.
-- `torch.allclose()` and `np.allclose()` for numerical/tensor comparisons.
+- Standard Python `assert`.
 
 **Run Commands:**
 ```bash
-pytest tests/                          # Run standard pytest suite
-python arcproLab/policy_stack/test_all_so_far.py  # Run comprehensive smoke test suite
+pytest arcproLab/policy_stack/tests/    # Run policy stack unit tests
+python arcproLab/scripts/verify_policy.py --checkpoint models/model.pth # Run simulation verification
 ```
 
 ## Test File Organization
 
 **Location:**
-- Separate `tests/` directory (e.g., `tests/test_track_manager.py`).
-- Integrated tests within subpackages (e.g., `arcproLab/policy_stack/test_all_so_far.py`).
+- Unit tests: `arcproLab/policy_stack/tests/`
+- Functional/Simulation tests: `arcproLab/scripts/` (prefixed with `verify_` or `test_`)
 
 **Naming:**
-- `test_*.py` for standard tests.
-- Scripts prefixed with `test_` in `arcproLab/scripts/` (e.g., `test_sb3_wrapper.py`).
-
-**Structure:**
-```
-[project-root]/
-├── tests/                 # Dedicated test directory
-└── arcproLab/
-    ├── policy_stack/
-    │   └── test_all_so_far.py # Monolithic smoke test
-    └── scripts/
-        └── test_*.py      # Utility/Verification scripts
-```
+- Unit tests: `test_*.py`
+- Simulation tests: `verify_*.py` or `test_*.py`
 
 ## Test Structure
 
 **Suite Organization:**
 ```python
-# From tests/test_track_manager.py
-@pytest.fixture
-def mock_track_manager():
-    # Setup
-    tm = TrackManager(device="cpu")
-    return tm
+# arcproLab/policy_stack/tests/test_registry.py
+def test_registry_registration():
+    # Test logic
+    pass
 
-def test_feature(mock_track_manager):
-    # Action
-    result = mock_track_manager.do_something()
-    # Assertion
-    assert result == expected
+def test_registry_make():
+    # Test logic
+    pass
 ```
 
 **Patterns:**
-- **Setup pattern:** Use `@pytest.fixture` for reusable components.
-- **Teardown pattern:** Use `with tempfile.TemporaryDirectory()` for file-based tests.
-- **Assertion pattern:** Direct equality for scalars, `allclose` for tensors/arrays.
+- Functional scripts: Many scripts in `arcproLab/scripts/` follow a "Launch Simulation -> Load Model -> Run N steps -> Print Results" pattern.
 
 ## Mocking
 
-**Framework:** `unittest.mock.MagicMock`
+**Framework:** None explicitly used; simulation environments are typically used directly or via Direct Envs.
 
 **Patterns:**
-```python
-# Mocking heavy dependencies to run tests without Isaac Sim
-import sys
-from unittest.mock import MagicMock
-sys.modules["omni"] = MagicMock()
-sys.modules["omni.usd"] = MagicMock()
-sys.modules["pxr"] = MagicMock()
-```
-
-**What to Mock:**
-- Isaac Sim / Omniverse modules (`omni`, `pxr`).
-- Hardware/Environment interactions when testing core logic.
-
-**What NOT to Mock:**
-- Mathematical models (Ackermann, Planar planner).
-- Configuration objects.
+- Isaac Lab `DirectRLEnv` used to simplify testing environments without the full manager overhead.
 
 ## Fixtures and Factories
 
 **Test Data:**
-```python
-# Synthetic waypoints for testing TrackManager
-wps = np.zeros((10, 3))
-wps[:, 0] = np.linspace(0, 9, 10)
-tm.waypoints = torch.tensor(wps)
-```
+- Cached track boundaries in `.npz` files.
+- Sample models in `arcproLab/models/`.
 
 **Location:**
-- Defined within the test files as fixtures or helper functions (e.g., `_create_synthetic_dataset`).
+- `arcproLab/mdp/*.npz`
+- `arcproLab/models/*.pth`
 
 ## Coverage
 
-**Requirements:** Not explicitly enforced via config, but `test_all_so_far.py` performs a "Syntax check all files" to ensure no major breakage.
+**Requirements:** None enforced.
 
 ## Test Types
 
 **Unit Tests:**
-- Mathematics and geometry (Ackermann, Planar planner).
-- Configuration loading/saving.
+- Test individual RL components (registry, schedulers) in `arcproLab/policy_stack/tests/`.
 
 **Integration Tests:**
-- `WorkerNode` interaction with `IntersectionGraph`.
-- `WorkerScheduler` conflict detection.
+- Testing the intersection flow and node server in `arcproLab/policy_stack/tests/`.
 
-**Smoke Tests:**
-- `test_all_so_far.py` runs a "Mini training loop" to verify the whole stack.
-
-**Syntax Checks:**
-- Automated `ast.parse()` check on all critical files in `test_all_so_far.py`.
+**Simulation Verification:**
+- Extensive collection of scripts to verify specific behaviors:
+  - `verify_metric.py`: Scale/unit verification.
+  - `verify_drive.py`: Actuator verification.
+  - `verify_spawn.py`: Reset/Spawn logic verification.
 
 ## Common Patterns
 
 **Async Testing:**
-- Not observed; Isaac Sim tests generally wait for the simulation step to complete.
+- Not prevalent; simulation is typically synchronous per-step.
 
 **Error Testing:**
-- `pytest.raises` or `try-except` in custom runners to verify expected failures or handle environment-specific skips.
+- Check for initialization failures (e.g., `TrackManager` sync attempts).
 
 ---
 
-*Testing analysis: 2025-01-23*
+*Testing analysis: 2024-11-20*

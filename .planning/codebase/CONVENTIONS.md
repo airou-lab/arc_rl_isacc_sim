@@ -1,87 +1,77 @@
 # Coding Conventions
 
-**Analysis Date:** 2025-01-23
+**Analysis Date:** 2024-11-20
 
 ## Naming Patterns
 
 **Files:**
-- snake_case for all source files (e.g., `observations.py`, `track_manager.py`).
-- Test files prefixed with `test_` (e.g., `test_track_manager.py`).
+- Snake_case for Python scripts and modules (e.g., `track_manager.py`).
 
 **Functions:**
-- snake_case for all functions (e.g., `get_telemetry_vector()`, `compute_marker_distances()`).
+- Snake_case for function and method names (e.g., `ensure_synced()`, `load_cache()`).
 
 **Variables:**
-- snake_case for local variables and parameters (e.g., `asset_cfg`, `env_origins`).
+- Snake_case for local variables and attributes (e.g., `self.yellow_tensor`, `wp_np`).
 
 **Types:**
-- PascalCase for classes (e.g., `TrackManager`, `AgentNode`, `WorkerNode`).
-- UPPER_SNAKE_CASE for constants and index definitions (e.g., `TELEMETRY_INDICES`, `IDX_LAT_ERR`).
+- CamelCase for classes (e.g., `TrackManager`, `RoadGraph`).
+- standard Python typing hints used (e.g., `device: str = "cuda:0"`).
 
 ## Code Style
 
 **Formatting:**
-- Standard Python (PEP 8) style is followed.
-- Indentation: 4 spaces.
+- Follows standard Python (PEP 8) style.
+- BSD-3-Clause license headers at the top of many files.
 
 **Linting:**
-- Not explicitly configured in the root, but `arcproLab/policy_stack/pytest.ini` disables several ament/colcon linting plugins, suggesting a ROS2 environment might be involved but suppressed for core tests.
+- `pytest.ini` excludes several `ament_lint` and `flake8` plugins, suggesting a ROS-lite or customized environment.
 
 ## Import Organization
 
 **Order:**
-1. Standard library imports (e.g., `import os`, `import sys`).
-2. Major external dependencies (e.g., `import torch`, `import numpy as np`).
-3. Isaac Lab / Isaac Sim specific imports (e.g., `from isaaclab.managers import SceneEntityCfg`).
-4. Internal project imports (e.g., `from mdp.road_graph import get_road_graph`).
+1. Standard library (e.g., `os`, `sys`).
+2. Third-party libraries (e.g., `torch`, `numpy`).
+3. Internal project modules (e.g., `from isaaclab.utils import ...`).
 
 **Path Aliases:**
-- `sys.path.insert(0, ...)` is frequently used in scripts and tests to ensure `arcproLab` or local directories are discoverable.
+- `sys.path.append` is used in some scripts to ensure local package availability (e.g., in `arcpro_env_cfg.py`).
 
 ## Error Handling
 
 **Patterns:**
-- `torch.isnan(reward)` checks in reward functions to ensure stability.
-- `try-except` blocks for optional imports (e.g., `HAS_TORCH` checks in `test_all_so_far.py`).
-- Existence checks for files and directories using `os.path.exists()` before loading data.
+- Try-except blocks for filesystem operations (`load_cache`).
+- Print statements for warnings and initialization status (e.g., `[TrackManager] Building high-fidelity...`).
 
 ## Logging
 
-**Framework:** `print()`
+**Framework:** `print()` for console output; Tensorboard for training metrics.
 
 **Patterns:**
-- Prefixed print statements for component-level logging: `[TrackManager]`, `[DIAGNOSTIC]`.
-- Conditional logging based on debug flags or random sampling (e.g., `if torch.rand(1).item() < 0.05:`).
+- Prefixed log messages: `[Component] Message`.
 
 ## Comments
 
 **When to Comment:**
-- Complexity: Mathematical formulas (e.g., yaw from quaternion) are commented with the formula.
-- Protocols: Index mappings for telemetry are documented in docstrings.
+- Docstrings for classes describing their purpose.
+- In-line comments for complex logic (e.g., yaw wrap-around handling in `track_manager.py`).
 
 **JSDoc/TSDoc:**
-- Triple-quoted docstrings are used for functions and classes, often providing usage examples or parameter descriptions.
+- Not applicable (Python project). Using standard docstrings.
 
 ## Function Design
 
-**Size:**
-- Generally small and focused on a single task (e.g., one function per reward or termination criteria).
+**Size:** Mixed; some complex initialization methods (like `ensure_synced`) are large but centralized.
 
-**Parameters:**
-- Heavily use type hinting (e.g., `env: ManagerBasedRLEnv`, `asset_cfg: SceneEntityCfg`).
-- Default parameters are common for configuration objects.
+**Parameters:** Use of default values and type hints is common.
 
-**Return Values:**
-- Most RL-related functions (rewards, observations, terminations) return `torch.Tensor` for GPU acceleration.
+**Return Values:** Explicit return types not always specified in method signatures but generally consistent.
 
 ## Module Design
 
-**Exports:**
-- Standard Python module exports.
+**Exports:** Standard Python module exports.
 
-**Barrel Files:**
-- `__init__.py` files are used to organize subpackages like `mdp/`.
+**Barrel Files:** `__init__.py` used to mark directories as packages.
 
 ---
 
-*Convention analysis: 2025-01-23*
+*Convention analysis: 2024-11-20*

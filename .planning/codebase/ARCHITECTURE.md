@@ -1,114 +1,99 @@
 # Architecture
 
-**Analysis Date:** 2024-05-18
+**Analysis Date:** 2024-11-20
 
 ## Pattern Overview
 
-**Overall:** Hierarchical Reinforcement Learning with Manager-Based Simulation Environment.
+**Overall:** Manager-Based Reinforcement Learning Environment (Isaac Lab pattern)
 
 **Key Characteristics:**
-- **Manager-Based RL Environment:** Built on NVIDIA Isaac Lab, using configurations to define scenes, observations, actions, rewards, and terminations.
-- **Hierarchical Policy:** Separates high-level path planning (waypoints) from low-level control (steering/throttle).
-- **Kinematic Anchors:** Inductive bias for the policy using curved paths derived from navigation intent and vehicle state.
-- **Modular MDP:** Component-based MDP (Markov Decision Process) implementation with dedicated classes for track management and road graph logic.
+- Configuration-driven environment and robot definitions.
+- Decoupled MDP terms (observations, rewards, actions, terminations).
+- Hierarchical policy structure (referenced in `train_policy.py`).
 
 ## Layers
 
-**Simulation Layer (Isaac Sim/Lab):**
-- Purpose: High-fidelity physics and visual simulation.
-- Location: Native NVIDIA Omniverse / Isaac Lab libraries.
-- Contains: PhysX engine, USD stage management, sensor simulation (TiledCamera, ContactSensor).
-- Depends on: NVIDIA Driver, CUDA.
-- Used by: Environment Layer.
+**Simulation Layer:**
+- Purpose: Handles physics, rendering, and USD stage management.
+- Location: `openStreetUSD/` (assets), `arcproLab/arcpro_env_cfg.py` (scene config).
+- Contains: USD files, light configs, ground planes.
+- Depends on: NVIDIA Isaac Sim.
+- Used by: MDP Layer.
 
-**Environment Layer:**
-- Purpose: Bridges Isaac Sim to Gymnasium-compatible RL interfaces.
-- Location: `arcproLab/arcpro_env_cfg.py`, `arcproLab/arcpro_robot_cfg.py`
-- Contains: Scene configuration, asset definitions, MDP manager registrations.
-- Depends on: Isaac Lab, MDP Layer.
-- Used by: Execution Layer.
-
-**MDP Layer:**
-- Purpose: Implements the RL logic (observations, rewards, terminations).
+**MDP Layer (Markov Decision Process):**
+- Purpose: Defines how the agent interacts with the simulation.
 - Location: `arcproLab/mdp/`
-- Contains: `track_manager.py` (road-relative state), `road_graph.py` (navigation logic), `rewards.py`, `observations.py`.
-- Depends on: Isaac Lab, PyTorch.
-- Used by: Environment Layer.
+- Contains: `actions.py`, `observations.py`, `rewards.py`, `terminations.py`, `events.py`.
+- Depends on: Simulation Layer, `TrackManager`.
+- Used by: Policy Layer.
 
 **Policy Layer:**
-- Purpose: The autonomous agent's "brain".
-- Location: `arcproLab/policy_stack/policies/`
-- Contains: `hierarchical_policy.py` (HPPP), `fusion_policy.py` (Visual + Telemetry feature extraction).
-- Depends on: Stable Baselines3 (SB3), sb3-contrib (RecurrentPPO), PyTorch.
-- Used by: Execution Layer.
+- Purpose: Implements the neural networks and RL algorithms.
+- Location: `arcproLab/policy_stack/`
+- Contains: `policies/`, `agent/`, `baselines/`.
+- Depends on: MDP Layer.
+- Used by: Training and Verification scripts.
 
-**Execution Layer:**
-- Purpose: Training and verification entry points.
-- Location: `arcproLab/scripts/`
-- Contains: `train_policy.py`, `verify_policy.py`, `verify_drive.py`.
-- Depends on: Environment Layer, Policy Layer.
+**Infrastructure Layer:**
+- Purpose: Utilities for track management, road graphs, and analytics.
+- Location: `arcproLab/mdp/track_manager.py`, `arcproLab/mdp/road_graph.py`, `arcproLab/mdp/visual_analytics.py`.
+- Contains: Pathfinding, boundary detection, visualization markers.
 
 ## Data Flow
 
-**Training Loop:**
+**Standard RL Loop:**
 
-1. `train_policy.py` initializes the `ManagerBasedRLEnv` using `ARCProEnvCfg`.
-2. Environment is wrapped by `WaypointTrackingWrapper` for auxiliary losses.
-3. `HPPPDirectBridge` translates Isaac Lab observations/actions to HPPP/SB3 format.
-4. `RecurrentPPO` (from `sb3-contrib`) collects rollouts:
-    - `HierarchicalPathPlanningPolicy.forward()` computes waypoints and actions.
-    - Isaac Sim steps physics at 500Hz (decimated to 20Hz for control).
-5. Rewards and terminations are calculated by managers in `arcproLab/mdp/`.
-6. Policy is updated using PPO loss + auxiliary waypoint loss.
+1. **Step:** `isaaclab` triggers a simulation step.
+2. **Observe:** `observations.py` extracts state (e.g., relative waypoint positions, velocities).
+3. **Act:** Policy computes actions (e.g., steering, throttle) based on observations.
+4. **Apply:** `actions.py` applies torques/velocities to the robot joints.
+5. **Reward/Terminate:** `rewards.py` and `terminations.py` calculate feedback and reset conditions.
 
-**State Management:**
-- **Simulation State:** Managed by Isaac Sim (PhysX).
-- **Agent Memory:** Managed by LSTM hidden states in `HierarchicalPathPlanningPolicy`.
-- **Navigation State:** Managed by `RoadGraph` (Turn Tokens) and `TrackManager` (Lateral/Heading errors).
+**Track Initialization Flow:**
+
+1. `TrackManager` loads centerline waypoints from `track_centerline_1x.npy`.
+2. `TrackManager` checks for cached boundaries in `track_boundaries_1x.npz`.
+3. If cache miss, `TrackManager` scans USD stage for markers (slow).
+4. `RoadGraph` builds a connectivity map for intersection navigation.
 
 ## Key Abstractions
 
 **TrackManager:**
-- Purpose: Provides geometric context relative to the track centerline and boundaries.
+- Purpose: Centralized access to track geometry and boundaries.
 - Examples: `arcproLab/mdp/track_manager.py`
-- Pattern: Singleton/Cached USD parser.
+- Pattern: Singleton-like utility injected into MDP terms.
 
-**RoadGraph:**
-- Purpose: Handles high-level navigation intent (intersections).
-- Examples: `arcproLab/mdp/road_graph.py`
-- Pattern: USD Attribute parser with Turn Token logic.
-
-**HierarchicalPathPlanningPolicy (HPPP):**
-- Purpose: Decouples path planning from control.
-- Examples: `arcproLab/policy_stack/policies/hierarchical_policy.py`
-- Pattern: Hierarchical Actor-Critic with Kinematic Anchors.
+**ManagerBasedRLEnvCfg:**
+- Purpose: Declarative configuration of the entire RL environment.
+- Examples: `arcproLab/arcpro_env_cfg.py`
+- Pattern: Configuration-as-code.
 
 ## Entry Points
 
 **Training Script:**
 - Location: `arcproLab/scripts/train_policy.py`
-- Triggers: Manual execution via `python arcproLab/scripts/train_policy.py`.
-- Responsibilities: CLI parsing, AppLauncher initialization, environment creation, policy setup, training loop.
+- Triggers: User execution via CLI.
+- Responsibilities: Launches Isaac Sim, initializes env, starts SB3 training loop.
 
 **Verification Script:**
 - Location: `arcproLab/scripts/verify_policy.py`
-- Triggers: Manual execution.
-- Responsibilities: Load trained model, run evaluation episodes, visualize waypoint predictions.
+- Triggers: User execution via CLI.
+- Responsibilities: Loads a trained model and runs it in the simulation for evaluation.
 
 ## Error Handling
 
-**Strategy:** Fail-fast on configuration errors; graceful resets on simulation instability.
+**Strategy:** Defensive checks and caching.
 
 **Patterns:**
-- **Termination Managers:** Detect "bad" states (crashes, driving blind, falling) and trigger environment resets via `arcproLab/mdp/terminations.py`.
-- **Validation Checks:** Scripts like `arcproLab/scripts/audit_assets.py` verify USD integrity before training.
+- Cache loading with fallback: `TrackManager.load_cache()`.
+- Wait-for-sync loops for USD assets.
 
 ## Cross-Cutting Concerns
 
-**Logging:** Tensorboard via SB3, custom CSV/text logging for curriculum tracking (`training_curriculum.log`).
-**Validation:** Extensive use of `VisualizationMarkers` in `TrackManager` for real-time debugging in the Isaac Sim GUI.
-**Authentication:** Not applicable (Local simulation).
+**Logging:** Tensorboard for metrics, prefixed stdout for component logs.
+**Validation:** `arcproLab/scripts/verify_*.py` for functional validation.
+**Authentication:** N/A (Local simulation).
 
 ---
 
-*Architecture analysis: 2024-05-18*
+*Architecture analysis: 2024-11-20*

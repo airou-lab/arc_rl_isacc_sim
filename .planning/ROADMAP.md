@@ -20,29 +20,10 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 ## Milestone 2: Autonomous Urban Navigation (v2.0) - ACTIVE
 *Focus: Graph-based routing, intersection logic, and multi-agent coordination.*
 
-- [x] **Phase 11: Retraining & Intersection logic** - (COMPLETED) Retrained policy at 1x and implemented alignment-aware intersection gate permeability.
+- [x] **Phase 11: Intersection Navigation** - Retrained policy at 1x and implemented alignment-aware intersection gate permeability.
 - [ ] **Phase 12: Autonomous Navigation** - Implement turning missions and proximity-based RoadGraph triggers for intersection decision-making.
 - [ ] **Phase 13: Live Policy GUI** - Develop a standalone dashboard to stream telemetry, vision debugging, and policy transparency.
-
-## Progress
-
-| Phase | Milestone | Status | Completed |
-|-------|-----------|--------|-----------|
-| 1-4   | M1 | COMPLETE | 2026-03-30 |
-| 5     | M1 | COMPLETE | 2026-04-02 |
-| 6-8   | M1 | COMPLETE | 2026-04-05 |
-| 9     | M1 | COMPLETE | 2026-04-11 |
-| 10    | M1 | COMPLETE | 2026-04-12 |
-| 11    | M2 | COMPLETE | 2026-04-24 |
-| 12    | M2 | Planned  | - |
-| 13    | M3 | ACTIVE   | - |
-| 14-17 | M4 | Planned  | - |
-
-## Milestone 3: Real-Time Visualization & Diagnostics (v2.5) - ACTIVE
-*Focus: Live telemetry, vision debugging, and policy transparency.*
-
-- [x] **Phase 14-01: USD Asset Flattening** - (COMPLETED) Physically scaled USD geometry to 1x and refreshed boundary cache.
-- [ ] **Phase 13: Live Policy GUI** - Develop a standalone dashboard to stream the robot's camera feed and real-time PPO action distributions.
+- [x] **Phase 14: Multi-Agent Environment Refactor** - Physically scaled USD geometry to 1x and refreshed boundary cache.
 
 ## Milestone 4: Multi-Agent Urban Coordination (v3.0) - PLANNED
 *Focus: Smart intersections, multi-car coordination, and multi-agent RL (MARL).*

@@ -18,7 +18,7 @@ To provide a physically accurate, high-performance simulation bridge that minimi
 - **Control Rate:** 20Hz (DT=0.05s).
 - **Physics Solver:** TGS (16 iterations).
 
-## Technical Requirements
+## Requirements
 - **Hardware:** NVIDIA RTX GPU (8GB+ VRAM recommended).
 - **Software:** Ubuntu 22.04+, Isaac Lab, Stable Baselines 3 Contrib.
 - **Scale:** Native 1.0x metric (1 unit = 1 meter).
