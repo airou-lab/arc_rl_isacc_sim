@@ -82,3 +82,36 @@
     - Updated `WaypointTrackingWrapper.py` to check for both `policy` and `vec` keys when extracting speed and yaw rate.
     - Adjusted the Z-spawn offset to **0.1m** and lowered the height termination to **-0.5m** to improve initial physics stability.
 - **Result**: Trajectory integration is now functional, and training has been restarted to recover from the corrupted "zero-movement" baseline.
+
+## Phase 14: Physics Stabilization & Coordinate Frame Sync (2026-05-08)
+
+### 1. 1.0x Metric Physical Collapse
+- **Issue**: The robot was experiencing "invisible bumps" and immediate resets on the 1x map.
+- **Root Cause**: Spawn height was set to 0.04m, causing the 5.0kg chassis to clip into the ground mesh. Additionally, gravity was not explicitly set, leading to "weird lightness."
+- **Fix**: Increased spawn height to **0.10m** (safe drop) and explicitly set gravity to **Earth standard (-9.81)** in ARCProEnvCfg.
+
+### 2. Coordinate Frame Inconsistency (The "Death Swerve")
+- **Issue**: Models from 3M-5M steps were swerving into the white line instantly.
+- **Root Cause**: A dual mismatch. 
+    - **Bias**: The models were trained with a **-0.238m target offset**. On the narrow 0.407m lane, this target was physically **inside the right-hand wall**.
+    - **Inversion**: Steering was Positive-Left, but Lateral Error calculation was Positive-Right, creating a confusing coordinate frame for the policy.
+- **Fix**: Standardized to a consistent **Right-Handed Frame**:
+    - **Target Offset**: Reset to **0.0m** (Targeting the safe centerline).
+    - **Steering**: **Positive = LEFT**.
+    - **Lateral Error**: **Positive = LEFT**.
+- **Result**: The agent now receives clear, non-inverted signals and targets the safest part of the road.
+
+### 3. Termination Logic Refinement
+- **Issue**: Resets were either delayed or happening immediately on spawn.
+- **Fix**: 
+    - Adjusted threshold to **0.13m** (allowing 3cm wiggle room for the 0.28m robot).
+    - Implemented a **10-step spawn grace period** in terminations.py to prevent resets on the start-line gate before forward velocity is achieved.
+    - Increased boundary marker resolution to **1cm** to eliminate gaps.
+
+### 4. Verification Script (Checkpoint Lock)
+- **Issue**: run_gui_verify.sh was persistently loading model_final.zip despite --checkpoint overrides.
+- **Fix**: Rewrote the bash argument parser to correctly handle and pass the checkpoint flag to the Python script. Archived collapsed 4M/5M models to prevent accidental usage.
+
+### 5. Production Retraining Initiated
+- **Configuration**: 32 environments, 5M steps, 1e-5 learning rate, headless with cameras.
+- **Goal**: Establish a clean, zero-bias baseline for autonomous urban navigation.
