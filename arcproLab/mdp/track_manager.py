@@ -144,7 +144,7 @@ class TrackManager:
         def finalize_group(data_list, name):
             if not data_list: return None
             all_dense_pts = []
-            resolution = 0.05
+            resolution = 0.02 # Increased resolution (2cm) for 1.0x scale
             for path, mesh_data in data_list:
                 pts = np.array(mesh_data['points'])
                 indices = mesh_data['indices']
@@ -270,7 +270,7 @@ class TrackManager:
         return dist_y, dist_w, dist_g
 
 
-    def refresh_visuals(self, target_lane_offset: float = -0.238):
+    def refresh_visuals(self, target_lane_offset: float = 0.0):
         try:
             from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
             import isaaclab.sim as sim_utils
@@ -320,7 +320,7 @@ class TrackManager:
                 self.visualizer_target.visualize(to_w(target_viz, z_off=0.18))
         except: pass
 
-    def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor, target_lane_offset: float = -0.238):
+    def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor, target_lane_offset: float = 0.0):
         self.ensure_synced()
         dists = torch.cdist(pos[:, :2], self.waypoints[:, :2])
         closest_idx = torch.argmin(dists, dim=1)

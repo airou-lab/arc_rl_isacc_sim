@@ -1,3 +1,6 @@
+---
+wave: 1
+---
 # Phase 12 Plan: Autonomous Intersection Navigation
 
 This phase implements the high-level decision logic required for the robot to navigate the road network, moving from simple lane-following to graph-based routing.

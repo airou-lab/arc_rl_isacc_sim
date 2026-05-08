@@ -51,11 +51,11 @@ def spawn_f1tenth(
                     mass_cfg = sim_utils.MassPropertiesCfg(mass=mass)
                     schemas.define_mass_properties(str(child.GetPath()), mass_cfg, stage)
                     
-                    # Lower Center of Mass to make the robot bottom-heavy and prevent flipping
+                    # Lower Center of Mass slightly to prevent flipping without clipping
                     from pxr import UsdPhysics, Gf
                     mass_api = UsdPhysics.MassAPI.Apply(child)
-                    # Move CoM down by 5cm relative to the prim origin
-                    mass_api.CreateCenterOfMassAttr().Set(Gf.Vec3f(0.0, 0.0, -0.05))
+                    # Move CoM down by 1cm (0.01m) relative to the prim origin
+                    mass_api.CreateCenterOfMassAttr().Set(Gf.Vec3f(0.0, 0.0, -0.01))
                     
                     # print(f"[Spawner] SUCCESS: Applied mass {mass} and lowered CoM for {child.GetPath()}")
                     break

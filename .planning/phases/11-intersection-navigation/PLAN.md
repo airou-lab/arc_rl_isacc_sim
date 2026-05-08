@@ -1,3 +1,6 @@
+---
+wave: 1
+---
 # Phase 11 Plan: Hierarchical Policy Integration
 
 This plan details the migration of the `HierarchicalPathPlanningPolicy` (HPPP) from the reference stack into the `arcproLab` workspace at 1.0x metric scale.

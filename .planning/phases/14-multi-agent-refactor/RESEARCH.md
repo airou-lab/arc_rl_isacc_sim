@@ -1,62 +1,53 @@
 # Phase 14: Multi-Agent Environment Refactor - Research
 
-**Researched:** 2024-05-22
-**Domain:** Multi-Agent Reinforcement Learning (MARL) in Isaac Lab
-**Confidence:** MEDIUM
+**Updated:** 2026-05-06
+**Domain:** Zero-Localization V2V & MARL Coordination
+**Confidence:** HIGH
 
 ## Summary
-The current environment uses `ManagerBasedRLEnv` configured for a single robot instance per environment. To scale to Multi-Agent scenarios, we must decide between treating multiple robots as a single "multi-body" entity or using specialized MARL frameworks. Isaac Lab's `DirectMARLEnv` is the native way to handle decentralized agents, but `ManagerBasedRLEnv` can be adapted by expanding the observation and action managers to handle concatenated tensors for $N$ agents.
+The project is prototyping a **Zero-Localization V2V (Vehicle-to-Vehicle)** coordination system. The goal is to enable 3-4 robots to navigate a shared 4-way stop intersection without requiring GPS or SLAM. Coordination is achieved through a **Peer-to-Peer Queueing** protocol based on logical "Lane Gates."
 
-**Primary recommendation:** Use `skrl` with `IPPO` or `MAPPO` for training, as it has the most robust MARL support for Isaac Lab. Implement $N$ robot instances within each vectorized environment by indexing prim paths.
+## Zero-Localization V2V Protocol
 
-## Policy Stack Status
-- **Verification:** Per user confirmation, the **Policy Stack** (`arcproLab/policy_stack/`) already supports multiple robots (via `WorkerScheduler` and `AgentNode` IDs).
-- **Refinement:** No core changes are required in the policy stack for multi-agent support. The focus of Phase 14 remains on **Environment Scaffolding** (Spawning, Observation/Reward Managers, and Inter-Agent Collision detection).
+### 1. The "Lane Gate" as a Logical Sensor
+The infrastructure (or the robots' local perception) identifies three critical zones per intersection branch:
+- **Arrival Gate:** Triggered when a robot approaches the intersection stop line.
+- **Stop Detection:** Triggered when the robot's local velocity $v < 0.1 m/s$ at the stop line.
+- **Exit Gate:** Triggered when the robot successfully clears the opposite side of the intersection.
 
-## Design Intent & Scope
-**Refined Strategy:** Unlike standard vectorized training where each environment is an isolated island with one robot, Phase 14 focuses on **Intra-Environment Multi-Agent (IEMA)** support. 
-- **Goal:** Enable a single environment instance (e.g., one Smart Intersection) to contain **2+ robots** simultaneously.
-- **Purpose:** To test and train coordination, yielding, and collision avoidance in a shared physical space.
-- **Scaling:** We will still use `num_envs` for parallelism, but each environment will now have `num_agents_per_env >= 2`.
+### 2. Peer-to-Peer Queueing Logic (FCFS)
+Robots broadcast short-range status messages (BSM-Lite):
+- **Event: ARRIVED**: "I am at Branch [North/South/East/West] at Timestamp [T]."
+- **Event: STOPPED**: "I am stationary at the stop line."
+- **Event: CLEARED**: "I have passed the Exit Gate."
 
-## MARL Design Decisions
-- **Policy:** **Homogeneous Parameter Sharing**. Both robots in the intersection will share the same PPO network weights.
-- **Reward:** **Individual Rewards**. Each robot is evaluated on its own lane-following and intersection success, though a mutual "collision penalty" will likely be added to discourage inter-agent crashes.
-- **Termination:** Episodes may terminate for an agent on boundary hit OR on robot-robot collision. 
+**Arbitration Rule:** 
+A robot may only enter the intersection if it is at the head of the global **First-Come, First-Served (FCFS)** queue. It yields to any robot that broadcasted a "STOPPED" event with a timestamp earlier than its own.
 
-## Standard Stack
-- **RL Framework:** `skrl` (v1.1.0+) - specifically for its `IPPO`/`MAPPO` implementations.
-- **Environment Base:** `DirectMARLEnv` (Recommended for true MARL) or `ManagerBasedRLEnv` (with concatenated agents).
-- **Communication:** Shared memory/Tensors via Isaac Lab's `Scene` buffers.
+## Architecture Refinement (V2V Prototype)
 
-## Architecture Patterns
+### 1. Spawning & "Rough Placement" Strategy
+- **Procedural Loop:** Use a `for i in range(num_agents)` loop within the `ARCProSceneCfg` to spawn robots.
+- **Rough Placement Strategy:** Agents are spawned at the four entry branches (N, S, E, W) of the main intersection to maximize interaction density.
+- **Proximity Maximization:** This ensures agents are within V2X communication range and on potential collision courses immediately.
 
-### Recommended Project Structure
-- `arcproLab/marl/`: New directory for MARL-specific MDP terms.
-- `arcproLab/arcpro_marl_env_cfg.py`: Specialized config for multi-agent setups.
+### 2. Observation Space (The "Peer Table")
+The policy does not receive world-coordinates ($x, y$). Instead, it sees:
+- **Go/Wait Signal (1 bit):** 1.0 if the robot is at the head of the FCFS queue, 0.0 otherwise.
+- **Queue Position (Float):** Current rank in the queue (e.g., 0.0 = Next, 1.0 = Second in line).
+- **Branch Occupancy (4 bits):** Binary indicators for North, South, East, and West branches showing if a peer is currently "Committing" to the intersection.
 
-### Multi-Agent Spawning Pattern
-Modify `ARCProSceneCfg` to spawn robots using indexed paths:
-```python
-for i in range(num_agents):
-    setattr(self, f"robot_{i}", ARCPRO_ROBOT_CFG.replace(
-        prim_path=f"{{ENV_REGEX_NS}}/Robot_{i}",
-        ...
-    ))
-```
+### 3. Reward & Termination (The Social Contract)
+- **Queue-Jumping Penalty:** Massive negative reward (-1000) and **immediate termination** if a robot moves into the intersection area while the Go Signal is 0.0.
+- **Collision Policy (Global Reset):** Any inter-agent contact results in a reset of the entire environment instance.
+- **Success Bonus:** Reward for clearing the Exit Gate after a valid "Go" sequence.
 
-## Don't Hand-Roll
-| Problem | Don't Build | Use Instead |
-|---------|-------------|-------------|
-| Multi-agent synchronization | Custom buffers | `skrl` MARL wrappers |
-| Observation concatenation | Manual loops | Isaac Lab `ObservationManager` with grouped terms |
+## Technical Decisions
+- **RL Framework:** `skrl` with Independent PPO (`IPPO`).
+- **Simulation Scaling:** Prototype with `num_envs=1` for visual fidelity, scaling to 32+ envs for production.
+- **Environment Base:** `ManagerBasedRLEnv` refactored for procedural N-agent support.
 
-## Common Pitfalls
-1. **Camera Memory Exhaustion**: Each robot instance with a `TiledCamera` consumes significant GPU memory. Scaling to 32 envs with 4 agents each (128 cameras) may crash 8GB/12VRAM cards.
-   - *Mitigation*: Lower resolution or use a single "Top-down" oracle camera for early MARL training.
-2. **Action Inversion/Mapping**: Ensure action tensors are correctly sliced and sent to the respective robot joints.
-
-## Implementation Strategy
-1. **Wave 1: Scaffolding**: Refactor `arcpro_env_cfg.py` to allow a configurable `num_agents` parameter.
-2. **Wave 2: Observation Mapping**: Update `mdp/observations.py` to return a tensor of shape `(num_envs, num_agents, obs_dim)`.
-3. **Wave 3: MARL Training**: Integrate `skrl` to handle the multi-agent reward and policy update loop.
+## Implementation Path (Refined)
+1. **Wave 1: MARL Config**: Procedural 4-agent spawning and basic MDP term loops.
+2. **Wave 2: V2V Manager**: Logic for tracking logical gates and maintaining the FCFS queue.
+3. **Wave 3: Yielding Observations**: Bridging the queue status to the robot telemetry.

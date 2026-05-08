@@ -132,18 +132,21 @@ class ActionCfg:
     drive = arcpro_actions.CombinedDriveActionCfg(
         asset_name="robot", 
         joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
-        scale=15.0,
+        scale=8.0,
         offset=0.0
     )
 
 @configclass
 class RewardCfg:
+        # Anti-Suicide: Heavy penalty for crashing/resetting
+        terminating = RewTerm(func=mdp_rew.termination_penalty, weight=1.0)
+        
         speed = RewTerm(func=mdp_rew.speed_reward, weight=20.0)
         # Moderate lateral error penalty (Speed reward now competitive with staying on track)
         lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=5.0)
         # Discourage staying still (Lower threshold for 5kg/1x scale)
         stationary = RewTerm(
-            func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.2, -20.0, 0.0),
+            func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.1, -20.0, 0.0),
             weight=10.0
         )
         # Prevent 180s
@@ -189,10 +192,10 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
             bounce_threshold_velocity=0.5, 
             enable_ccd=True, 
             enable_stabilization=True,
-            gpu_max_rigid_contact_count=2**20, # 1M contacts
-            gpu_max_rigid_patch_count=2**17,
+            gpu_max_rigid_contact_count=2**16, # 64k contacts
+            gpu_max_rigid_patch_count=2**11,
             gpu_heap_capacity=2**26, # 64MB heap
-            gpu_found_lost_pairs_capacity=2**20,
+            gpu_found_lost_pairs_capacity=2**13,
         ),
     )
 

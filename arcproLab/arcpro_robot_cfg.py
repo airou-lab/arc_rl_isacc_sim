@@ -44,6 +44,10 @@ class ArcProRobotCfg(ArticulationCfg):
             solver_velocity_iteration_count=8, 
             fix_root_link=False, 
         ),
+        collision_props=sim_utils.CollisionPropertiesCfg(
+            contact_offset=0.005, # 5mm offset for high precision
+            rest_offset=0.0, 
+        ),
     )
 
     init_state: ArticulationCfg.InitialStateCfg = ArticulationCfg.InitialStateCfg(

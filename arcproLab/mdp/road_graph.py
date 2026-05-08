@@ -40,7 +40,6 @@ class RoadGraph:
                 pos = world_transform.ExtractTranslation()
                 
                 # Get intent from attribute (Default to Straight if missing)
-                # Note: SignalTurnRelation: -1=Left, 0=Straight, 1=Right
                 intent = 0.0
                 attr = prim.GetAttribute("SignalTurnRelation")
                 if attr.IsValid():
@@ -77,7 +76,6 @@ class RoadGraph:
             self.turn_token = torch.randint(-1, 2, (env.num_envs,), device=self.device).float()
 
         # Logic: Randomize mission ONLY on environment reset
-        # This keeps the 'Intent' persistent so the robot can learn to follow it
         reset_buf = getattr(env, "reset_buf", None)
         if reset_buf is not None and reset_buf.any():
             new_tokens = torch.randint(-1, 2, (env.num_envs,), device=self.device).float()

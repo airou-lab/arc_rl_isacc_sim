@@ -8,70 +8,46 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
 def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """
-    Terminates if the robot center gets too close to ANY road marker.
-    Ditches centerline math for robust direct proximity.
-    Supports permeable Gate markers (Stop Lines).
-    """
+    """Terminates if the robot hits a white line boundary."""
     from mdp.track_manager import get_track_manager
     tm = get_track_manager(device=env.device)
+    
     asset = env.scene[asset_cfg.name]
+    env_origins = env.scene.env_origins
+    local_pos = asset.data.root_pos_w - env_origins
     
-    # Get direct distance to Yellow (Center), White (Edge), and Gate (Stop) markers
-    dist_y, dist_w, dist_g = tm.compute_marker_distances(asset.data.root_pos_w - env.scene.env_origins)
+    # Get boundary data
+    dist_y, dist_w, dist_g = tm.compute_marker_distances(local_pos)
     
-    # Standard boundaries (Always reset if hitting the edge)
-    # White (Edge) or Yellow (Center)
-    # 0.12m allows for wheel overlap on the 1.0x metric scale (Proposed in Phase 14-01)
+    # 1. Boundary hit (White or Yellow line dist < threshold)
     boundary_hit = (dist_w < 0.12) | (dist_y < 0.12)
     
-    # DEBUG: Loud diagnostic for Env 0
-    if False: # Disabled for high FPS production run
-        step_count = env.unwrapped.episode_length_buf[0].item()
-        speed = asset.data.root_lin_vel_b[0, 0].item()
-        print(f"[DIAGNOSTIC] Env 0 | Step: {step_count} | Speed: {speed:.4f} | DistW: {dist_w[0].item():.4f} | DistY: {dist_y[0].item():.4f} | Hit: {boundary_hit[0].item()}")
-    
-    # Gates (Permeable if aligned)
+    # 2. Gate permeability check (Phase 11-17)
     gate_contact = dist_g < 0.12
     
-    # Calculate yaw from quaternion
-    q = asset.data.root_quat_w
-    yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
+    # Check alignment (Heading error < 45 degrees)
+    head_err = env.extras.get("head_err", torch.zeros(env.num_envs, device=env.device))
+    aligned_long = torch.abs(head_err) < 0.8  # ~45 deg
     
-    # Get heading error
-    _, head_err, _ = tm.compute_errors(asset.data.root_pos_w[:, :2] - env.scene.env_origins[:, :2], yaw)
+    # Also check if moving forward
+    vel = asset.data.root_lin_vel_b[:, 0]
+    moving_forward = vel > 0.1
     
-    # Speed/Intent check (Task 11-16)
-    # Only allow gate permeability if moving forward > 0.1m/s
-    speed = asset.data.root_lin_vel_b[:, 0]
-    moving_forward = speed > 0.1
-    
-    # Only reset on Gate if alignment is poor (sliding into it) OR if we are stationary
-    # Alignment: cos(head_err) > 0.7 means robot is facing roughly forward/backward along the path
-    # We also check sin(head_err) to allow 90 degree crossing (perpendicular gates in intersections)
-    cos_err = torch.cos(head_err)
-    sin_err = torch.sin(head_err)
-    
-    # facing 0 or 180 (aligned with lane)
-    aligned_long = torch.abs(cos_err) > 0.707 
-    # facing 90 or 270 (crossing perpendicular stop lines)
-    aligned_lat = torch.abs(sin_err) > 0.707
-    
+    # Gate intent logic
+    aligned_lat = torch.abs(torch.sin(head_err)) > 0.8 
     alignment_ok = (aligned_long | aligned_lat) & moving_forward
     
-    # A gate hit is ONLY a termination if alignment/intent is NOT okay
     gate_hit = gate_contact & (~alignment_ok)
-    
     return boundary_hit | gate_hit
-
-def fov_visibility_termination(env: ManagerBasedRLEnv, horizontal_aperture: float, focal_length: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
 
 def height_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Terminates if the robot flips or falls."""
     asset = env.scene[asset_cfg.name]
-    height = asset.data.root_pos_w[:, 2]
-    return (height < -0.5) | (height > 5.0)
+    return asset.data.root_pos_w[:, 2] < 0.05
 
 def stagnation_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Terminates if the robot stays still for too long (stuck against wall)."""
+    return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+def fov_visibility_termination(env: ManagerBasedRLEnv, horizontal_aperture: float, focal_length: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)

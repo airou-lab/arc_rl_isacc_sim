@@ -30,15 +30,14 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     from mdp.road_graph import get_road_graph
     rg = get_road_graph(device=env.device)
     rg.update(env)
+    
     turn_token, go_signal = rg.get_nav_commands()
 
     obs[:, 0] = turn_token
     obs[:, 1] = go_signal
     obs[:, 2] = 0.0  # IDX_GOAL_DIST
 
-
     # Index 3: Forward Speed (m/s) - Local X velocity
-    # Metric scale: 1.0 = 1m/s
     obs[:, 3] = asset.data.root_lin_vel_b[:, 0]
 
     # Index 4: Yaw Rate (rad/s) - Local Z angular velocity
@@ -49,10 +48,9 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
         if env.action_manager.action is not None and env.action_manager.action.shape[1] >= 3:
             obs[:, 5:8] = env.action_manager.action[:, :3] # Steer, Throttle, Brake
     except:
-        pass # Actions not yet defined in Wave 1
+        pass 
 
     # Index 8 & 9: Lateral and Heading Error
-    # Use TrackManager for high-fidelity errors (not axis-aligned)
     from mdp.track_manager import get_track_manager
     tm = get_track_manager(device=env.device)
 
@@ -66,12 +64,8 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     reset_buf = getattr(env, "reset_buf", None)
     if reset_buf is not None:
         env.extras["distance"] = torch.where(reset_buf, torch.zeros_like(env.extras["distance"]), env.extras["distance"])
-    elif env.num_envs == 1 and env.episode_length_buf[0] == 0:
-        # Fallback for initialization
-        env.extras["distance"].zero_()
 
-    # Calculate distance moved in this step (Forward velocity * dt)
-    # We use local X velocity * environment dt (0.05s)
+    # Calculate distance moved in this step
     env.extras["distance"] += asset.data.root_lin_vel_b[:, 0] * 0.05
     
     # Store raw values in extras for Reward/Termination (Unmasked)
@@ -89,15 +83,9 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     if "distance" in env.extras:
         obs[:, 11] = env.extras["distance"]
         
-    # Store raw values in extras for easy access by scripts (not used by policy)
-    env.extras["raw_lat_err"] = lat_err
-    env.extras["raw_speed"] = asset.data.root_lin_vel_b[:, 0]
-    
     # Final verification for NaNs
     nan_mask = torch.isnan(obs)
     if nan_mask.any():
-        nan_indices = torch.where(nan_mask.any(dim=0))[0]
-        # Just zero out NaNs to keep training alive
         obs[nan_mask] = 0.0
         
     return obs

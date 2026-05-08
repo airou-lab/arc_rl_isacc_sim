@@ -1,3 +1,6 @@
+---
+wave: 1
+---
 # Phase 13 Plan: Remote Training Telemetry (Dockerized TensorBoard)
 
 This phase focuses on setting up a persistent, remote-accessible dashboard for viewing Stable Baselines 3 training runs, replicating the seamless remote experience of existing containers (like Bento PDF).
