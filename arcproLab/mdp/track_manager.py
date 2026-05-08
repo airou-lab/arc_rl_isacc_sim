@@ -144,7 +144,7 @@ class TrackManager:
         def finalize_group(data_list, name):
             if not data_list: return None
             all_dense_pts = []
-            resolution = 0.02 # Increased resolution (2cm) for 1.0x scale
+            resolution = 0.01 # High resolution (1cm) for 1.0x scale
             for path, mesh_data in data_list:
                 pts = np.array(mesh_data['points'])
                 indices = mesh_data['indices']
@@ -331,7 +331,9 @@ class TrackManager:
         # Curvature at closest waypoint
         kappa = self.curvature_tensor[closest_idx]
         
-        normal_x, normal_y = -torch.sin(wp_yaw), torch.cos(wp_yaw)
+        # Standard Right-Handed Lateral Error (Positive = LEFT of path)
+        # For South (yaw=-pi/2): sin(-pi/2)=-1, cos(-pi/2)=0 -> normal=(sin, -cos) = (-1, 0) = East/Left
+        normal_x, normal_y = torch.sin(wp_yaw), -torch.cos(wp_yaw)
         raw_lat_err = wp_to_robot[:, 0] * normal_x + wp_to_robot[:, 1] * normal_y
         lat_err, head_err = raw_lat_err - target_lane_offset, yaw - wp_yaw
         head_err = torch.atan2(torch.sin(head_err), torch.cos(head_err))

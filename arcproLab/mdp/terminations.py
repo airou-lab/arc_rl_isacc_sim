@@ -20,7 +20,8 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     dist_y, dist_w, dist_g = tm.compute_marker_distances(local_pos)
     
     # 1. Boundary hit (White or Yellow line dist < threshold)
-    boundary_hit = (dist_w < 0.12) | (dist_y < 0.12)
+    # 0.13m allows ~3cm of wiggle room for the 0.28m wide robot in a 0.60m lane
+    boundary_hit = (dist_w < 0.13) | (dist_y < 0.13)
     
     # 2. Gate permeability check (Phase 11-17)
     gate_contact = dist_g < 0.12
@@ -29,13 +30,17 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     head_err = env.extras.get("head_err", torch.zeros(env.num_envs, device=env.device))
     aligned_long = torch.abs(head_err) < 0.8  # ~45 deg
     
-    # Also check if moving forward
+    # Also check if moving forward (Grace period for spawn)
     vel = asset.data.root_lin_vel_b[:, 0]
-    moving_forward = vel > 0.1
+    # Allow 0 velocity if aligned or if it's the first few steps of the episode
+    moving_forward = vel > 0.05
     
-    # Gate intent logic
+    # Check if we just started (less than 10 steps) to prevent spawn resets
+    is_spawn = env.episode_length_buf < 10
+    
+    # Gate intent logic: Alignment OK if looking straight OR if we just spawned
     aligned_lat = torch.abs(torch.sin(head_err)) > 0.8 
-    alignment_ok = (aligned_long | aligned_lat) & moving_forward
+    alignment_ok = (aligned_long | aligned_lat | is_spawn) & (moving_forward | is_spawn)
     
     gate_hit = gate_contact & (~alignment_ok)
     return boundary_hit | gate_hit

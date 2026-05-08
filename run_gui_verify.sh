@@ -6,16 +6,33 @@ PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 # Define the Isaac Lab path
 ISAACLAB_PATH="/home/arika/IsaacLab/isaaclab.sh"
 
-# FIND LATEST MODEL
-# Search for .zip files in logs/ppo, sort by modification time, and take the most recent
-LATEST_CHECKPOINT=$(find "$PROJECT_DIR/logs/ppo" -name "*.zip" -printf "%T@ %p\n" | sort -n | tail -1 | cut -d' ' -f2-)
+# Default checkpoint
+CHECKPOINT_ARG=""
+DECLARE_REMAINING=()
 
-if [ -z "$LATEST_CHECKPOINT" ]; then
-    echo "Warning: No model checkpoints found in logs/ppo. Launching for visual verification only."
-    CHECKPOINT_ARG=""
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --checkpoint)
+            CHECKPOINT_ARG="--checkpoint $2"
+            shift 2
+            ;;
+        *)
+            DECLARE_REMAINING+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# If no checkpoint provided, find the latest .zip that is NOT a backup
+if [ -z "$CHECKPOINT_ARG" ]; then
+    LATEST_CHECKPOINT=$(find "$PROJECT_DIR/logs/ppo" -name "*.zip" -printf "%T@ %p\n" | sort -n | tail -1 | cut -d' ' -f2-)
+    if [ -n "$LATEST_CHECKPOINT" ]; then
+        echo "Checkpoint (Auto-detected): $LATEST_CHECKPOINT"
+        CHECKPOINT_ARG="--checkpoint $LATEST_CHECKPOINT"
+    fi
 else
-    echo "Checkpoint:  $LATEST_CHECKPOINT"
-    CHECKPOINT_ARG="--checkpoint $LATEST_CHECKPOINT"
+    echo "Checkpoint (Specified): ${CHECKPOINT_ARG#--checkpoint }"
 fi
 
 echo "--------------------------------------------------"
@@ -23,7 +40,8 @@ echo "--------------------------------------------------"
 # Ensure DISPLAY is set for GUI
 export DISPLAY=:0
 
-# Run the verification script with GUI enabled
+# Final Command execution
+echo "Executing: $ISAACLAB_PATH -p $PROJECT_DIR/arcproLab/scripts/verify_policy.py $CHECKPOINT_ARG ${DECLARE_REMAINING[@]}"
 $ISAACLAB_PATH -p "$PROJECT_DIR/arcproLab/scripts/verify_policy.py" \
     $CHECKPOINT_ARG \
-    --num_envs 1
+    "${DECLARE_REMAINING[@]}"

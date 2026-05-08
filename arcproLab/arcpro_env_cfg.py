@@ -76,8 +76,8 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             scale=(1.0, 1.0, 1.0), # Revert to 1.0x
         ),
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
-            # Fixed Spawn Point from main
-            pos=(-16.25, 5.65, 0.10),
+            # Exactly on the path center (X=-16.197) at stable height
+            pos=(-16.197, 5.50, 0.10),
             rot=(0.7071, 0.0, 0.0, -0.7071) # Face South
         ),
 
@@ -94,7 +94,7 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         ),
         offset=TiledCameraCfg.OffsetCfg(pos=(0.4, 0.0, 0.2), rot=(0.985, 0.0, 0.174, 0.0), convention="parent"),
         data_types=["rgb"], width=160, height=90,
-        debug_vis=True,
+        debug_vis=False,
     )
 
     # Contact Sensor: Detect chassis collisions (crashes)
@@ -102,7 +102,7 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/Robot/Chassis",
         update_period=0.0,
         history_length=3,
-        debug_vis=True,
+        debug_vis=False,
     )
 
 @configclass
@@ -185,6 +185,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
         dt=0.002, # 500Hz for high-fidelity small scale physics
         render_interval=25, # Maintain 20Hz visual (500 / 25)
         device="cuda:0",
+        gravity=(0.0, 0.0, -9.81), # Explicit Earth Gravity
         physx=sim_utils.PhysxCfg(
             solver_type=1, # TGS
             max_position_iteration_count=16, 
