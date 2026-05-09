@@ -20,10 +20,10 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 ## Milestone 2: Autonomous Urban Navigation (v2.0) - ACTIVE
 *Focus: Graph-based routing, intersection logic, and multi-agent coordination.*
 
-- [x] **Phase 11**: intersection-navigation - Retrained policy at 1x and implemented alignment-aware intersection gate permeability.
-- [ ] **Phase 12**: autonomous-navigation - Implement turning missions and proximity-based RoadGraph triggers for intersection decision-making.
-- [ ] **Phase 13**: live-policy-gui - Develop a standalone dashboard to stream telemetry, vision debugging, and policy transparency.
-- [x] **Phase 14**: multi-agent-refactor - Physically scaled USD geometry to 1x and refreshed boundary cache.
+- [x] **Phase 11: intersection-navigation** - Retrained policy at 1x and implemented alignment-aware intersection gate permeability.
+- [ ] **Phase 12: autonomous-navigation** - Implement turning missions and proximity-based RoadGraph triggers for intersection decision-making.
+- [ ] **Phase 13: live-policy-gui** - Develop a standalone dashboard to stream telemetry, vision debugging, and policy transparency.
+- [x] **Phase 14: multi-agent-refactor** - Physically scaled USD geometry to 1x and refreshed boundary cache.
 
 ## Milestone 4: Multi-Agent Urban Coordination (v3.0) - PLANNED
 *Focus: Smart intersections, multi-car coordination, and multi-agent RL (MARL).*
