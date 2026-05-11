@@ -1,32 +1,22 @@
 # Project State: ARCPro RL v2.5-dev
 
 ## Current Milestone
-**Milestone 3: Real-Time Visualization & Diagnostics** (ACTIVE)
+**Milestone 2: Autonomous Urban Navigation** (ACTIVE)
 
 ## Current Phase
-**Phase 14-01: Procedural Multi-Agent Scaffolding** (ACTIVE)
+**Phase 15: HD Vision & ResNet Hardening** (ACTIVE)
 
 ## Summary
-The project has successfully resolved the **Fatal Coordinate Mismatch** that caused previous policy collapses. Measurement confirmed the 1.0x metric lane is only **0.407m wide**, meaning the previous training target (-0.238m offset) was physically **3cm inside the white line boundary**. This caused immediate self-destruction upon loading. We have now standardized to a consistent **Right-Handed Coordinate Frame (Positive-Left for both Steer and LatErr)** and neutralized the target to **0.0m (Centerline)**. 
+The project has successfully resolved the **Suicide Trap** and achieved **5M step convergence** on a 160x90 precision baseline. However, the model remains brittle in tight 6cm margins. We are now transitioning to **HD Vision (960x600)** using a **ResNet-18 backbone** and **Domain Randomization** to achieve robust, high-speed lapping.
 
 ## Recent Activity
-- **Fatal Bias Resolution**: Reset `target_lane_offset` to 0.0m after measuring actual 0.407m lane width.
-- **Coordinate Frame Sync**: Standardized `TrackManager` and `AckermannSteering` to **Positive-Left** (Right-Handed).
-- **Physics Stabilization**: Fixed ground clipping by setting spawn height to 0.10m and explicitly setting **Earth Gravity (-9.81)**.
-- **Termination Logic**: Implemented 10-step spawn grace period and increased boundary resolution to 1cm.
-- **Health Fix**: Generated missing `VALIDATION.md` files for Phases 11-14 and standardizing all phase documentation.
+- **Phase 15 Formulated**: Created `.planning/phases/15-hd-vision-resnet/` and established the HD ResNet implementation plan.
+- **Precision Tuning Breakthrough**: Achieved >1,800 step survival in the 160x90 1.0x metric baseline at 50Hz.
+- **Suicide Loop Break**: Successfully moved away from the 4-step collapse through centered spawning and reward rebalancing.
 
 ## Active Todos (Queue)
-1. [ ] **14-01-production-training**: (ACTIVE) Complete 5M steps on 32 envs with neutral, synchronized physics.
-2. [ ] **14-01-01-marl-config**: Create `arcpro_marl_env_cfg.py` with loop-based N-agent support.
-3. [ ] **14-01-03-roadgraph-2d**: Upgrade `RoadGraph` to handle per-agent navigation tokens.
-4. [ ] **14-01-04-collision-global-reset**: Implement inter-agent crash detection and global environment reset.
+1. [x] **15-01-adaptive-cnn-backbone**: Implement Adaptive CNN with Early Pooling in `fusion_policy.py` for VRAM efficiency.
+2. [x] **15-02-late-fusion**: Implement vision-dominant concatenation for HD-Telemetry integration.
+3. [x] **15-03-hd-config**: Configure Isaac Lab for 640x360 rendering.
+4. [ ] **15-04-production-hardening**: Launch 2M step hardening run with randomized spawns. (ACTIVE v7)
 
-## Completed
-- [x] Phase 14-01: Multi-Agent Research & Strategy (V2X Focus).
-- [x] Phase 14-01: USD Asset Flattening (1.0x Metric Physical Scale).
-- [x] Phase 11: 1.0x Baseline Retraining & Perception Fixes.
-
-## Health Status (2026-05-08)
-- **Status**: **Healthy**
-- **Summary**: All validation docs generated, frontmatter repaired, and stale directories archived. Training is stable.

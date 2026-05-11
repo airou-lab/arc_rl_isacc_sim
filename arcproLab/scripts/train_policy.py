@@ -186,7 +186,7 @@ def main():
     # 7. Define Policy & Model
     policy_kwargs = dict(
         features_extractor_class=FusionFeaturesExtractor,
-        features_extractor_kwargs=dict(features_dim=268),
+        features_extractor_kwargs=dict(features_dim=256),
         lstm_hidden_size=256,
         n_lstm_layers=1,
         enable_critic_lstm=True,
@@ -220,14 +220,14 @@ def main():
             HierarchicalPathPlanningPolicy,
             env,
             verbose=1,
-            learning_rate=2e-5, # Reduced from 5e-5 for stability
-            n_steps=2048,      # Increased from 1024 for better gradient estimates
-            batch_size=128,    # Increased from 64
-            n_epochs=10,
+            learning_rate=2e-4, # Increased for ResNet-18 complexity
+            n_steps=256,        # Small rollout for VRAM safety
+            batch_size=32,      # Small batch for backprop safety
+            n_epochs=15,
             gamma=0.99,
             gae_lambda=0.95,
             clip_range=0.2,
-            ent_coef=0.02,     # Increased from 0.01 to encourage smoother exploration
+            ent_coef=0.01,     # Focused exploration for HD
             tensorboard_log=os.path.join(log_dir, "tb"),
             seed=args_cli.seed,
             device="cuda",
@@ -260,8 +260,8 @@ def main():
                 self.training_env.save(os.path.join(self.save_path, "vec_normalize.pkl"))
             return True
 
-    # save_freq is per vectorized step. 1M / num_envs = frequency.
-    save_freq = max(1, 1000000 // args_cli.num_envs)
+    # save_freq is per vectorized step. 500k / num_envs = frequency.
+    save_freq = max(1, 500000 // args_cli.num_envs)
     checkpoint_callback = CheckpointCallback(save_freq=save_freq, save_path=log_dir, name_prefix="model")
     vec_norm_callback = SaveVecNormalizeCallback(save_path=log_dir, save_freq=save_freq)
     reward_logger_callback = RewardLoggerCallback()

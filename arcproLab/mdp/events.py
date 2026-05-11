@@ -13,54 +13,52 @@ import math
 
 def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")):
     """
-    Event to reset the robot to a FIXED starting waypoint, aligned to the ground normal.
-    Exactly as in 'main' branch to ensure physical stability.
+    Event to reset the robot to the starting waypoint with Domain Randomization.
+    Randomizes X-offset, Heading, and Initial Velocity to force 'Recovery' learning.
     """
     asset = env.scene[asset_cfg.name]
+    num_resets = len(env_ids)
     
-    # Target Waypoint: Lane Center (Original Coordinates)
-    local_spawn_x, local_spawn_y = -16.1500, 5.65
-    spawn_yaw = -1.5708 # Face South
+    # Base Target: Lane Center (Sync with -16.25 centerline)
+    base_spawn_x, base_spawn_y = -16.25, 5.50
+    base_spawn_yaw = -1.5708 # Face South
+    
+    # 1. Domain Randomization (Hardening)
+    # Randomize X-offset: ±8cm (within the 13cm lethal margin)
+    rand_offset_x = (torch.rand(num_resets, device=env.device) * 0.16) - 0.08
+    # Randomize Heading: ±5 degrees (~0.08 rad)
+    rand_yaw = (torch.rand(num_resets, device=env.device) * 0.16) - 0.08
+    # Randomize Initial Velocity: 0.0 to 1.5 m/s (force handling dynamic starts)
+    rand_vel_x = torch.rand(num_resets, device=env.device) * 1.5
     
     # Get environment origins
     env_origins = env.scene.env_origins[env_ids]
     
-    # 1. Base position
-    final_pos = torch.zeros((len(env_ids), 3), device=env.device)
-    final_pos[:, 0] = env_origins[:, 0] + local_spawn_x
-    final_pos[:, 1] = env_origins[:, 1] + local_spawn_y
+    # 2. Compute final positions
+    final_pos = torch.zeros((num_resets, 3), device=env.device)
+    final_pos[:, 0] = env_origins[:, 0] + base_spawn_x + rand_offset_x
+    final_pos[:, 1] = env_origins[:, 1] + base_spawn_y
     final_pos[:, 2] = env_origins[:, 2]  # Clean drop height
 
-    # 2. Base rotation (Facing South)
-    quats = torch.zeros((len(env_ids), 4), device=env.device)
+    # 3. Compute final rotations (WXYZ)
+    quats = torch.zeros((num_resets, 4), device=env.device)
     
-    # 3. Ground Alignment (Raycast for Normal)
+    # Ground Alignment (Raycast for Normal)
     query = omni.physx.get_physx_scene_query_interface()
     for i, env_id in enumerate(env_ids):
         world_x, world_y = final_pos[i, 0].item(), final_pos[i, 1].item()
         hit = query.raycast_closest((world_x, world_y, 100.0), (0.0, 0.0, -1.0), 200.0)
         
-        # Default flat South-facing
-        half_yaw = spawn_yaw / 2.0
+        # Apply Randomized Yaw to base South-facing
+        yaw = base_spawn_yaw + rand_yaw[i].item()
+        half_yaw = yaw / 2.0
         q_final = Gf.Quatd(math.cos(half_yaw), Gf.Vec3d(0, 0, math.sin(half_yaw)))
 
         if hit["hit"]:
-            # Snap Z to road (10cm offset from main)
+            # Snap Z to road (10cm offset)
             spawn_z = hit["position"][2] + 0.10
-            
-            # Sanity check: Ensure we don't spawn below the world
-            if spawn_z < 0.05:
-                spawn_z = 0.05
+            if spawn_z < 0.05: spawn_z = 0.05
             final_pos[i, 2] = spawn_z
-            
-            # Ground alignment DISABLED - robot will spawn flat
-            # normal = hit["normal"]
-            # normal_vec = Gf.Vec3d(normal[0], normal[1], normal[2])
-            # up_vec = Gf.Vec3d(0, 0, 1)
-            # tilt_rot = Gf.Rotation(up_vec, normal_vec)
-            # yaw_rot = Gf.Rotation(Gf.Vec3d(0, 0, 1), math.degrees(spawn_yaw))
-            # q_final = (yaw_rot * tilt_rot).GetQuat()
-
 
         # Update tensor (WXYZ)
         quats[i, 0] = q_final.GetReal()
@@ -68,9 +66,16 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
         quats[i, 2] = q_final.GetImaginary()[1]
         quats[i, 3] = q_final.GetImaginary()[2]
     
-    # Teleport and Zero Momentum
+    # 4. Apply Initial Velocity (Local X)
+    velocities = torch.zeros((num_resets, 6), device=env.device)
+    # Convert local X velocity to world frame based on randomized yaw
+    # South-ish: Vy = -vel, Vx = rand_drift
+    velocities[:, 0] = rand_vel_x * torch.cos(base_spawn_yaw + rand_yaw)
+    velocities[:, 1] = rand_vel_x * torch.sin(base_spawn_yaw + rand_yaw)
+
+    # Teleport and Apply Initial State
     asset.write_root_pose_to_sim(torch.cat([final_pos, quats], dim=-1), env_ids=env_ids)
-    asset.write_root_velocity_to_sim(torch.zeros((len(env_ids), 6), device=env.device), env_ids=env_ids)
+    asset.write_root_velocity_to_sim(velocities, env_ids=env_ids)
     
     # Zero joint states
     joint_pos = asset.data.default_joint_pos[env_ids]

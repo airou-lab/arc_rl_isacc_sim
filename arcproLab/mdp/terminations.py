@@ -35,15 +35,17 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     # Allow 0 velocity if aligned or if it's the first few steps of the episode
     moving_forward = vel > 0.05
     
-    # Check if we just started (less than 10 steps) to prevent spawn resets
-    is_spawn = env.episode_length_buf < 10
+    # Check if we just started (less than 5 steps) to prevent spawn resets
+    is_spawn = env.episode_length_buf < 5
     
     # Gate intent logic: Alignment OK if looking straight OR if we just spawned
     aligned_lat = torch.abs(torch.sin(head_err)) > 0.8 
     alignment_ok = (aligned_long | aligned_lat | is_spawn) & (moving_forward | is_spawn)
     
     gate_hit = gate_contact & (~alignment_ok)
-    return boundary_hit | gate_hit
+    
+    # Apply grace period to both boundaries and gates
+    return (~is_spawn) & (boundary_hit | gate_hit)
 
 def height_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Terminates if the robot flips or falls."""

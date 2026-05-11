@@ -84,16 +84,16 @@ class ARCProSceneCfg(InteractiveSceneCfg):
  
     )
     
-    # Camera (Standard offset)
+    # Camera (Mimic Intel RealSense D435i Wide - 90° HFOV) with NO TILT
     tiled_camera = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraSensor",
         update_period=0.0,
         spawn=sim_utils.PinholeCameraCfg(
-            horizontal_aperture=2.65, 
+            horizontal_aperture=3.86, # 90-degree HFOV (2 * atan(3.86 / (2 * 1.93)))
             focal_length=1.93,
         ),
-        offset=TiledCameraCfg.OffsetCfg(pos=(0.4, 0.0, 0.2), rot=(0.985, 0.0, 0.174, 0.0), convention="parent"),
-        data_types=["rgb"], width=160, height=90,
+        offset=TiledCameraCfg.OffsetCfg(pos=(0.4, 0.0, 0.2), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
+        data_types=["rgb"], width=640, height=360,
         debug_vis=False,
     )
 
@@ -132,7 +132,7 @@ class ActionCfg:
     drive = arcpro_actions.CombinedDriveActionCfg(
         asset_name="robot", 
         joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
-        scale=8.0,
+        scale=15.0,
         offset=0.0
     )
 
@@ -141,13 +141,14 @@ class RewardCfg:
         # Anti-Suicide: Heavy penalty for crashing/resetting
         terminating = RewTerm(func=mdp_rew.termination_penalty, weight=1.0)
         
-        speed = RewTerm(func=mdp_rew.speed_reward, weight=20.0)
-        # Moderate lateral error penalty (Speed reward now competitive with staying on track)
-        lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=5.0)
-        # Discourage staying still (Lower threshold for 5kg/1x scale)
+        # Primary Objective: MOMENTUM (Increased weight)
+        speed = RewTerm(func=mdp_rew.speed_reward, weight=25.0)
+        # Secondary Objective: Precision (Lowered weight to stop the "crawling" behavior)
+        lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=10.0)
+        # Force the agent to move (Higher threshold for 50Hz control)
         stationary = RewTerm(
-            func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.1, -20.0, 0.0),
-            weight=10.0
+            func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.5, -20.0, 0.0),
+            weight=2.0
         )
         # Prevent 180s
         heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
@@ -175,7 +176,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     viewer: ViewerCfg = ViewerCfg(eye=(-15.0, 6.875, 1.25), lookat=(-16.25, 5.56, 0.0))
     
     enable_cameras: bool = True
-    scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=32, env_spacing=50.0)
+    scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=8, env_spacing=50.0)
     observations: ObservationCfg = ObservationCfg()
     actions: ActionCfg = ActionCfg()
     rewards: RewardCfg = RewardCfg()
@@ -183,7 +184,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     events: EventCfg = EventCfg()
     sim: SimulationCfg = SimulationCfg(
         dt=0.002, # 500Hz for high-fidelity small scale physics
-        render_interval=25, # Maintain 20Hz visual (500 / 25)
+        render_interval=10, # Maintain visual sync with decimation (500 / 10 = 50Hz)
         device="cuda:0",
         gravity=(0.0, 0.0, -9.81), # Explicit Earth Gravity
         physx=sim_utils.PhysxCfg(
@@ -201,7 +202,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     )
 
     def __post_init__(self):
-        self.decimation = 25 # Sync with render_interval (500Hz / 25 = 20Hz control)
+        self.decimation = 10 # 500Hz / 10 = 50Hz control (Nyquist stability for 6cm clearance)
         self.episode_length_s = 120.0 
         self.viewer.camera_follow_prim_path = None
         

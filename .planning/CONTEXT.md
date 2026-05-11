@@ -16,7 +16,7 @@
 ## Policy Configuration
 - **Vision-only**: `lat_err` and `head_err` are **masked (0.0)** in the policy observation vector to force reliance on the RGB camera.
 - **Rewards**: Logic uses unmasked `env.extras["lat_err"]` for ground-truth feedback.
-- **Camera**: Mimics **Intel RealSense D435i** (69° FOV), tilted 15° down.
+- **Camera**: Mimics **Intel RealSense D435i Wide** (90° HFOV), tilted 10° down.
 
 ## Next Step
 - **Retrain Phase 11**: Launch 32-env production run (`bash train.sh --num_envs 32 --headless`).

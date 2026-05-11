@@ -20,24 +20,24 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 ## Milestone 2: Autonomous Urban Navigation (v2.0) - ACTIVE
 *Focus: Graph-based routing, intersection logic, and multi-agent coordination.*
 
-- [x] **Phase 11: intersection-navigation** - Retrained policy at 1x and implemented alignment-aware intersection gate permeability.
-- [ ] **Phase 12: autonomous-navigation** - Implement turning missions and proximity-based RoadGraph triggers for intersection decision-making.
-- [ ] **Phase 13: live-policy-gui** - Develop a standalone dashboard to stream telemetry, vision debugging, and policy transparency.
-- [x] **Phase 14: multi-agent-refactor** - Physically scaled USD geometry to 1x and refreshed boundary cache.
+- [x] **Phase 11: 11-intersection-navigation** - Retrained policy at 1x and implemented alignment-aware intersection gate permeability.
+- [ ] **Phase 12: 12-autonomous-navigation** - Implement turning missions and proximity-based RoadGraph triggers for intersection decision-making.
+- [ ] **Phase 13: 13-live-policy-gui** - Develop a standalone dashboard to stream telemetry, vision debugging, and policy transparency.
+- [x] **Phase 14: 14-01-procedural-multi-agent-scaffolding** - Physically scaled USD geometry to 1x and established production training baseline for multi-agent support.
 
 ## Milestone 4: Multi-Agent Urban Coordination (v3.0) - PLANNED
 *Focus: Smart intersections, multi-car coordination, and multi-agent RL (MARL).*
 
-- [ ] **Phase 14-02: Multi-Agent Environment Refactor** - Adapt `ManagerBasedRLEnv` to handle multiple robot instances with independent observation/action streams.
-- [ ] **Phase 15: Smart Intersection Infrastructure** - Implement intersection controllers (V2I/V2V) and dynamic traffic signaling in the USD.
-- [ ] **Phase 16: Coordination & Yielding Logic** - Develop social-norm based navigation (e.g., yielding at stop signs, 4-way stop logic) between Two Cars.
-- [ ] **Phase 17: MARL Training & Evaluation** - Train collaborative policies (MAPPO/IPPO) for high-density intersection throughput.
+- [ ] **Phase 15: HD Vision & Adaptive CNN** - ACTIVE - Transition to 640x360 resolution with an Adaptive CNN vision backbone and Vision-Dominant Fusion for high-speed robust navigation.
+- [ ] **Phase 16: Smart Intersection Infrastructure** - Implement intersection controllers (V2I/V2V) and dynamic traffic signaling in the USD.
+- [ ] **Phase 17: Coordination & Yielding Logic** - Develop social-norm based navigation (e.g., yielding at stop signs, 4-way stop logic) between Two Cars.
+- [ ] **Phase 18: MARL Training & Evaluation** - Train collaborative policies (MAPPO/IPPO) for high-density intersection throughput.
 
 ## Milestone 5: Custom Hardware & Sim2Real (v4.0) - PLANNED
 *Focus: Transitioning from generic F1Tenth platforms to custom ARCPro hardware and real-world deployment.*
 
-- [ ] **Phase 18: Custom ARCPro Robot Remodel** - Replace F1Tenth assets with a full-fidelity custom ARCPro robot model. Calibrate true-to-life physics (Torque, Mass, Friction).
-- [ ] **Phase 19: Sim2Real Deployment** - Implement the self-driving policy on physical hardware with real-world perception bridges.
+- [ ] **Phase 19: Custom ARCPro Robot Remodel** - Replace F1Tenth assets with a full-fidelity custom ARCPro robot model. Calibrate true-to-life physics (Torque, Mass, Friction).
+- [ ] **Phase 20: Sim2Real Deployment** - Implement the self-driving policy on physical hardware with real-world perception bridges.
 
 ---
 *Roadmap updated: 2026-04-20*
