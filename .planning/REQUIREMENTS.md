@@ -25,6 +25,13 @@
 - [x] **REQ-BACKBONE-ADAPTIVE**: VRAM-efficient CNN backbone utilizing early pooling.
 - [ ] **REQ-PROD-HARDENING**: Successful 5M step training run with zero target offset.
 
+## v2.6 Mastery & Curriculum (Planned)
+
+- [ ] **REQ-MASTERY-LAP**: Achieve 6000+ steps per episode (full lap) with zero boundary resets.
+- [ ] **REQ-MASTERY-BOUND**: Dynamic boundary margin reduction (0.25m to 0.13m) based on training steps.
+- [ ] **REQ-MASTERY-RAM**: Stable 12-env training on 32GB RAM via uint8 image buffer optimization.
+- [ ] **REQ-MASTERY-MONITOR**: Custom callback for logging Max Episode Length and Curriculum Progress.
+
 ## v1.2 Simulation Fidelity (Completed)
 
 - [x] **REQ-SIM-METRIC**: Simulation uses 1.0x metric scale for both robot and track.
@@ -51,6 +58,10 @@
 | REQ-VIS-HD | Phase 15 | COMPLETE |
 | REQ-BACKBONE-ADAPTIVE| Phase 15 | COMPLETE |
 | REQ-PROD-HARDENING | Phase 15 | ACTIVE |
+| REQ-MASTERY-LAP | Phase 15 | PLANNED |
+| REQ-MASTERY-BOUND | Phase 15 | PLANNED |
+| REQ-MASTERY-RAM | Phase 15 | PLANNED |
+| REQ-MASTERY-MONITOR | Phase 15 | PLANNED |
 
 ---
 *Requirements updated: 2026-05-11*

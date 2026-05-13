@@ -28,20 +28,24 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 *Focus: High-resolution vision, VRAM-optimized backbones, and production-scale training.*
 
 - [x] **Phase 14:** 14-01-procedural-multi-agent-scaffolding - Physically scaled USD geometry to 1x and established production training baseline for multi-agent support.
-- [ ] **Phase 15:** 15-hd-vision-resnet - **ACTIVE** - Transition to 640x360 resolution with an Adaptive CNN vision backbone and Vision-Dominant Fusion for high-speed robust navigation.
+- [ ] **Phase 15:** 15-mastery-curriculum - **ACTIVE** - Single-Agent Lane-Following Mastery. Achieve full-lap capability (6000+ steps) using a dynamic boundary curriculum and memory-optimized HD vision.
+    **Plans:** 2 plans
+    - [ ] 15-01-PLAN.md — Dynamic Boundary Infrastructure & Precision Reward Tuning.
+    - [ ] 15-02-PLAN.md — uint8 Memory Optimization & Curriculum Monitoring.
 
 ## Milestone 4: Multi-Agent Urban Coordination (v3.0) - PLANNED
 *Focus: Smart intersections, multi-car coordination, and multi-agent RL (MARL).*
 
-- [ ] **Phase 16: Smart Intersection Infrastructure** - Implement intersection controllers (V2I/V2V) and dynamic traffic signaling in the USD.
-- [ ] **Phase 17: Coordination & Yielding Logic** - Develop social-norm based navigation (e.g., yielding at stop signs, 4-way stop logic) between Two Cars.
-- [ ] **Phase 18: MARL Training & Evaluation** - Train collaborative policies (MAPPO/IPPO) for high-density intersection throughput.
+- [ ] **Phase 16: Multi-Agent Urban Coordination (MARL transition)** - **PLANNED** - Refactor singletons to vectorized managers and establish multi-agent scene config.
+- [ ] **Phase 17: Smart Intersection Infrastructure** - Implement intersection controllers (V2I/V2V) and dynamic traffic signaling in the USD.
+- [ ] **Phase 18: Coordination & Yielding Logic** - Develop social-norm based navigation (e.g., yielding at stop signs, 4-way stop logic) between Two Cars.
+- [ ] **Phase 19: MARL Training & Evaluation** - Train collaborative policies (MAPPO/IPPO) for high-density intersection throughput.
 
 ## Milestone 5: Custom Hardware & Sim2Real (v4.0) - PLANNED
 *Focus: Transitioning from generic F1Tenth platforms to custom ARCPro hardware and real-world deployment.*
 
-- [ ] **Phase 19: Custom ARCPro Robot Remodel** - Replace F1Tenth assets with a full-fidelity custom ARCPro robot model. Calibrate true-to-life physics (Torque, Mass, Friction).
-- [ ] **Phase 20: Sim2Real Deployment** - Implement the self-driving policy on physical hardware with real-world perception bridges.
+- [ ] **Phase 20: Custom ARCPro Robot Remodel** - Replace F1Tenth assets with a full-fidelity custom ARCPro robot model. Calibrate true-to-life physics (Torque, Mass, Friction).
+- [ ] **Phase 21: Sim2Real Deployment** - Implement the self-driving policy on physical hardware with real-world perception bridges.
 
 ---
 *Roadmap updated: 2026-05-11*
