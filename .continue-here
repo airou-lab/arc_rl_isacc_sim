@@ -2,17 +2,17 @@
 
 ## Project Context
 - **Milestone:** Milestone 3: Real-Time Visualization & Diagnostics (v2.5)
-- **Phase:** Phase 14-01: Procedural Multi-Agent Scaffolding (Production Training)
-- **Discovery:** Verified lane width is **0.407m**. Old models were "lunging" for a target at -0.238m (offset) which was **3cm inside the right boundary wall**.
-- **Stabilization:** Standardized to **Positive-Left** coordinate frame for both Steering and Lateral Error.
+- **Phase:** Phase 15: HD Vision & ResNet Hardening
+- **Discovery:** Verified that 30 environments with HD Vision (640x360) were too heavy for the RTX 3060, causing silent process termination after the first optimization update.
+- **Stabilization:** Reduced environment count to **16**. Current VRAM usage is stable at **~6.2GB / 12GB**.
 
 ## Immediate Next Steps
-- [ACTIVE] **Monitor `logs/production_training_32_neutral_v1.log`**.
+- [ACTIVE] **Monitor `logs/production_training_16.log`**.
 - [GOAL] Achieve **5M steps** with zero target offset.
 - [NEXT] Once training hits ~1M steps, run a GUI verification to confirm the "Centerline Mastery" behavior.
 
 ## Active Command
 ```bash
-# Training is running in the background (PID: 3678723)
-tail -f logs/production_training_32_neutral_v1.log
+# Training is running in the background (PID: 132842)
+tail -f logs/production_training_16.log
 ```

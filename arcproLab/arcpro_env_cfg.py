@@ -153,7 +153,7 @@ class RewardCfg:
         # Prevent 180s
         heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
         # Smoothness Calibration: Heavier penalty to stop the jitter
-        smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=10.0)
+        smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=30.0)
 
 @configclass
 class TerminationCfg:

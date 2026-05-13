@@ -22,8 +22,9 @@ def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     """Reward based on lateral offset from track centerline."""
     lat_err = env.extras.get("lat_err", torch.zeros(env.num_envs, device=env.device))
     abs_lat = torch.abs(lat_err)
-    threshold = 0.1
-    reward = torch.where(abs_lat < threshold, torch.ones_like(lat_err), -abs_lat * 5.0)
+    # Continuous gradient: 1.0 at center, decreasing linearly as it drifts.
+    # This provides a clear signal for the HD vision to maintain centerline mastery.
+    reward = 1.0 - (abs_lat * 10.0)
     return reward
 
 def line_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
