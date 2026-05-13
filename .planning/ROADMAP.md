@@ -17,18 +17,22 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 - [x] **Phase 9: Training Loop Stabilization** - Stabilized 8x physics, implemented 2D action space, and confirmed PPO convergence.
 - [x] **Phase 10: Asset Downscaling** - Reverted to 1.0x metric scale, isolated roads, and removed terrain clutter.
 
-## Milestone 2: Autonomous Urban Navigation (v2.0) - ACTIVE
+## Milestone 2: Autonomous Urban Navigation (v2.0) - COMPLETE
 *Focus: Graph-based routing, intersection logic, and multi-agent coordination.*
 
-- [x] **Phase 11: 11-intersection-navigation** - Retrained policy at 1x and implemented alignment-aware intersection gate permeability.
-- [ ] **Phase 12: 12-autonomous-navigation** - Implement turning missions and proximity-based RoadGraph triggers for intersection decision-making.
-- [ ] **Phase 13: 13-live-policy-gui** - Develop a standalone dashboard to stream telemetry, vision debugging, and policy transparency.
-- [x] **Phase 14: 14-01-procedural-multi-agent-scaffolding** - Physically scaled USD geometry to 1x and established production training baseline for multi-agent support.
+- [x] **Phase 11:** 11-intersection-navigation - Retrained policy at 1x and implemented alignment-aware intersection gate permeability.
+- [x] **Phase 12:** 12-autonomous-navigation - Implement turning missions and proximity-based RoadGraph triggers for intersection decision-making.
+- [x] **Phase 13:** 13-live-policy-gui - Develop a standalone dashboard to stream telemetry, vision debugging, and policy transparency.
+
+## Milestone 3: HD Perception & Production Hardening (v2.5) - ACTIVE
+*Focus: High-resolution vision, VRAM-optimized backbones, and production-scale training.*
+
+- [x] **Phase 14:** 14-01-procedural-multi-agent-scaffolding - Physically scaled USD geometry to 1x and established production training baseline for multi-agent support.
+- [ ] **Phase 15:** 15-hd-vision-resnet - **ACTIVE** - Transition to 640x360 resolution with an Adaptive CNN vision backbone and Vision-Dominant Fusion for high-speed robust navigation.
 
 ## Milestone 4: Multi-Agent Urban Coordination (v3.0) - PLANNED
 *Focus: Smart intersections, multi-car coordination, and multi-agent RL (MARL).*
 
-- [ ] **Phase 15: HD Vision & Adaptive CNN** - ACTIVE - Transition to 640x360 resolution with an Adaptive CNN vision backbone and Vision-Dominant Fusion for high-speed robust navigation.
 - [ ] **Phase 16: Smart Intersection Infrastructure** - Implement intersection controllers (V2I/V2V) and dynamic traffic signaling in the USD.
 - [ ] **Phase 17: Coordination & Yielding Logic** - Develop social-norm based navigation (e.g., yielding at stop signs, 4-way stop logic) between Two Cars.
 - [ ] **Phase 18: MARL Training & Evaluation** - Train collaborative policies (MAPPO/IPPO) for high-density intersection throughput.
@@ -40,4 +44,4 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 - [ ] **Phase 20: Sim2Real Deployment** - Implement the self-driving policy on physical hardware with real-world perception bridges.
 
 ---
-*Roadmap updated: 2026-04-20*
+*Roadmap updated: 2026-05-11*

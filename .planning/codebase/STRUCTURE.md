@@ -20,6 +20,9 @@ arc_rl_isacc_sim/
 ├── trash/                  # Deprecated or backup files (Untracked)
 └── .planning/              # Project planning and phase documentation
     └── phases/
+        ├── 11-intersection-navigation/
+        ├── 12-autonomous-navigation/
+        ├── 13-live-policy-gui/
         ├── 14-01-procedural-multi-agent-scaffolding/
         └── 15-hd-vision-resnet/ # Current active phase
 ```
@@ -28,7 +31,7 @@ arc_rl_isacc_sim/
 
 **arcproLab/mdp/:**
 - Purpose: Defines the MDP interface and simulation logic.
-- Key files: `track_manager.py`, `road_graph.py`, `events.py`, `terminations.py`, `track_boundaries_1x.npz`.
+- Key files: `track_manager.py`, `road_graph.py`, `events.py`, `terminations.py`, `track_boundaries_1x.npz`, `spawner.py`, `debug_terminations.py`.
 
 **arcproLab/policy_stack/:**
 - Purpose: RL framework and Isaac Lab environment wrappers (Submodule).
@@ -43,7 +46,7 @@ arc_rl_isacc_sim/
 
 **logs/:**
 - Purpose: Stores training progress and telemetry.
-- Key files: `production_hd_resnet_v7.log`.
+- Key files: `production_hd_resnet_v14.log` (Simulated reference for v14 hardening).
 
 ---
 

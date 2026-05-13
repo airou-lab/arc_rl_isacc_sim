@@ -9,7 +9,7 @@ To provide a physically accurate, high-performance simulation bridge that minimi
 ## Goals
 - **v1.2 (Foundation):** Stabilized 1.0x metric scaling and hierarchical policy stack.
 - **v2.0 (Navigation):** Graph-based intersection crossing and random mission generation.
-- **v2.5 (Visibility):** Real-time telemetry visualization and policy diagnostics.
+- **v2.5 (Perception):** HD Vision integration, VRAM optimization, and production hardening.
 - **v3.0 (Multi-Agent):** Collaborative multi-robot coordination and smart infrastructure.
 
 ## Context
