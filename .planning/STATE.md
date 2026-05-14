@@ -4,27 +4,30 @@
 **Milestone 3: HD Perception & Production Hardening** (ACTIVE)
 
 ## Current Phase
-**Phase 15: Mastery Curriculum** (ACTIVE)
+**Phase 16: MARL Transition** (ACTIVE)
 
 ## Summary
-The project has successfully transitioned to **HD Vision (640x360)** using an **Adaptive CNN backbone**. We are now focusing on **Mastery Curriculum** to achieve full-lap capability (6000+ steps) with zero boundary resets. This involves dynamic boundary scheduling, precision reward tuning, and RAM optimization (uint8) to support production-scale training.
+The project has successfully verified the **Mastery Curriculum** with 32 environments achieving 162 FPS. Headless segfaults were resolved via driver rollback. We have now refactored the navigation infrastructure from a singleton `RoadGraph` to a vectorized `RoadManager` to support Phase 16 Multi-Agent RL (MARL) transitions.
 
 ## Recent Activity
-- **HD Baseline Stabilized**: Achieved convergence on 640x360 resolution with 8 parallel envs.
-- **Mastery Planning**: Defined Plan 15-01 (Boundary & Rewards) and Plan 15-02 (Memory & Monitoring) to achieve full-lap autonomy.
-- **VRAM/RAM Strategy**: Transitioning to uint8 image storage in SB3 RolloutBuffer to increase environment count from 8 to 12+ on 32GB RAM.
+- **Phase 15 Mastery Verified**: Achieved stable training with 32 envs, 5cm boundary margins, and 10cm reward plateaus.
+- **Infrastructure Refactor**: Vectorized `RoadManager` implemented and integrated into the telemetry observation stream.
+- **Legacy Cleanup**: Removed `road_graph.py` and archived to `trash/`.
+- **System Stability**: Headless mode verified stable after driver rollback.
 
-## Reference State (v15)
-- **Resolution**: 640x360 (HD)
-- **Environments**: 8 (Targeting 12)
-- **Reward Ratio**: Precision-first (LatErr: 20, Speed: 15)
-- **Boundary Margin**: 0.25m (Start) -> 0.13m (Target)
+## Reference State (v16)
+- **Resolution**: 640x360 (HD Adaptive CNN)
+- **Environments**: 32 (Verified)
+- **Reward Ratio**: Precision-first (LatErr: 10, Speed: 25, Smoothness: 30)
+- **Boundary Margin**: 0.05m (Mastery)
+- **Infrastructure**: Vectorized RoadManager (B, N) support.
 
 ## Active Todos (Queue)
-1. [ ] **15-01-PLAN**: Implement parameterized boundary termination and mastery reward weights. (NEXT)
-3. [ ] **16-marl-transition**: Refactor singletons and establish multi-agent infrastructure. (DEFERRED to Milestone 4)
+1. [x] **15-01-PLAN**: Implement parameterized boundary termination and mastery reward weights.
+2. [x] **16-marl-transition**: Refactor singletons and establish multi-agent infrastructure.
+3. [ ] **16-02-SKRL**: Integrate SKRL backend for multi-agent policy training. (NEXT)
 
 **RESUME HERE**
 - Milestone: Milestone 3
-- Phase: Phase 15 (Mastery Curriculum)
-- Next Todo: Execute `15-01-PLAN.md` to refactor terminations and tune rewards.
+- Phase: Phase 16 (MARL Transition)
+- Next Todo: Integrate SKRL backend and verify multi-agent environment configuration.

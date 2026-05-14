@@ -1,178 +1,131 @@
-# Phase 15: HD ResNet-18 Integration - Research
+# Phase 15: HD Vision ResNet-18 Optimization - Research
 
-**Researched:** 2024-05-18
-**Domain:** Vision-based Reinforcement Learning (RL) / Isaac Sim
+**Researched:** 2026-05-15
+**Domain:** Deep Reinforcement Learning / Vision Backbones / VRAM Optimization
 **Confidence:** HIGH
 
 ## Summary
 
-Implementing a 960x600 vision-based RL policy on an RTX 3060 (12GB) requires a balance between rendering overhead and the training memory budget. Isaac Sim consumes ~4.5GB VRAM at idle, and a training batch of 512 HD images (float32) consumes ~3.5GB. This leaves ~3GB for environment viewports and model activations.
+This research evaluates the transition from a custom strided CNN to a standard ResNet-18 backbone at 224x224 resolution. At this resolution, lane line visibility (4cm) is maintained at ~1.12 px/cm at a 1m lookahead, providing sufficient signal for precision steering. VRAM costs are manageable (~456MB for 16 environments during rollout), and ImageNet pre-training is recommended to accelerate feature discovery for road markings.
 
-**Primary recommendation:** Use **4 parallel environments** with a **Deep Stem ResNet-18** (replacing the 7x7 conv with three 3x3 convs) and **Gated Fusion** for telemetry integration.
+**Primary recommendation:** Use `torchvision.models.resnet18` with pre-trained weights, replacing the `self.cnn` block in `FusionFeaturesExtractor`. Keep the backbone unfrozen (trainable) to allow the model to specialize in road-surface textures and lane-line contrast.
 
+<user_constraints>
 ## User Constraints (from CONTEXT.md)
 
-*Note: No CONTEXT.md was found for this phase. Research follows the technical requirements provided in the goal.*
+### Locked Decisions
+- **Scale**: 1.0x Metric (True Physics).
+- **Target**: Right Lane Center.
+- **Resolution**: 640x360 (Source), 224x224 (ResNet Input).
+- **Backbone**: ResNet-18 (Standard).
+
+### the agent's Discretion
+- **Pre-training**: Choice of weights (ImageNet vs Scratch).
+- **Freezing**: Whether to freeze early layers.
+</user_constraints>
+
+<phase_requirements>
+## Phase Requirements
+
+| ID | Description | Research Support |
+|----|-------------|------------------|
+| REQ-RESNET-18 | Implement standard ResNet-18 in policy. | Integration path via `torchvision.models` identified. |
+| REQ-VRAM-AUDIT | VRAM check for 12/16 envs. | Audit shows 342MB/456MB activation cost. |
+| REQ-HD-VISIBILITY | Verify 4cm line visibility @ 224px. | Calculation confirms 4.48px width @ 1m lookahead. |
+</phase_requirements>
 
 ## Standard Stack
 
 ### Core
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| PyTorch | 2.2+ | Deep Learning | Industry standard, primary backend for SB3. |
-| Stable-Baselines3 | 2.3+ | RL Framework | Robust PPO implementation with custom policy support. |
-| Isaac Sim | 4.0+ | Simulation | High-fidelity physics and rendering. |
-| torchvision | 0.17+ | Vision Models | Provides pre-trained ResNet-18 and building blocks. |
-
-### Supporting
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|--------------|
-| GroupNorm | N/A | Normalization | Use instead of BatchNorm for RL stability. |
-| GMU | Custom | Gated Fusion | To combine vision and telemetry features adaptively. |
+| Library | Library ID | Version | Purpose |
+|---------|------------|---------|---------|
+| torchvision | torchvision | 0.19.1 | Pre-trained ResNet-18 models. |
+| torch | torch | 2.4.1 | Neural network backend. |
 
 **Installation:**
 ```bash
-pip install stable-baselines3 shimmy[gymanywhere] torchvision
+pip install torchvision>=0.19.0 torch>=2.4.0
 ```
 
 ## Architecture Patterns
 
-### Recommended Project Structure
-```
-arcproLab/
-├── mdp/
-│   ├── vision_policy.py    # Custom SB3 Features Extractor
-│   ├── fusion_layers.py    # Gated Multimodal Unit implementation
-│   └── resnet_stem.py      # Modified ResNet-18 architecture
-```
+### ResNet-18 Integration in FusionFeaturesExtractor
+The `FusionFeaturesExtractor` should be modified to swap the custom `self.cnn` with a truncated ResNet-18.
 
-### Pattern 1: Deep Stem for HD Images
-**What:** Replace the standard 7x7 stride-2 convolution and 3x3 maxpool with three 3x3 convolutions.
-**When to use:** High-resolution inputs where fine-grained spatial detail preservation is critical.
-**Example:**
 ```python
-# Modified Stem for 960x600 -> 240x150
-stem = nn.Sequential(
-    nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1, bias=False), # 480x300
-    nn.GroupNorm(8, 32),
-    nn.ReLU(inplace=True),
-    nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, bias=False), # 480x300
-    nn.GroupNorm(8, 32),
-    nn.ReLU(inplace=True),
-    nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1, bias=False), # 240x150
-    nn.GroupNorm(8, 64),
-    nn.ReLU(inplace=True)
-)
-```
+# Implementation pattern
+from torchvision import models
 
-### Anti-Patterns to Avoid
-- **BatchNorm in RL:** BatchNorm depends on batch statistics which are non-stationary in RL. Use **GroupNorm** or **LayerNorm**.
-- **Flattening HD Feature Maps:** A 960x600 image reduced to 1/32 scale still has 30x19 spatial dimensions. Flattening 512 channels results in ~290k features, leading to massive policy heads and overfitting. Use **Global Average Pooling (GAP)**.
+class FusionFeaturesExtractor(BaseFeaturesExtractor):
+    def __init__(self, observation_space, features_dim=256):
+        # ...
+        backbone = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+        # Truncate at avgpool to get a 512-dim vector
+        self.cnn = nn.Sequential(
+            nn.AdaptiveAvgPool2d((224, 224)), # Input adapter
+            *list(backbone.children())[:-1],
+            nn.Flatten()
+        )
+        # ...
+```
 
 ## Don't Hand-Roll
 
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
-| ResNet backbone | Custom CNN | `torchvision.models.resnet18` | Pre-verified architecture and weight loading. |
-| Image Preprocessing | Manual Scaling | `torchvision.transforms` | Highly optimized on GPU/CPU. |
-| PPO | Custom PPO | `stable_baselines3.PPO` | Handles complex edge cases (GAE, clipping, entropy) reliably. |
+| ResNet Architecture | Custom skip-connections | `torchvision.models.resnet18` | Standardized, pre-optimized, and supports pre-trained weights. |
+| Image Normalization | Manual Mean/Std calculation | `transforms.Normalize` | Standard ImageNet constants are calibrated for these weights. |
+
+## Feature Preservation Audit
+
+**Scenario:** 4cm Lane Lines at 1m Lookahead.
+- **Camera HFOV:** 90° (Intel RealSense D435i spec).
+- **Resolution:** 224x224 (ResNet input).
+- **Calculation:**
+  - FOV Width @ 1m: $W_{FOV} = 2 \times 1.0 \times \tan(45^\circ) = 2.0$ meters.
+  - Pixels-per-cm: $224 \text{ px} / 200 \text{ cm} = 1.12$ px/cm.
+  - Line Width in Pixels: $4 \text{ cm} \times 1.12 \text{ px/cm} = 4.48$ pixels.
+- **Conclusion:** **CLEARLY VISIBLE.** 4.5 pixels is well above the Nyquist sampling limit for a CNN to detect a high-contrast edge.
+
+## VRAM Audit (ResNet-18 @ 224x224)
+
+| Metric | Per Environment | 12 Envs | 16 Envs |
+|--------|-----------------|---------|---------|
+| Activations (Inference) | 28.5 MB | 342.3 MB | 456.4 MB |
+| Parameters (Weights) | 46.8 MB | 46.8 MB | 46.8 MB |
+| **Total (Rollout)** | **75.3 MB** | **389.1 MB** | **503.2 MB** |
+
+*Note: Training VRAM (PPO) with a minibatch of 64 will require approximately 1.8 GB for activations + 200 MB for gradients/optimizer, totaling ~2 GB. This fits comfortably within the 12GB budget.*
+
+## ImageNet Pre-training Assessment
+
+| Aspect | Pre-trained (Unfrozen) | Training from Scratch |
+|--------|------------------------|-----------------------|
+| **Feature Quality** | **HIGH.** Filters for edges/shapes already exist. | **LOW.** Must learn basic vision from sparse RL rewards. |
+| **Convergence** | **FAST.** Focuses on task-logic immediately. | **SLOW.** 1M+ steps spent on "learning to see". |
+| **Domain Fit** | Good, adaptable to track texture. | Perfect, but takes significantly longer to train. |
+| **Recommendation** | **PRIMARY.** Start with ImageNet weights. | Only if pre-trained fails to generalize. |
 
 ## Common Pitfalls
 
-### Pitfall 1: VRAM Exhaustion during Update
-**What goes wrong:** The training script crashes with CUDA OOM when transitioning from Rollout to Train phase.
-**Why it happens:** Rollout data is stored as uint8 on CPU, but SB3 converts the entire mini-batch to float32 on GPU for the update. 1024 HD images = ~6.8GB VRAM.
-**How to avoid:** Keep `batch_size` at 512 and use `n_envs <= 4`. Monitor VRAM during the first training update.
+### Pitfall 1: Input Mismatch
+**What goes wrong:** The model fails to learn anything despite pre-training.
+**Why it happens:** ResNet-18 expects input normalized with ImageNet mean/std (Mean: [0.485, 0.456, 0.406], Std: [0.229, 0.224, 0.225]). If the simulator output is [0, 1] or [0, 255], the features will be "out of distribution".
+**How to avoid:** Add a `Normalize` step in the `forward` pass or as a wrapper.
 
-### Pitfall 2: Vanishing Detail in Stem
-**What goes wrong:** Agent fails to see thin lane lines or distant obstacles.
-**Why it happens:** Standard MaxPool stride-2 is a "hard" downsampling that can discard high-frequency features.
-**How to avoid:** Use strided convolutions (learnable downsampling) in the Deep Stem.
-
-## Code Examples
-
-### Gated Fusion (GMU) Implementation
-```python
-class GatedMultimodalUnit(nn.Module):
-    def __init__(self, vision_dim, telemetry_dim, output_dim):
-        super().__init__()
-        self.vision_proj = nn.Linear(vision_dim, output_dim)
-        self.telemetry_proj = nn.Linear(telemetry_dim, output_dim)
-        self.gate = nn.Linear(vision_dim + telemetry_dim, output_dim)
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, vision_feat, telemetry_feat):
-        h_v = torch.tanh(self.vision_proj(vision_feat))
-        h_t = torch.tanh(self.telemetry_proj(telemetry_feat))
-        # Compute gate based on concatenated raw features
-        z = self.sigmoid(self.gate(torch.cat([vision_feat, telemetry_feat], dim=-1)))
-        return z * h_v + (1 - z) * h_t
-```
-
-## Questions & Answers
-
-### 1. Optimal Number of Environments
-**Recommendation:** **4 environments**.
-- **Isaac Sim Base:** ~4.5 GB
-- **Rendering Overhead (4 x 0.7 GB):** ~2.8 GB
-- **Training Batch (512 images, float32):** ~3.4 GB
-- **Total Estimated:** **10.7 GB** (under the 11 GB budget).
-
-### 2. Stem Modification
-**Recommendation:** **Strided Convolutions (Deep Stem)**.
-- Replace the 7x7 conv and 3x3 MaxPool with three 3x3 convs.
-- Use **Stride-2** in the 1st and 3rd layers to reach 240x150 resolution gracefully.
-- Strided convs are faster due to kernel fusion and preserve more learnable spatial information than MaxPool.
-
-### 3. GAP vs. Flattening
-**Recommendation:** **Global Average Pooling (GAP) is superior**.
-- Reduces feature maps to a fixed 512-dim vector regardless of input resolution.
-- Prevents the "parameter explosion" in the MLP head (~290k for Flatten vs 512 for GAP).
-- Provides robustness to small spatial shifts.
-
-### 4. Late Fusion Architecture
-**Recommendation:** **Gated Fusion (GMU)**.
-- Superior to Concatenation as it allows the model to dynamically prioritize modalities (e.g., ignoring noisy vision in favor of telemetry).
-- Enhances robustness to sensor failures or environmental noise.
-
-### 5. PPO Hyperparameters
-| Parameter | Value | Reason |
-|-----------|-------|--------|
-| `learning_rate` | $2 \times 10^{-4}$ | Balance stability and speed. |
-| `n_steps` | 2048 | Standard for high-dim visual RL. |
-| `batch_size` | 512 | Fits in VRAM with 960x600 images. |
-| `n_epochs` | 10 | Maximize data utility per rollout. |
-| `ent_coef` | 0.01 | Maintain exploration in high-res space. |
-
-## Environment Availability
-
-| Dependency | Required By | Available | Version | Fallback |
-|------------|------------|-----------|---------|----------|
-| Python | Runtime | ✓ | 3.12.3 | — |
-| NVIDIA GPU | Rendering/Training | ✓ | RTX 3060 (12GB) | — |
-| PyTorch | Model Backend | ✓ | 2.10.0 | — |
-| torchvision | Feature Extractor | ✓ | 0.25.0 | — |
-| stable-baselines3 | RL Algorithm | ✗ | — | Install in Wave 0 |
-
-**Missing dependencies with no fallback:**
-- **stable-baselines3**: Must be installed before phase execution.
+### Pitfall 2: Learning Rate Saturation
+**What goes wrong:** Pre-trained weights are destroyed by high RL learning rates.
+**Why it happens:** The PPO optimizer uses a high LR (e.g. 3e-4) which might be too aggressive for a pre-trained backbone.
+**How to avoid:** Use a differential learning rate or a smaller global LR (1e-4) when using pre-trained weights.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- **NVIDIA Isaac Sim Docs** - VRAM usage and Tiled Rendering specs.
-- **Stable-Baselines3 Docs** - Custom policy and buffer implementation.
-- **"ResNet-D" / Bag of Tricks** - Deep Stem and strided conv research.
-
-### Secondary (MEDIUM confidence)
-- **Gated Multimodal Units for Information Fusion** (Luvizon et al.) - GMU architecture.
+- `torchvision` Documentation: ResNet implementation details.
+- `vram_audit.py`: Empirical measurement of ResNet-18 activations.
+- Isaac Lab `ARCProEnvCfg`: Camera and resolution parameters.
 
 ## Metadata
-
-**Confidence breakdown:**
-- Standard stack: HIGH - SB3/ResNet are mature.
-- Architecture: HIGH - Gated fusion and Deep Stem are well-documented.
-- VRAM Estimates: MEDIUM - Actual usage depends on scene complexity (USD textures).
-
-**Research date:** 2024-05-18
-**Valid until:** 2024-06-18
+**Confidence:** HIGH
+**Research date:** 2026-05-15
+**Valid until:** 2026-06-15

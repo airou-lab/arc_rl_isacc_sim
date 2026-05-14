@@ -15,6 +15,7 @@ class TrackManager:
     def __init__(self, device: str = "cuda:0"):
         self.device = device
         self.waypoints = None
+        self.last_indices = None # Tensor (num_envs,) to track closest waypoints
         
         # Performance: Only enable visuals if explicitly requested via --debug flag
         import sys
@@ -320,26 +321,55 @@ class TrackManager:
                 self.visualizer_target.visualize(to_w(target_viz, z_off=0.18))
         except: pass
 
-    def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor, target_lane_offset: float = 0.0):
+    def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor, target_lane_offset: torch.Tensor | float = 0.0):
+        """
+        Calculates lateral and heading error relative to the track centerline.
+        Uses Windowed Search for O(WindowSize) performance.
+        
+        target_lane_offset: Tensor (B,) or float. Allows independent targets per agent.
+        """
         self.ensure_synced()
-        dists = torch.cdist(pos[:, :2], self.waypoints[:, :2])
-        closest_idx = torch.argmin(dists, dim=1)
+        num_envs_agents = pos.shape[0] # Total agents across all envs
+        num_wps = self.waypoints.shape[0]
+
+        # Ensure target_lane_offset is a tensor for vectorized math
+        if not isinstance(target_lane_offset, torch.Tensor):
+            target_lane_offset = torch.full((num_envs_agents,), target_lane_offset, device=self.device)
+
+        # 1. Initialize or Re-sync last_indices if batch size changed
+        if self.last_indices is None or self.last_indices.shape[0] != num_envs_agents:
+            dists = torch.cdist(pos[:, :2], self.waypoints[:, :2])
+            self.last_indices = torch.argmin(dists, dim=1)
+        
+        # 2. Windowed Search: Look +/- 50 waypoints around last known index
+        window_size = 50
+        offsets = torch.arange(-window_size, window_size + 1, device=self.device)
+        search_indices = (self.last_indices.view(-1, 1) + offsets) % num_wps
+        
+        candidate_wps = self.waypoints[search_indices][:, :, :2]
+        candidate_dists = torch.norm(pos[:, None, :2] - candidate_wps, dim=2)
+        best_in_window_idx = torch.argmin(candidate_dists, dim=1)
+        closest_idx = torch.gather(search_indices, 1, best_in_window_idx.view(-1, 1)).squeeze()
+        self.last_indices = closest_idx
+
+        # 3. Calculate Errors
         closest_wp = self.waypoints[closest_idx]
         wp_to_robot = pos[:, :2] - closest_wp[:, :2]
         wp_yaw = closest_wp[:, 2]
         
-        # Curvature at closest waypoint
         kappa = self.curvature_tensor[closest_idx]
-        
-        # Standard Right-Handed Lateral Error (Positive = LEFT of path)
-        # For South (yaw=-pi/2): sin(-pi/2)=-1, cos(-pi/2)=0 -> normal=(sin, -cos) = (-1, 0) = East/Left
         normal_x, normal_y = torch.sin(wp_yaw), -torch.cos(wp_yaw)
         raw_lat_err = wp_to_robot[:, 0] * normal_x + wp_to_robot[:, 1] * normal_y
-        lat_err, head_err = raw_lat_err - target_lane_offset, yaw - wp_yaw
+        
+        # Vectorized offset application
+        lat_err = raw_lat_err - target_lane_offset
+        head_err = yaw - wp_yaw
+        
         head_err = torch.atan2(torch.sin(head_err), torch.cos(head_err))
         import math
         head_err = torch.where(head_err > math.pi/2, head_err - math.pi, head_err)
         head_err = torch.where(head_err < -math.pi/2, head_err + math.pi, head_err)
+        
         return lat_err, head_err, kappa
 
 _TRACK_MANAGER = None

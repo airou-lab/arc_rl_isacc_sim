@@ -50,9 +50,11 @@ Research consistently shows a sharp drop in performance-per-pixel beyond the **5
 
 ### Isaac Sim / Isaac Lab Specifics
 - **Tiled Rendering:** Isaac Lab uses a "tiled" buffer to render multiple environments. 
-- **VRAM Footprint:** 
-  - **Low Res (128x128):** Can scale to **1024+ environments** on 12-16GB VRAM.
-  - **Mid Res (640x480):** Limits training to **~32-64 environments** on a 12GB GPU (RTX 3060/4070).
+- **VRAM Footprint (Empirical Updates - RTX 3060 12GB):** 
+  - **Low Res (128x128):** Can scale to **1024+ environments**.
+  - **Mid/HD Res (640x360):** *CRITICAL LIMIT IDENTIFIED.* Training becomes unstable and is reliably **killed by OOM during PPO optimization** when using 30+ environments.
+  - **Safe HD Baseline:** Empirically verified that **16 environments** at 640x360 maintains stable VRAM usage (~6.2GB) allowing room for PPO buffer gradients.
+- **MARL "Camera Budget":** For multi-agent training, the total camera count must not exceed 16. E.g., 8 environments with 2 agents = 16 cameras.
 - **Strategy for 12GB GPUs:**
   1. Use **TiledCamera** (standard in Isaac Lab).
   2. If high resolution is required for data collection, drop `num_envs` to <8.

@@ -72,10 +72,11 @@ class HPPPDirectBridge(VecEnv):
         single_obs_space = env.get_wrapper_attr("single_observation_space")
         img_space = single_obs_space.spaces["visual"]
         
+        # Mastery: Use uint8 for storage to save 4x VRAM in the rollout buffer
         transposed_img_space = gym.spaces.Box(
-            low=0.0, high=1.0, 
+            low=0, high=255, 
             shape=(img_space.shape[2], img_space.shape[0], img_space.shape[1]),
-            dtype=np.float32
+            dtype=np.uint8
         )
         observation_space = gym.spaces.Dict({
             "vec": single_obs_space.spaces["policy"],
@@ -127,12 +128,16 @@ class HPPPDirectBridge(VecEnv):
         return self._process_obs(obs_dict), rewards.cpu().numpy(), dones, infos
 
     def _process_obs(self, obs_dict):
+        # Isaac Lab returns normalized float32 (0-1) if "normalize": True is set in cfg
+        # We convert to uint8 (0-255) for storage efficiency
         img = obs_dict["visual"].cpu().numpy()
+        img_uint8 = (np.clip(img, 0, 1) * 255).astype(np.uint8)
+        
         # Transpose from (B, H, W, C) to (B, C, H, W)
-        img = np.transpose(img, (0, 3, 1, 2))
+        img_transposed = np.transpose(img_uint8, (0, 3, 1, 2))
         return {
             "vec": obs_dict["policy"].cpu().numpy(),
-            "image": img
+            "image": img_transposed
         }
 
     def close(self):

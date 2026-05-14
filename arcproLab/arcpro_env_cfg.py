@@ -93,7 +93,7 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             focal_length=1.93,
         ),
         offset=TiledCameraCfg.OffsetCfg(pos=(0.4, 0.0, 0.2), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
-        data_types=["rgb"], width=640, height=360,
+        data_types=["rgb"], width=224, height=224,
         debug_vis=False,
     )
 
@@ -154,6 +154,8 @@ class RewardCfg:
         heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
         # Smoothness Calibration: Heavier penalty to stop the jitter
         smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=30.0)
+        # Jitter Suppression
+        jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=1.0)
 
 @configclass
 class TerminationCfg:
@@ -176,7 +178,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     viewer: ViewerCfg = ViewerCfg(eye=(-15.0, 6.875, 1.25), lookat=(-16.25, 5.56, 0.0))
     
     enable_cameras: bool = True
-    scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=8, env_spacing=50.0)
+    scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=32, env_spacing=30.0)
     observations: ObservationCfg = ObservationCfg()
     actions: ActionCfg = ActionCfg()
     rewards: RewardCfg = RewardCfg()

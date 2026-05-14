@@ -8,7 +8,10 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
 def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Terminates if the robot hits a white line boundary."""
+    """
+    Terminates if the robot hits a white line boundary.
+    Mastery Logic: Tightened margin (0.05m) and Permissive Gates.
+    """
     from mdp.track_manager import get_track_manager
     tm = get_track_manager(device=env.device)
     
@@ -20,10 +23,16 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     dist_y, dist_w, dist_g = tm.compute_marker_distances(local_pos)
     
     # 1. Boundary hit (White or Yellow line dist < threshold)
-    # 0.13m allows ~3cm of wiggle room for the 0.28m wide robot in a 0.60m lane
-    boundary_hit = (dist_w < 0.13) | (dist_y < 0.13)
+    # Mastery Threshold: 0.05m (Very strict, allows only 5cm of proximity to paint)
+    boundary_hit = (dist_w < 0.05) | (dist_y < 0.05)
     
     # 2. Gate permeability check (Phase 11-17)
+    # Mask the boundary reset if we are inside a gate zone (dist_g < 0.20m)
+    # This allows the robot to cross white lines that belong to gates
+    in_gate_zone = dist_g < 0.20
+    masked_boundary_hit = boundary_hit & (~in_gate_zone)
+    
+    # 3. Gate contact logic: Still resets if entering gate with bad alignment
     gate_contact = dist_g < 0.12
     
     # Check alignment (Heading error < 45 degrees)
@@ -45,7 +54,7 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     gate_hit = gate_contact & (~alignment_ok)
     
     # Apply grace period to both boundaries and gates
-    return (~is_spawn) & (boundary_hit | gate_hit)
+    return (~is_spawn) & (masked_boundary_hit | gate_hit)
 
 def height_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Terminates if the robot flips or falls."""

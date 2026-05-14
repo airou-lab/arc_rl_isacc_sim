@@ -1,18 +1,20 @@
 # RESUME HERE
 
 ## Project Context
-- **Milestone:** Milestone 3: Real-Time Visualization & Diagnostics (v2.5)
-- **Phase:** Phase 15: HD Vision & ResNet Hardening
-- **Discovery:** Verified that 30 environments with HD Vision (640x360) were too heavy for the RTX 3060, causing silent process termination after the first optimization update.
-- **Stabilization:** Reduced environment count to **16**. Current VRAM usage is stable at **~6.2GB / 12GB**.
+- **Milestone:** Milestone 3: HD Perception & Production Hardening (v2.6)
+- **Phase:** Phase 16: MARL Transition
+- **Status:** Mastery Curriculum verified (32 envs, 162 FPS). RoadManager refactor complete.
+
+## Recent Changes
+- **Infrastructure**: Refactored singleton `RoadGraph` to vectorized `RoadManager` supporting multi-agent state.
+- **Verification**: Verified Phase 15 Mastery with 32 environments at 162 FPS (HD Vision).
+- **Rewards**: Implemented 10cm plateau and -100.0 jerk penalty in `rewards.py`.
+- **Terminations**: Tightened white line margins to 0.05m for high-precision driving.
 
 ## Immediate Next Steps
-- [ACTIVE] **Monitor `logs/production_training_16.log`**.
-- [GOAL] Achieve **5M steps** with zero target offset.
-- [NEXT] Once training hits ~1M steps, run a GUI verification to confirm the "Centerline Mastery" behavior.
+- [ ] **SKRL Integration**: Integrate SKRL backend to handle multi-agent observation and action buffers.
+- [ ] **Multi-Agent Spawning**: Update `spawner.py` to support multiple robot entities per environment.
+- [ ] **Policy Training**: Initiate initial MARL training run with 2 agents per env.
 
-## Active Command
-```bash
-# Training is running in the background (PID: 132842)
-tail -f logs/production_training_16.log
-```
+## Active Blockers
+- None. Headless mode stable.

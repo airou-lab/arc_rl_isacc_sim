@@ -19,18 +19,29 @@ def termination_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     return torch.where(env.reset_buf, torch.tensor(-500.0, device=env.device), torch.tensor(0.0, device=env.device))
 
 def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
-    """Reward based on lateral offset from track centerline."""
+    """
+    Reward based on lateral offset from track centerline.
+    Features a 10cm Plateau: Full reward if within 10cm, then drops off linearly.
+    """
     lat_err = env.extras.get("lat_err", torch.zeros(env.num_envs, device=env.device))
     abs_lat = torch.abs(lat_err)
-    # Continuous gradient: 1.0 at center, decreasing linearly as it drifts.
-    # This provides a clear signal for the HD vision to maintain centerline mastery.
-    reward = 1.0 - (abs_lat * 10.0)
+    
+    # Plateau: 1.0 if within 0.10m
+    # Penalty: 2.0 per meter outside the plateau
+    reward = torch.clamp(1.0 - (torch.clamp(abs_lat - 0.10, min=0.0) * 2.0), min=-1.0)
     return reward
 
-def line_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
-    hit = env.termination_manager.get_term("white_line_contact")
-    reward = torch.where(hit, torch.tensor(-10.0, device=env.device), torch.tensor(0.0, device=env.device))
-    return reward
+def jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Penalizes high-frequency steering oscillations (Jitter).
+    Weight: -100.0
+    """
+    if "prev_action" not in env.extras:
+        return torch.zeros(env.num_envs, device=env.device)
+    
+    # Action index 0 is Steering
+    steer_delta = env.action_manager.action[:, 0] - env.extras["prev_action"][:, 0]
+    return -100.0 * torch.square(steer_delta)
 
 def action_rate_smoothness_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     current_action = env.action_manager.action

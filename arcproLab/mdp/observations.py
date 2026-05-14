@@ -26,15 +26,19 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     env_origins = env.scene.env_origins
     local_pos = asset.data.root_pos_w - env_origins
 
-    # Indices 0-2: Navigation intent (Task 11-17: RoadGraph)
-    from mdp.road_graph import get_road_graph
-    rg = get_road_graph(device=env.device)
-    rg.update(env)
+    # Indices 0-2: Navigation intent (Vectorized RoadManager)
+    from mdp.road_manager import get_road_manager
+    # Note: Milestone 4 uses 2 agents, but for now we assume 1 agent per env in single-agent mode.
+    num_agents = 1
+    rm = get_road_manager(num_envs=env.num_envs, num_agents=num_agents, device=env.device)
+    rm.update(env)
     
-    turn_token, go_signal = rg.get_nav_commands()
+    turn_tokens, go_signals = rm.get_nav_commands()
 
-    obs[:, 0] = turn_token
-    obs[:, 1] = go_signal
+    # Map (B, N) to obs (B, 12) - Current assumption: N=1
+    # We use .view(-1) to ensure it fits into the (B,) slice of obs
+    obs[:, 0] = turn_tokens.view(-1)
+    obs[:, 1] = go_signals.view(-1)
     obs[:, 2] = 0.0  # IDX_GOAL_DIST
 
     # Index 3: Forward Speed (m/s) - Local X velocity
@@ -54,7 +58,11 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     from mdp.track_manager import get_track_manager
     tm = get_track_manager(device=env.device)
 
+    # 1. Update persistent track indices and compute errors
     lat_err, head_err, kappa = tm.compute_errors(local_pos, yaw)    
+    
+    # 2. Get Marker Distances (Yellow, White, Gate)
+    dist_y, dist_w, dist_g = tm.compute_marker_distances(local_pos)
     
     # Distance Tracking (Accumulated)
     if "distance" not in env.extras:
@@ -71,6 +79,7 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     # Store raw values in extras for Reward/Termination (Unmasked)
     env.extras["lat_err"] = lat_err
     env.extras["head_err"] = head_err
+    env.extras["dist_g"] = dist_g # Masking signal for gate crossing
     
     # Lateral and Heading Error (Mapped to indices 8 and 9)
     obs[:, 8] = lat_err
