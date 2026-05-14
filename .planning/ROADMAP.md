@@ -29,9 +29,8 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 
 - [x] **Phase 14:** 14-01-procedural-multi-agent-scaffolding - Physically scaled USD geometry to 1x and established production training baseline for multi-agent support.
 - [ ] **Phase 15:** 15-mastery-curriculum - **ACTIVE** - Single-Agent Lane-Following Mastery. Achieve full-lap capability (6000+ steps) using a dynamic boundary curriculum and memory-optimized HD vision.
-    **Plans:** 2 plans
-    - [ ] 15-01-PLAN.md — Dynamic Boundary Infrastructure & Precision Reward Tuning.
-    - [ ] 15-02-PLAN.md — uint8 Memory Optimization & Curriculum Monitoring.
+    **Plans:** 1 plan
+    - [ ] PLAN.md — Unified Mastery Curriculum (ResNet-18, Windowed Search, 32-Envs)
 
 ## Milestone 4: Multi-Agent Urban Coordination (v3.0) - PLANNED
 *Focus: Smart intersections, multi-car coordination, and multi-agent RL (MARL).*

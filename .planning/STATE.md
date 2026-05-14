@@ -22,7 +22,6 @@ The project has successfully transitioned to **HD Vision (640x360)** using an **
 
 ## Active Todos (Queue)
 1. [ ] **15-01-PLAN**: Implement parameterized boundary termination and mastery reward weights. (NEXT)
-2. [ ] **15-02-PLAN**: Implement uint8 memory optimization and curriculum monitoring callback.
 3. [ ] **16-marl-transition**: Refactor singletons and establish multi-agent infrastructure. (DEFERRED to Milestone 4)
 
 **RESUME HERE**
