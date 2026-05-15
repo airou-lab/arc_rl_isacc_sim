@@ -1,79 +1,82 @@
 # Codebase Concerns
 
-**Analysis Date:** 2024-11-20
+**Analysis Date:** 2026-05-11
 
 ## Tech Debt
 
-**Marker Initialization:**
-- Issue: `TrackManager` collects marker points from USD stage by scanning names. This is slow and fragile if naming conventions in the USD change.
-- Files: `arcproLab/mdp/track_manager.py`
-- Impact: Slow startup times on new tracks.
-- Fix approach: Transition fully to the cached `.npz` system or use a more robust USD query API.
+**RoadManager Initialization:**
+- Issue: `RoadManager` scans the entire USD stage for "laneGate" prims on every startup.
+- Files: `arcproLab/mdp/road_manager.py`
+- Impact: Slow environment startup times.
+- Fix approach: Move gate discovery to the cached `.npz` system used by `TrackManager`.
 
-**CLI-driven Debugging:**
-- Issue: Debugging visuals are toggled by checking `sys.argv` directly in `TrackManager.__init__`.
-- Files: `arcproLab/mdp/track_manager.py`
-- Impact: Unexpected behavior if `--debug` is used for other purposes or if `TrackManager` is used in a context without CLI args.
-- Fix approach: Use a proper configuration object or environment variable.
+**Hard-coded Agent Count in Observations:**
+- Issue: `mdp/observations.py` hard-codes `num_agents = 1` when accessing `RoadManager`.
+- Files: `arcproLab/mdp/observations.py`
+- Impact: Blocks multi-agent training where more than one agent exists per environment.
+- Fix approach: Fetch `num_agents` dynamically from `env.scene` or environment config.
+
+**Circular Dependency Workarounds:**
+- Issue: `WorkerScheduler` and `SchedulerTransport` use local imports within methods to avoid circularity.
+- Files: `arcproLab/policy_stack/agent/worker_scheduler.py`
+- Impact: Slightly less readable code; potential for runtime errors if not careful.
+- Fix approach: Refactor module structure to separate interfaces from implementations.
 
 ## Known Bugs
 
 **None reported:**
-- Currently, the focus is on migration and scale verification (1.0x metric scale).
+- MARL transition is in progress; potential for synchronization issues at high `num_envs`.
 
 ## Security Considerations
 
-**Environment Variables:**
-- Risk: None detected (local simulation).
-- Files: N/A
-- Current mitigation: N/A
+**Unprotected Network Transports:**
+- Risk: `IntersectionNodeServer` (Stage 3) may use unprotected network sockets if configured for remote operation.
+- Files: `arcproLab/policy_stack/agent/intersection_node_server.py`
+- Current mitigation: Default to `LocalTransport` (in-process).
 
 ## Performance Bottlenecks
 
-**USD Point Collection:**
-- Problem: Scanning the USD stage for "yellow_line", "white_line", etc., is slow.
-- Files: `arcproLab/mdp/track_manager.py`
-- Cause: Iterating over many USD prims.
-- Improvement path: Ensure the `.npz` cache is always up to date and shared between environments.
+**VRAM Pressure:**
+- Problem: Multi-agent environments with HD visual perception (Adaptive CNN) consume significant VRAM.
+- Files: `arcproLab/policy_stack/policies/fusion_policy.py`
+- Cause: High-resolution images for N agents across B environments.
+- Improvement path: Optimize ResNet backbone or implement shared perception features.
 
 ## Fragile Areas
 
-**USD Path Dependencies:**
-- Files: `arcproLab/arcpro_env_cfg.py`, `arcproLab/mdp/track_manager.py`
-- Why fragile: Hardcoded relative paths to USD files and centerline data.
-- Safe modification: Use absolute paths or an environment variable for the workspace root.
-
-**Spawn/Reset Logic:**
-- Files: `arcproLab/mdp/spawner.py`, `arcproLab/scripts/verify_spawn.py`
-- Why fragile: Resetting state in Isaac Sim can occasionally lead to physics instability if joints aren't settled correctly.
+**FCFS Arbitration during Jitter:**
+- Files: `arcproLab/policy_stack/agent/scheduler_core.py`
+- Why fragile: First-Come-First-Served logic depends on monotonic time; network jitter in Stage 3 could cause reordering.
+- Safe modification: Use logical timestamps or sequence numbers.
 
 ## Scaling Limits
 
-**Simulation Parallelization:**
-- Current capacity: `num_envs` is usually set to 16-64.
-- Limit: Limited by GPU VRAM and CPU core count for physics.
-- Scaling path: Distribute training across multiple GPUs if needed.
+**Arbitration Complexity:**
+- Current capacity: Simple O(N^2) path conflict checks.
+- Limit: Becomes a bottleneck as the number of agents per intersection increases.
+- Scaling path: Spatial partitioning for intersection queries.
 
 ## Dependencies at Risk
 
-**Isaac Lab/Sim:**
-- Risk: Rapidly evolving API; updates to Isaac Sim often break backward compatibility.
-- Impact: Env configs might break on newer versions.
+**sb3-contrib:**
+- Risk: `RecurrentPPO` implementation has specific conventions (e.g., bare tuple for LSTM states) that differ from standard SB3.
+- Impact: Policy class must maintain messy compatibility shims.
 
 ## Missing Critical Features
 
-**RoadGraph Connectivity:**
-- Problem: While `RoadGraph` exists, full autonomous navigation through arbitrary intersections is still under development.
-- Blocks: Multi-segment pathfinding.
+**Vectorized Scheduler:**
+- Problem: `SchedulerCore` is currently a Python-object-based loop.
+- Blocks: High-performance training with thousands of environments.
+- Priority: High for Phase 17+.
 
 ## Test Coverage Gaps
 
-**MDP Logic:**
-- What's not tested: `rewards.py`, `observations.py` lack dedicated unit tests.
-- Files: `arcproLab/mdp/rewards.py`, `arcproLab/mdp/observations.py`
-- Risk: Reward bugs (e.g., sign errors) can go unnoticed and derail training.
-- Priority: High.
+**RoadManager:**
+- What's not tested: Vectorized randomization and gate discovery.
+- Files: `arcproLab/mdp/road_manager.py`
+- Risk: Agents starting with incorrect navigation tokens.
+- Priority: Medium.
 
 ---
 
-*Concerns audit: 2024-11-20*
+*Concerns audit: 2026-05-11*

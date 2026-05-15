@@ -1,6 +1,6 @@
 # External Integrations
 
-**Analysis Date:** 2024-11-20
+**Analysis Date:** 2026-05-11
 
 ## APIs & External Services
 
@@ -9,7 +9,7 @@
   - SDK: `isaaclab`, `omni`
 
 **RL Algorithms:**
-- Stable Baselines 3 - Provides PPO and other RL algorithm implementations.
+- Stable Baselines 3 & SB3-Contrib - Provides PPO and Recurrent PPO implementations.
 
 ## Data Storage
 
@@ -23,6 +23,7 @@
 
 **Caching:**
 - `TrackManager` implements a local `.npz` cache to avoid slow USD marker collection on every startup.
+- `RoadManager` discovers navigation gates from the USD stage and caches them during runtime.
 
 ## Authentication & Identity
 
@@ -50,7 +51,7 @@
 ## Environment Configuration
 
 **Required env vars:**
-- None explicitly listed in code, but Isaac Sim requires specific environment setup (e.g., `ISAAC_PATH`).
+- `ISAAC_PATH`: Path to Isaac Sim installation (standard requirement).
 
 **Secrets location:**
 - Not applicable.
@@ -65,4 +66,4 @@
 
 ---
 
-*Integration audit: 2024-11-20*
+*Integration audit: 2026-05-11*

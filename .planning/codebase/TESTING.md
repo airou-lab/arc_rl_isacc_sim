@@ -1,6 +1,6 @@
 # Testing Patterns
 
-**Analysis Date:** 2024-11-20
+**Analysis Date:** 2026-05-11
 
 ## Test Framework
 
@@ -9,84 +9,72 @@
 - Config: `arcproLab/policy_stack/pytest.ini`
 
 **Assertion Library:**
-- Standard Python `assert`.
+- pytest assertions.
 
 **Run Commands:**
 ```bash
-pytest arcproLab/policy_stack/tests/    # Run policy stack unit tests
-python arcproLab/scripts/verify_policy.py --checkpoint models/model.pth # Run simulation verification
+pytest arcproLab/policy_stack/tests/    # Run all MARL and policy unit tests
+python arcproLab/scripts/verify_policy.py # Full simulation verification
 ```
 
 ## Test File Organization
 
 **Location:**
-- Unit tests: `arcproLab/policy_stack/tests/`
-- Functional/Simulation tests: `arcproLab/scripts/` (prefixed with `verify_` or `test_`)
+- `arcproLab/policy_stack/tests/`
 
 **Naming:**
-- Unit tests: `test_*.py`
-- Simulation tests: `verify_*.py` or `test_*.py`
+- `test_*.py`
 
 ## Test Structure
 
 **Suite Organization:**
 ```python
-# arcproLab/policy_stack/tests/test_registry.py
-def test_registry_registration():
-    # Test logic
-    pass
-
-def test_registry_make():
-    # Test logic
+# arcproLab/policy_stack/tests/test_intersection_flow.py
+def test_simultaneous_arrival():
+    # Setup two agents at an intersection
+    # Assert FCFS ordering and go_signal values
     pass
 ```
 
-**Patterns:**
-- Functional scripts: Many scripts in `arcproLab/scripts/` follow a "Launch Simulation -> Load Model -> Run N steps -> Print Results" pattern.
-
 ## Mocking
 
-**Framework:** None explicitly used; simulation environments are typically used directly or via Direct Envs.
+**Framework:**
+- Manual mocks or `unittest.mock` if needed.
 
 **Patterns:**
-- Isaac Lab `DirectRLEnv` used to simplify testing environments without the full manager overhead.
+- Mocking the `SchedulerTransport` to test `WorkerScheduler` facades.
+- Mocking the environment for testing `SchedulerCore` without simulation overhead.
 
 ## Fixtures and Factories
 
 **Test Data:**
-- Cached track boundaries in `.npz` files.
-- Sample models in `arcproLab/models/`.
-
-**Location:**
-- `arcproLab/mdp/*.npz`
-- `arcproLab/models/*.pth`
+- `arcproLab/policy_stack/config/intersection_topology.json`: Sample topology for graph tests.
 
 ## Coverage
 
-**Requirements:** None enforced.
+**Requirements:**
+- High coverage required for `SchedulerCore` arbitration logic.
 
 ## Test Types
 
 **Unit Tests:**
-- Test individual RL components (registry, schedulers) in `arcproLab/policy_stack/tests/`.
+- `test_worker_scheduler.py`: Verifies facade delegation.
+- `test_registry.py`: Verifies intent lifecycle.
 
 **Integration Tests:**
-- Testing the intersection flow and node server in `arcproLab/policy_stack/tests/`.
+- `test_intersection_flow.py`: Verifies multi-agent conflict resolution.
 
-**Simulation Verification:**
-- Extensive collection of scripts to verify specific behaviors:
-  - `verify_metric.py`: Scale/unit verification.
-  - `verify_drive.py`: Actuator verification.
-  - `verify_spawn.py`: Reset/Spawn logic verification.
+**Functional Tests:**
+- `arcproLab/scripts/verify_*.py`: End-to-end simulation tests for drive, metric, and reset logic.
 
 ## Common Patterns
 
 **Async Testing:**
-- Not prevalent; simulation is typically synchronous per-step.
+- Used for `IntersectionNodeServer` tests if network transports are involved.
 
 **Error Testing:**
-- Check for initialization failures (e.g., `TrackManager` sync attempts).
+- Verifying stale intent expiration via `SchedulerCore.tick()`.
 
 ---
 
-*Testing analysis: 2024-11-20*
+*Testing analysis: 2026-05-11*

@@ -1,77 +1,79 @@
 # Coding Conventions
 
-**Analysis Date:** 2024-11-20
+**Analysis Date:** 2026-05-11
 
 ## Naming Patterns
 
 **Files:**
-- Snake_case for Python scripts and modules (e.g., `track_manager.py`).
+- snake_case: `road_manager.py`, `scheduler_core.py`.
 
 **Functions:**
-- Snake_case for function and method names (e.g., `ensure_synced()`, `load_cache()`).
+- snake_case: `register_intent()`, `update_road_manager()`.
 
 **Variables:**
-- Snake_case for local variables and attributes (e.g., `self.yellow_tensor`, `wp_np`).
+- snake_case: `turn_tokens`, `go_signals`.
 
 **Types:**
-- CamelCase for classes (e.g., `TrackManager`, `RoadGraph`).
-- standard Python typing hints used (e.g., `device: str = "cuda:0"`).
+- CamelCase for classes: `RoadManager`, `SchedulerCore`.
+- Use typing hints for all public methods.
 
 ## Code Style
 
 **Formatting:**
-- Follows standard Python (PEP 8) style.
-- BSD-3-Clause license headers at the top of many files.
+- Black/PEP8 compliant.
+- BSD-3-Clause headers required for core `arcproLab` files.
 
 **Linting:**
-- `pytest.ini` excludes several `ament_lint` and `flake8` plugins, suggesting a ROS-lite or customized environment.
+- Configured via `pytest.ini`.
 
 ## Import Organization
 
 **Order:**
-1. Standard library (e.g., `os`, `sys`).
-2. Third-party libraries (e.g., `torch`, `numpy`).
-3. Internal project modules (e.g., `from isaaclab.utils import ...`).
+1. Future imports (`from __future__ import annotations`).
+2. Standard library.
+3. Third-party (torch, numpy).
+4. Local modules.
 
 **Path Aliases:**
-- `sys.path.append` is used in some scripts to ensure local package availability (e.g., in `arcpro_env_cfg.py`).
+- Use absolute imports within `arcproLab` where possible.
+- Avoid circular dependencies in `policy_stack` by using local imports in methods if necessary (see `WorkerScheduler`).
 
 ## Error Handling
 
 **Patterns:**
-- Try-except blocks for filesystem operations (`load_cache`).
-- Print statements for warnings and initialization status (e.g., `[TrackManager] Building high-fidelity...`).
+- Graceful degradation if USD prims are missing (see `RoadManager._initialize_gates`).
+- Logging warnings for dead code or configuration mismatches.
 
 ## Logging
 
-**Framework:** `print()` for console output; Tensorboard for training metrics.
-
-**Patterns:**
-- Prefixed log messages: `[Component] Message`.
+**Framework:**
+- `logging` module for system-level messages.
+- `print` with prefixes for simulation-level messages (e.g., `[RoadManager] ...`).
+- Tensorboard for RL metrics.
 
 ## Comments
 
 **When to Comment:**
-- Docstrings for classes describing their purpose.
-- In-line comments for complex logic (e.g., yaw wrap-around handling in `track_manager.py`).
+- Complexity: Explain coordinate transformations (Vehicle vs World frame).
+- Policy: Explain inductive biases (e.g., Kinematic Anchors).
 
 **JSDoc/TSDoc:**
-- Not applicable (Python project). Using standard docstrings.
+- Standard Python Docstrings.
 
 ## Function Design
 
-**Size:** Mixed; some complex initialization methods (like `ensure_synced`) are large but centralized.
-
-**Parameters:** Use of default values and type hints is common.
-
-**Return Values:** Explicit return types not always specified in method signatures but generally consistent.
+**Size:**
+- Prefer small, pure-compute functions for arbitration (see `scheduler_core.py`).
+- Keep environment update loops centralized.
 
 ## Module Design
 
-**Exports:** Standard Python module exports.
+**Exports:**
+- Explicit `__all__` in facade modules (`worker_scheduler.py`).
 
-**Barrel Files:** `__init__.py` used to mark directories as packages.
+**Barrel Files:**
+- `__init__.py` should expose core classes for cleaner imports.
 
 ---
 
-*Convention analysis: 2024-11-20*
+*Convention analysis: 2026-05-11*

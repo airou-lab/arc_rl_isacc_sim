@@ -3,18 +3,20 @@
 ## Project Context
 - **Milestone:** Milestone 3: HD Perception & Production Hardening (v2.6)
 - **Phase:** Phase 16: MARL Transition
-- **Status:** Mastery Curriculum verified (32 envs, 162 FPS). RoadManager refactor complete.
+- **Status:** Production training (Mastery Curriculum) is running in the background.
+
+## Active Command
+- **Background Training**: PID 956074
+- **Log File**: `logs/production_mastery_32.log`
+- **Target**: 5,000,000 steps (~150 FPS)
 
 ## Recent Changes
-- **Infrastructure**: Refactored singleton `RoadGraph` to vectorized `RoadManager` supporting multi-agent state.
-- **Verification**: Verified Phase 15 Mastery with 32 environments at 162 FPS (HD Vision).
-- **Rewards**: Implemented 10cm plateau and -100.0 jerk penalty in `rewards.py`.
-- **Terminations**: Tightened white line margins to 0.05m for high-precision driving.
+- **Vision**: Upgraded to ResNet-18 with ImageNet-v1 weights and uint8 storage.
+- **Infrastructure**: Refactored singleton `RoadGraph` to vectorized `RoadManager` (B, N).
+- **Rewards**: Implemented 10cm plateau and -100.0 steering jerk penalty.
+- **Scaling**: Verified stability with 32 environments at 224x224.
 
 ## Immediate Next Steps
-- [ ] **SKRL Integration**: Integrate SKRL backend to handle multi-agent observation and action buffers.
-- [ ] **Multi-Agent Spawning**: Update `spawner.py` to support multiple robot entities per environment.
-- [ ] **Policy Training**: Initiate initial MARL training run with 2 agents per env.
-
-## Active Blockers
-- None. Headless mode stable.
+- [ ] **Monitor Training**: Check `logs/production_mastery_32.log` once steps reach ~1M to verify reward convergence.
+- [ ] **SKRL Integration**: Begin implementing the SKRL policy stack bridge for Phase 16 multi-agent support.
+- [ ] **MARL Spawner**: Refactor the vehicle spawner to support multiple agents per environment.
