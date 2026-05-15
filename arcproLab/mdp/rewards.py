@@ -54,3 +54,14 @@ def action_rate_smoothness_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
 def heading_alignment_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     head_err = env.extras.get("head_err", torch.zeros(env.num_envs, device=env.device))
     return torch.cos(head_err)
+
+def boundary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Penalizes the agent for crossing or being too close to white/yellow lines.
+    Mastery Logic: Penalize if within 0.15m, but wait for termination logic to reset.
+    """
+    from .terminations import white_line_contact
+    # Use a slightly more permissive check for the penalty itself
+    # We reuse the logic but we can check if it's "close enough" to be a penalty
+    is_near = white_line_contact(env, threshold=0.15)
+    return torch.where(is_near, torch.tensor(-100.0, device=env.device), torch.tensor(0.0, device=env.device))

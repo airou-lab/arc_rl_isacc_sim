@@ -7,10 +7,11 @@ import torch
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
-def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"), threshold: float = 0.15) -> torch.Tensor:
     """
     Terminates if the robot hits a white line boundary.
-    Mastery Logic: Tightened margin (0.05m) and Permissive Gates.
+    Mastery Logic: Relaxed margin (0.15m) to prevent physics-induced resets, 
+    but still resets if leaving the road.
     """
     from mdp.track_manager import get_track_manager
     tm = get_track_manager(device=env.device)
@@ -23,8 +24,8 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     dist_y, dist_w, dist_g = tm.compute_marker_distances(local_pos)
     
     # 1. Boundary hit (White or Yellow line dist < threshold)
-    # Mastery Threshold: 0.05m (Very strict, allows only 5cm of proximity to paint)
-    boundary_hit = (dist_w < 0.05) | (dist_y < 0.05)
+    # Default: 0.15m (Provides buffer for 50Hz control loop)
+    boundary_hit = (dist_w < threshold) | (dist_y < threshold)
     
     # 2. Gate permeability check (Phase 11-17)
     # Mask the boundary reset if we are inside a gate zone (dist_g < 0.20m)

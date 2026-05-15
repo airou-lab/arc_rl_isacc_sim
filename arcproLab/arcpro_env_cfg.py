@@ -156,13 +156,16 @@ class RewardCfg:
         smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=30.0)
         # Jitter Suppression
         jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=1.0)
+        # Boundary Penalty: Give negative reward for crossing lines
+        boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=1.0)
 
 @configclass
 class TerminationCfg:
-    # height termination: Catch flying robots
+    # height termination: Catch flying robots (falling into void)
     height = DoneTerm(func=mdp_done.height_termination)
     # Contact termination: Reset if hitting roadmarks (white lines)
-    roadmark_contact = DoneTerm(func=mdp_done.white_line_contact)
+    # 0.25m survival margin (Reset) allows 10cm of recovery after the 0.15m penalty starts
+    roadmark_contact = DoneTerm(func=mdp_done.white_line_contact, params={"threshold": 0.25})
     # Stagnation: Reset if stuck against a wall
     stagnation = DoneTerm(func=mdp_done.stagnation_termination)
     # FOV Driving: Reset if driving into areas not visible to the camera
