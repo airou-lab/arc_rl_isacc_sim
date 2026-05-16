@@ -349,11 +349,11 @@ class TrackManager:
         candidate_wps = self.waypoints[search_indices][:, :, :2]
         candidate_dists = torch.norm(pos[:, None, :2] - candidate_wps, dim=2)
         best_in_window_idx = torch.argmin(candidate_dists, dim=1)
-        closest_idx = torch.gather(search_indices, 1, best_in_window_idx.view(-1, 1)).squeeze()
+        closest_idx = torch.gather(search_indices, 1, best_in_window_idx.view(-1, 1)).view(-1)
         self.last_indices = closest_idx
 
         # 3. Calculate Errors
-        closest_wp = self.waypoints[closest_idx]
+        closest_wp = self.waypoints[closest_idx] # Always (B, 3) because closest_idx is (B,)
         wp_to_robot = pos[:, :2] - closest_wp[:, :2]
         wp_yaw = closest_wp[:, 2]
         

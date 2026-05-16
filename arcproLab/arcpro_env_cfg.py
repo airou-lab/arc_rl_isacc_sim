@@ -114,7 +114,7 @@ class ObservationCfg:
     
     @configclass
     class VisualCfg(ObservationGroupCfg):
-        tiled_camera = ObsTerm(func=mdp.image, params={"sensor_cfg": SceneEntityCfg("tiled_camera"), "normalize": True})
+        tiled_camera = ObsTerm(func=mdp.image, params={"sensor_cfg": SceneEntityCfg("tiled_camera"), "normalize": False})
     
     visual: VisualCfg | None = VisualCfg()
 
@@ -138,34 +138,30 @@ class ActionCfg:
 
 @configclass
 class RewardCfg:
-        # Anti-Suicide: Heavy penalty for crashing/resetting
-        terminating = RewTerm(func=mdp_rew.termination_penalty, weight=1.0)
-        
-        # Primary Objective: MOMENTUM (Increased weight)
-        speed = RewTerm(func=mdp_rew.speed_reward, weight=25.0)
-        # Secondary Objective: Precision (Lowered weight to stop the "crawling" behavior)
-        lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=10.0)
-        # Force the agent to move (Higher threshold for 50Hz control)
-        stationary = RewTerm(
-            func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.5, -20.0, 0.0),
-            weight=2.0
-        )
-        # Prevent 180s
-        heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
-        # Smoothness Calibration: Heavier penalty to stop the jitter
-        smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=30.0)
-        # Jitter Suppression
-        jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=1.0)
-        # Boundary Penalty: Give negative reward for crossing lines
-        boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=1.0)
+    # Anti-Suicide: Massive penalty for crashing/resetting (Priority 1)
+    terminating = RewTerm(func=mdp_rew.termination_penalty, weight=50.0)
+    
+    # Performance: Momentum
+    speed = RewTerm(func=mdp_rew.speed_reward, weight=10.0)
+    # Precision: Lane centering
+    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=10.0)
+    # Force the agent to move
+    stationary = RewTerm(
+        func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.5, -20.0, 0.0),
+        weight=2.0
+    )
+    heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
+    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=30.0)
+    # Jitter Suppression
+    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=1.0)
+    # Boundary Penalty: Corrective signal (Priority 2)
+    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=1.0)
+
 
 @configclass
 class TerminationCfg:
     # height termination: Catch flying robots (falling into void)
     height = DoneTerm(func=mdp_done.height_termination)
-    # Contact termination: Reset if hitting roadmarks (white lines)
-    # 0.25m survival margin (Reset) allows 10cm of recovery after the 0.15m penalty starts
-    roadmark_contact = DoneTerm(func=mdp_done.white_line_contact, params={"threshold": 0.25})
     # Stagnation: Reset if stuck against a wall
     stagnation = DoneTerm(func=mdp_done.stagnation_termination)
     # FOV Driving: Reset if driving into areas not visible to the camera
