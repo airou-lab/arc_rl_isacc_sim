@@ -80,6 +80,8 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     env.extras["lat_err"] = lat_err
     env.extras["head_err"] = head_err
     env.extras["dist_g"] = dist_g # Masking signal for gate crossing
+    env.extras["dist_y"] = dist_y
+    env.extras["dist_w"] = dist_w
     
     # Lateral and Heading Error (Mapped to indices 8 and 9)
     obs[:, 8] = lat_err

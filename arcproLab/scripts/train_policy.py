@@ -113,6 +113,11 @@ class HPPPDirectBridge(VecEnv):
         
         # Update prev_action for next step
         self.prev_action.copy_(actions_torch)
+
+        # Extraction for custom logging (Mastery v2.6)
+        # We extract speed and boundary distances for fine-grained debugging
+        robot_asset = self.venv.scene["robot"]
+        self.venv.extras["speed"] = robot_asset.data.root_lin_vel_b[:, 0].clone()
         
         # SB3 expects info to be a list of dicts, one for each env
         infos = [{} for _ in range(self.num_envs)]
@@ -124,6 +129,16 @@ class HPPPDirectBridge(VecEnv):
             else:
                 for i in range(self.num_envs):
                     infos[i][key] = value
+
+        # Manually add the extra telemetry to the info dicts
+        dist_y = self.venv.extras.get("dist_y", torch.zeros(self.num_envs)).cpu().numpy()
+        dist_w = self.venv.extras.get("dist_w", torch.zeros(self.num_envs)).cpu().numpy()
+        speed = self.venv.extras["speed"].cpu().numpy()
+
+        for i in range(self.num_envs):
+            infos[i]["dist_yellow"] = dist_y[i]
+            infos[i]["dist_white"] = dist_w[i]
+            infos[i]["speed"] = speed[i]
                     
         return self._process_obs(obs_dict), rewards.cpu().numpy(), dones, infos
 
@@ -245,11 +260,25 @@ def main():
             super().__init__(verbose)
         
         def _on_step(self) -> bool:
+            # Mastery v2.6: Log raw speed and boundary distances to TensorBoard every step
+            infos = self.locals.get("infos", [{}])
+            speeds = [info.get("speed", 0.0) for info in infos]
+            dist_w = [info.get("dist_white", 0.0) for info in infos]
+            dist_y = [info.get("dist_yellow", 0.0) for info in infos]
+            
+            mean_speed = sum(speeds) / len(speeds)
+            mean_dist_w = sum(dist_w) / len(dist_w)
+            mean_dist_y = sum(dist_y) / len(dist_y)
+            
+            self.logger.record("rollout/speed_mps", mean_speed)
+            self.logger.record("rollout/dist_white_m", mean_dist_w)
+            self.logger.record("rollout/dist_yellow_m", mean_dist_y)
+
             if self.n_calls % 1000 == 0:
-                info = self.locals.get("infos", [{}])[0]
+                info = infos[0]
                 ep_rew = info.get("episode", {}).get("r", 0.0)
                 ep_len = info.get("episode", {}).get("l", 0)
-                print(f"[PROGRESS] Step {self.n_calls} | EpRew: {ep_rew:.2f} | EpLen: {ep_len}")
+                print(f"[PROGRESS] Step {self.n_calls} | EpRew: {ep_rew:.2f} | EpLen: {ep_len} | AvgSpeed: {mean_speed:.2f} m/s | DW: {mean_dist_w:.2f}m | DY: {mean_dist_y:.2f}m")
                 sys.stdout.flush()
 
             return True
