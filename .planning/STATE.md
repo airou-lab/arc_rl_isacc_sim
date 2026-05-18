@@ -28,6 +28,8 @@ The project has successfully verified the **Mastery Curriculum** with 32 environ
 1. [x] **15-01-PLAN**: Implement parameterized boundary termination and mastery reward weights.
 2. [x] **16-marl-transition**: Refactor singletons and establish multi-agent infrastructure.
 3. [ ] **16-02-SKRL**: Integrate SKRL backend for multi-agent policy training. (NEXT)
+4. [ ] **17-competitive-racing**: Overtaking and multi-agent interaction logic.
+5. [ ] **18-env-hardening**: Re-introduce terrain, distractors, and domain randomization.
 
 **RESUME HERE**
 - Milestone: Milestone 3
