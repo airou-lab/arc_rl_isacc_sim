@@ -1,6 +1,6 @@
 # External Integrations
 
-**Analysis Date:** 2026-05-11
+**Analysis Date:** 2026-05-16
 
 ## APIs & External Services
 
@@ -32,6 +32,10 @@
 
 ## Monitoring & Observability
 
+**Telemetry Logging:**
+- 12-element Telemetry Vector: Implemented in `arcproLab/mdp/observations.py` via `get_telemetry_vector`.
+- Telemetry Window: Real-time UI visualization in `arcproLab/mdp/visual_analytics.py`.
+
 **Error Tracking:**
 - None.
 
@@ -39,6 +43,7 @@
 - Tensorboard: Used for tracking training progress.
   - Config: `tensorboard_view_docker/`
 - Local logs: Stored in `logs/` or `arcproLab/logs/`.
+- Telemetry log: Dedicated logging via `relaunch_with_telemetry.sh`.
 
 ## CI/CD & Deployment
 
@@ -66,4 +71,4 @@
 
 ---
 
-*Integration audit: 2026-05-11*
+*Integration audit: 2026-05-16*

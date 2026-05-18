@@ -1,11 +1,11 @@
 # Technology Stack
 
-**Analysis Date:** 2026-05-11
+**Analysis Date:** 2026-05-16
 
 ## Languages
 
 **Primary:**
-- Python 3.12 - Used for environment configuration, RL logic, and simulation scripts.
+- Python 3.12 - Core language for environment configuration, RL logic, and simulation scripts.
 
 **Secondary:**
 - USD (Universal Scene Description) - Used for simulation assets and scene definitions in `openStreetUSD/`.
@@ -23,7 +23,7 @@
 ## Frameworks
 
 **Core:**
-- Isaac Lab (formerly Orbit) - Framework for reinforcement learning on Isaac Sim.
+- Isaac Lab - Framework for reinforcement learning on Isaac Sim.
 - PyTorch - Deep learning framework used for policies and observations.
 
 **Testing:**
@@ -38,7 +38,7 @@
 - `isaaclab` - Core simulation and RL environment framework.
 - `torch` - Neural network backend.
 - `numpy` - Numerical computations for waypoints and track management.
-- `sb3_contrib` - Recurrent PPO implementation and supporting types (`RNNStates`).
+- `sb3_contrib` - Recurrent PPO implementation and supporting types.
 
 **Infrastructure:**
 - `stable-baselines3` (SB3) - RL algorithm implementations.
@@ -49,11 +49,9 @@
 - Configured via Python classes using `isaaclab.utils.configclass`.
 - Key configs: `arcproLab/arcpro_env_cfg.py` and `arcproLab/arcpro_robot_cfg.py`.
 
-**MDP Logic (Mastery Calibration):**
+**MDP Logic (MARL & Mastery):**
+- **RoadManager:** Vectorized navigation state management (`(num_envs, num_agents)`).
 - **Hybrid Boundary Logic:** Implemented via `mdp/rewards.py` and `mdp/terminations.py`.
-  - Penalty Zone: 0.15m (Weight 1.0, -100.0 penalty).
-  - Hard-Reset Zone: 0.25m (Termination threshold).
-  - Margin: 10cm survival buffer between penalty and reset.
 
 **Build:**
 - `pytest.ini` for testing configuration in `arcproLab/policy_stack/`.
@@ -70,4 +68,4 @@
 
 ---
 
-*Stack analysis: 2026-05-11*
+*Stack analysis: 2026-05-16*

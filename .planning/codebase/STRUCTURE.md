@@ -1,6 +1,6 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-05-11
+**Analysis Date:** 2026-05-16
 
 ## Directory Layout
 
@@ -9,7 +9,8 @@ arcproLab/
 ├── assets/                 # Robot and environment USD assets
 ├── mdp/                    # MDP logic (observations, rewards, terminations)
 │   ├── road_manager.py     # Multi-agent navigation state management
-│   └── track_manager.py    # Track geometry and boundary management
+│   ├── track_manager.py    # Track geometry and boundary management
+│   └── visual_analytics.py # Telemetry UI and visual monitoring
 ├── policy_stack/           # RL Framework
 │   ├── agent/              # MARL arbitration and coordination logic
 │   ├── policies/           # Neural network architectures
@@ -19,6 +20,7 @@ arcproLab/
 └── models/                 # Trained model checkpoints
 openStreetUSD/              # USD scene files and track definitions
 .planning/                  # Project roadmap and codebase maps
+relaunch_with_telemetry.sh  # Operational script for telemetry logging
 ```
 
 ## Directory Purposes
@@ -26,7 +28,7 @@ openStreetUSD/              # USD scene files and track definitions
 **arcproLab/mdp/:**
 - Purpose: Markov Decision Process components for Isaac Lab.
 - Contains: Logic for calculating observations, rewards, and environment reset events.
-- Key files: `road_manager.py`, `track_manager.py`, `rewards.py`, `observations.py`.
+- Key files: `road_manager.py`, `track_manager.py`, `rewards.py`, `observations.py`, `visual_analytics.py`.
 
 **arcproLab/policy_stack/agent/:**
 - Purpose: Multi-agent coordination and arbitration.
@@ -45,7 +47,7 @@ openStreetUSD/              # USD scene files and track definitions
 
 **Entry Points:**
 - `arcproLab/scripts/train_policy.py`: Primary training script.
-- `arcproLab/policy_stack/train_policy_ros2.py`: ROS2-compatible training script.
+- `relaunch_with_telemetry.sh`: Resume training with telemetry logging.
 
 **Configuration:**
 - `arcproLab/arcpro_env_cfg.py`: Environment and scene configuration.
@@ -82,9 +84,8 @@ openStreetUSD/              # USD scene files and track definitions
 
 **trash/:**
 - Purpose: Contains deprecated files like `road_graph.py.bak`.
-- Generated: No.
 - Committed: No (ignored by .gitignore).
 
 ---
 
-*Structure analysis: 2026-05-11*
+*Structure analysis: 2026-05-16*
