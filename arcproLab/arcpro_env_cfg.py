@@ -138,11 +138,12 @@ class ActionCfg:
 
 @configclass
 class RewardCfg:
-    # Anti-Suicide: Massive penalty for crashing/resetting (Priority 1)
-    terminating = RewTerm(func=mdp_rew.termination_penalty, weight=50.0)
+    # Anti-Suicide: Balanced penalty for crashing/resetting (Priority 1)
+    # Reduced from 50.0 to 10.0 to prevent "cowardly" crawling
+    terminating = RewTerm(func=mdp_rew.termination_penalty, weight=10.0)
     
-    # Performance: Momentum
-    speed = RewTerm(func=mdp_rew.speed_reward, weight=10.0)
+    # Performance: Momentum (Increased from 10.0 to 50.0)
+    speed = RewTerm(func=mdp_rew.speed_reward, weight=50.0)
     # Precision: Lane centering
     lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=10.0)
     # Force the agent to move
