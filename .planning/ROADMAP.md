@@ -20,17 +20,17 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 ## Milestone 2: Autonomous Urban Navigation (v2.0) - COMPLETE
 *Focus: Graph-based routing, intersection logic, and multi-agent coordination.*
 
-- [x] [Phase 11: Intersection Navigation](phases/11-intersection-navigation/SUMMARY.md) - Retrained policy at 1x and implemented alignment-aware intersection gate permeability.
-- [x] [Phase 12: Autonomous Navigation](phases/12-autonomous-navigation/SUMMARY.md) - Implement turning missions and proximity-based RoadGraph triggers for intersection decision-making.
-- [x] [Phase 13: Live Policy GUI](phases/13-live-policy-gui/SUMMARY.md) - Develop a standalone dashboard to stream telemetry, vision debugging, and policy transparency.
+- [x] **Phase 11: Intersection Navigation** - Retrained policy at 1x and implemented alignment-aware intersection gate permeability.
+- [x] **Phase 12: Autonomous Navigation** - Implement turning missions and proximity-based RoadGraph triggers for intersection decision-making.
+- [x] **Phase 13: Live Policy GUI** - Develop a standalone dashboard to stream telemetry, vision debugging, and policy transparency.
 
 ## Milestone 3: HD Perception & Production Hardening (v2.5) - ACTIVE
 *Focus: High-resolution vision, VRAM-optimized backbones, and production-scale training.*
 
-- [x] [Phase 14: Procedural Multi-Agent Scaffolding](phases/14-01-procedural-multi-agent-scaffolding/SUMMARY.md) - Physically scaled USD geometry to 1x and established production training baseline for multi-agent support.
-- [x] [Phase 15: HD Vision ResNet](phases/15-hd-vision-resnet/SUMMARY.md) - Research into ResNet-18 vs Custom CNN and uint8 optimization.
-- [x] [Phase 15: Mastery Curriculum](phases/15-mastery-curriculum/SUMMARY.md) - Single-Agent Lane-Following Mastery. Achieve full-lap capability (6000+ steps) using a dynamic boundary curriculum and memory-optimized HD vision.
-- [ ] [Phase 16: MARL Transition](phases/16-marl-transition/SUMMARY.md) - **ACTIVE** - Refactor singletons to vectorized managers and establish multi-agent scene config.
+- [x] **Phase 14: Procedural Multi-Agent Scaffolding** - Physically scaled USD geometry to 1x and established production training baseline for multi-agent support.
+- [x] **Phase 15: HD Vision ResNet** - Research into ResNet-18 vs Custom CNN and uint8 optimization.
+- [x] **Phase 15: Mastery Curriculum** - Single-Agent Lane-Following Mastery. Achieve full-lap capability (6000+ steps) using a dynamic boundary curriculum and memory-optimized HD vision.
+- [ ] **Phase 16: MARL Transition** - **ACTIVE** - Refactor singletons to vectorized managers and establish multi-agent scene config.
 - [ ] **Phase 17: Smart Intersection Infrastructure** - Implement intersection controllers (V2I/V2V) and dynamic traffic signaling in the USD.
 - [ ] **Phase 18: Coordination & Yielding Logic** - Develop social-norm based navigation (e.g., yielding at stop signs, 4-way stop logic) between Two Cars.
 - [ ] **Phase 19: MARL Training & Evaluation** - Train collaborative policies (MAPPO/IPPO) for high-density intersection throughput.
