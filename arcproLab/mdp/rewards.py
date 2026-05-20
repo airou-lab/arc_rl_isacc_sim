@@ -11,7 +11,8 @@ def speed_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntity
     """Rewards forward speed, heavily penalizes reverse driving."""
     asset = env.scene[asset_cfg.name]
     speed = asset.data.root_lin_vel_b[:, 0]
-    reward = torch.where(speed > 0, speed * 0.5, torch.tensor(-2.0, device=env.device))
+    # Penalize backwards driving 10x more than rewards for forward driving
+    reward = torch.where(speed > 0, speed, speed * 10.0)
     return reward
 
 def termination_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:

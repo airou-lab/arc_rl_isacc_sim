@@ -203,6 +203,8 @@ class CombinedDriveAction(GroupedJointAction):
 
     def process_actions(self, actions: torch.Tensor):
         # actions is (num_envs, 2) -> [throttle, brake]
+        # Explicitly clamp to [0, 1] to respect the action space
+        actions = torch.clamp(actions, 0.0, 1.0)
         self._raw_actions[:] = actions
         
         throttle = actions[:, 0]

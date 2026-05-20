@@ -83,9 +83,10 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     env.extras["dist_y"] = dist_y
     env.extras["dist_w"] = dist_w
     
-    # Lateral and Heading Error (Mapped to indices 8 and 9)
-    obs[:, 8] = lat_err
-    obs[:, 9] = head_err
+    # Vision-only Mandate: Mask ground-truth errors in the policy observation
+    # This forces the ResNet-18 to learn features from the camera
+    obs[:, 8] = 0.0 # MASKED lat_err
+    obs[:, 9] = 0.0 # MASKED head_err
     
     # Index 10: Path Curvature (Kappa)
     obs[:, 10] = kappa

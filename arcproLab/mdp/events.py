@@ -19,13 +19,13 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     asset = env.scene[asset_cfg.name]
     num_resets = len(env_ids)
     
-    # Base Target: Lane Center (Sync with -16.25 centerline)
-    base_spawn_x, base_spawn_y = -16.25, 5.50
+    # Base Target: Lane Center (Sync with -16.2 centerline)
+    base_spawn_x, base_spawn_y = -16.18, 5.30
     base_spawn_yaw = -1.5708 # Face South
     
     # 1. Domain Randomization (Hardening)
-    # Randomize X-offset: ±8cm (within the 13cm lethal margin)
-    rand_offset_x = (torch.rand(num_resets, device=env.device) * 0.16) - 0.08
+    # Randomize X-offset: ±4cm (tighter for initial learning)
+    rand_offset_x = (torch.rand(num_resets, device=env.device) * 0.08) - 0.04
     # Randomize Heading: ±5 degrees (~0.08 rad)
     rand_yaw = (torch.rand(num_resets, device=env.device) * 0.16) - 0.08
     # Randomize Initial Velocity: 0.0 to 1.5 m/s (force handling dynamic starts)

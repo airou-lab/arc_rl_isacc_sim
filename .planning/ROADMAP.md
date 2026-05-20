@@ -42,4 +42,4 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 - [ ] **Phase 21: Sim2Real Deployment** - Implement the self-driving policy on physical hardware with real-world perception bridges.
 
 ---
-*Roadmap updated: 2026-05-11*
+*Roadmap updated: 2026-05-19*

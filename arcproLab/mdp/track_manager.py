@@ -365,10 +365,9 @@ class TrackManager:
         lat_err = raw_lat_err - target_lane_offset
         head_err = yaw - wp_yaw
         
+        # Normalize to [-pi, pi]
+        # This prevents the 180-degree 'flip' that allowed backwards driving to look correct
         head_err = torch.atan2(torch.sin(head_err), torch.cos(head_err))
-        import math
-        head_err = torch.where(head_err > math.pi/2, head_err - math.pi, head_err)
-        head_err = torch.where(head_err < -math.pi/2, head_err + math.pi, head_err)
         
         return lat_err, head_err, kappa
 

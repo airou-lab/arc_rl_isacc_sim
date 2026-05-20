@@ -114,7 +114,7 @@ class ObservationCfg:
     
     @configclass
     class VisualCfg(ObservationGroupCfg):
-        tiled_camera = ObsTerm(func=mdp.image, params={"sensor_cfg": SceneEntityCfg("tiled_camera"), "normalize": False})
+        tiled_camera = ObsTerm(func=mdp.image, params={"sensor_cfg": SceneEntityCfg("tiled_camera"), "normalize": True})
     
     visual: VisualCfg | None = VisualCfg()
 
@@ -132,24 +132,24 @@ class ActionCfg:
     drive = arcpro_actions.CombinedDriveActionCfg(
         asset_name="robot", 
         joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
-        scale=15.0,
+        scale=-40.0,
         offset=0.0
     )
 
 @configclass
 class RewardCfg:
-    # Anti-Suicide: Balanced penalty for crashing/resetting (Priority 1)
-    # Reduced from 50.0 to 10.0 to prevent "cowardly" crawling
-    terminating = RewTerm(func=mdp_rew.termination_penalty, weight=10.0)
+    # Anti-Suicide: Massive penalty to discourage 'sprint and crash'
+    # A crash now costs -25,000 points (Weight 50.0 * penalty -500)
+    terminating = RewTerm(func=mdp_rew.termination_penalty, weight=50.0)
     
-    # Performance: Momentum (Increased from 10.0 to 50.0)
-    speed = RewTerm(func=mdp_rew.speed_reward, weight=50.0)
+    # Performance: Momentum
+    speed = RewTerm(func=mdp_rew.speed_reward, weight=100.0)
     # Precision: Lane centering
     lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=10.0)
-    # Force the agent to move
+    # Force movement: Standing still for 1s now costs as much as a crash (-25,000 points)
     stationary = RewTerm(
-        func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.5, -20.0, 0.0),
-        weight=2.0
+        func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.5, -100.0, 0.0),
+        weight=5.0
     )
     heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
     smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=30.0)
