@@ -65,9 +65,9 @@ F1Tenth at 1.0x scale: 0.45m width, 20kg chassis, 1kg wheels. USD: `F1Tenth_Metr
 
 ### Observation Vector Layout
 
-Two observation groups are registered in `ObservationCfg` (`arcproLab/arcpro_env_cfg.py:123-134`).
+One observation group `policy` is registered in `ObservationCfg` (`arcproLab/arcpro_env_cfg.py`), containing two terms: `telemetry` and `tiled_camera`. The group name `policy` is what IsaacLab's `Sb3VecEnvWrapper` reads (it does `obs_dict["policy"]`); having both terms inside means the camera RGB actually reaches the PPO network rather than being spawn-only.
 
-**`vec` group — 12-D telemetry**, built by `get_telemetry_vector` (`arcproLab/mdp/observations.py`).
+**`policy.telemetry` — 12-D telemetry**, built by `get_telemetry_vector` (`arcproLab/mdp/observations.py`).
 - Shape: `(num_envs, 12)`, dtype: `torch.float32`, allocated on `env.device`.
 - V1 reunification (2026-05-25): layout conforms to the policy repo's `TELEMETRY_INDICES`. The sim has no Worker / Scheduler, so slots 0/1 ship `0.0` (a checkpoint trained against `IsaacDirectEnv` reads slot 0 as `turn_token ∈ {-1, 0, 1}` — `rel_x` would be off-distribution).
 - All values are raw metric / radian (see `docs/claude/sim-conventions.md`).
@@ -89,14 +89,14 @@ Two observation groups are registered in `ObservationCfg` (`arcproLab/arcpro_env
 
 Raw `lat_err` / `head_err` from `TrackManager.compute_errors` still flow into `env.extras` for the reward function. NaNs in the obs vector are zeroed before return.
 
-**`visual` group — camera RGB**, produced by `isaaclab.envs.mdp.image(..., normalize=True)` (`arcproLab/arcpro_env_cfg.py:132`), sourced from the `tiled_camera` sensor (`arcproLab/arcpro_env_cfg.py:88-98`).
+**`policy.tiled_camera` — camera RGB**, produced by `get_image_uint8` (`arcproLab/mdp/observations.py`) which wraps `isaaclab.envs.mdp.image(..., normalize=False)` and ensures `uint8` dtype, sourced from the `tiled_camera` sensor (`arcproLab/arcpro_env_cfg.py`).
 - Shape: `(num_envs, 224, 224, 3)` (H, W, C — Isaac Lab `TiledCamera` convention).
 - dtype: `torch.uint8`, values in `[0, 255]` (V1 reunification: matches policy `Box(0, 255, uint8)` declaration, OM 1.3-B). Produced by `mdp/observations.py::get_image_uint8`.
 - Resolution `224 × 224`, `data_types=["rgb"]`, horizontal aperture 2.65, focal length 1.93 → ≈ 69° horizontal FOV.
 - Camera offset relative to chassis: `(0.28, 0.0, 0.16) m`, identity rotation, `convention="parent"`.
-- The visual group and the camera sensor are both set to `None` when `enable_cameras=False` (`arcpro_env_cfg.py:213-215`).
+- The `tiled_camera` term inside the policy group and the camera sensor are both set to `None` when `enable_cameras=False` (`arcpro_env_cfg.py` `__post_init__`).
 
-`Sb3VecEnvWrapper` flattens the dict into a single vector before the SB3 `MlpPolicy` sees it (`scripts/train_policy.py:63, 84`). With cameras enabled, that is `12 + 224·224·3 = 150 540` values per env per step.
+`Sb3VecEnvWrapper` passes the `policy` group through as a Dict (with `concatenate_terms=False` on `PolicyCfg`); SB3's `MultiInputPolicy` consumes the Dict natively — NatureCNN on the `(224, 224, 3)` uint8 image (channels-first transpose handled by the wrapper) and an MLP on the 12-D telemetry, fused for the actor/critic heads (`scripts/train_policy.py`).
 
 ### Action Vector Layout
 

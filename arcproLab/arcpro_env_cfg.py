@@ -123,18 +123,24 @@ class ARCProSceneCfg(InteractiveSceneCfg):
 @configclass
 class ObservationCfg:
     @configclass
-    class VecCfg(ObservationGroupCfg):
+    class PolicyCfg(ObservationGroupCfg):
+        # concatenate_terms=False keeps telemetry (1-D) and tiled_camera (3-D)
+        # as separate keys in the obs dict; IsaacLab would otherwise try to
+        # torch.stack their shape descriptors and fail. SB3's MultiInputPolicy
+        # consumes a Dict space natively (CNN extractor on image, MLP on vec).
+        concatenate_terms = False
         telemetry = ObsTerm(func=mdp_obs.get_telemetry_vector)
-    vec: VecCfg = VecCfg()
-
-    @configclass
-    class ImageCfg(ObservationGroupCfg):
         tiled_camera = ObsTerm(
             func=mdp_obs.get_image_uint8,
             params={"sensor_cfg": SceneEntityCfg("tiled_camera")},
+            # clip sets the gym.spaces.Box low/high used by SB3's image-space
+            # detection (which requires bounds of either [-1,1] or [0,255]).
+            # Integer literals so torch.clip_ on the uint8 tensor doesn't try
+            # to cast float bounds to uint8 in-place (errors out).
+            clip=(0, 255),
         )
 
-    image: ImageCfg | None = ImageCfg()
+    policy: PolicyCfg = PolicyCfg()
 
 import mdp.actions as arcpro_actions
 
@@ -217,5 +223,5 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
         self.viewer.camera_follow_prim_path = None
         
         if not self.enable_cameras:
-            self.observations.image = None
+            self.observations.policy.tiled_camera = None
             self.scene.tiled_camera = None

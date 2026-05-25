@@ -81,9 +81,12 @@ def main():
             device="cuda"
         )
     else:
-        # Note: Using MlpPolicy as Sb3VecEnvWrapper currently flattens observations.
+        # MultiInputPolicy handles the Dict observation (telemetry + tiled_camera)
+        # natively: NatureCNN feature extractor on the image, MLP on the
+        # 12-D telemetry, fused for the actor/critic heads. Requires
+        # PolicyCfg.concatenate_terms=False in arcpro_env_cfg.py.
         model = PPO(
-            "MlpPolicy",
+            "MultiInputPolicy",
             env,
             verbose=1,
             learning_rate=3e-4,

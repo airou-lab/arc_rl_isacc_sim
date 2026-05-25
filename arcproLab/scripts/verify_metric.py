@@ -100,14 +100,12 @@ def main():
             simulation_app.update()
 
         with torch.no_grad():
-            # Get camera observations
+            # Get camera observations from the policy group (post obs-group
+            # restructuring: tiled_camera lives inside the policy dict now).
             images = None
-            if "image" in obs:
-                v_data = obs["image"]
-                if isinstance(v_data, dict):
-                    images = v_data.get("tiled_camera")
-                else:
-                    images = v_data
+            policy_obs = obs.get("policy", {})
+            if isinstance(policy_obs, dict):
+                images = policy_obs.get("tiled_camera")
 
             if images is not None:
                 # Action shape is (num_envs, 3): [steer, throttle, brake].
