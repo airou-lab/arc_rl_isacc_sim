@@ -43,7 +43,10 @@ def main():
     
     # get track manager
     tm = get_track_manager(device=env.device)
-    
+    # ensure_synced collects marker points from the USD stage and populates
+    # tm.waypoints with the dummy seed entry. Without this, tm.waypoints is None.
+    tm.ensure_synced()
+
     print(f"[Verify] Simulation started with {env.num_envs} environments.")
     print(f"[Verify] Track Manager has {len(tm.waypoints)} waypoints.")
     
