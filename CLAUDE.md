@@ -49,7 +49,7 @@ The Isaac Lab manager system dispatches to these modules:
 - `observations.py` — 12D telemetry (PVP-masked layout, V1 reunification). Optional camera RGB (224×224×3, uint8).
 - `rewards.py` — Speed (5.0×), lateral error (5.0×), heading alignment (2.0×), action smoothness (−1.0×), stationary penalty (−5.0).
 - `terminations.py` — Height bounds, white-line contact (0.1m threshold), stagnation (500 steps), FOV visibility.
-- `actions.py` — `GroupedJointPositionAction` (steering) and `GroupedJointVelocityAction` (throttle, 0–60 rad/s).
+- `actions.py` — `GroupedJointPositionAction` (steering) and `ThrottleBrakeVelocityAction` (throttle + brake folded into a 2-D term; brake multiplicatively attenuates throttle, matching the policy's `isaac_direct_env` semantics).
 - `track_manager.py` — GPU-accelerated waypoint and lane-boundary tracking using USD marker detection. Critical for computing lateral/heading errors.
 - `events.py` — Reset and initialization logic (robot pose, joint states).
 - `spawner.py` — Asset spawning utilities.
@@ -100,19 +100,19 @@ Raw `lat_err` / `head_err` from `TrackManager.compute_errors` still flow into `e
 
 ### Action Vector Layout
 
-Three action terms in `ActionCfg` (`arcproLab/arcpro_env_cfg.py`), implemented by `GroupedJointAction` / `NoOpBrakeAction` (`arcproLab/mdp/actions.py`).
+Two action terms in `ActionCfg` (`arcproLab/arcpro_env_cfg.py`), implemented by `GroupedJointPositionAction` (steering) and `ThrottleBrakeVelocityAction` (throttle + brake) in `arcproLab/mdp/actions.py`.
 
-- Shape: `(num_envs, 3)`, dtype: `torch.float32`. V1 reunification: brake channel declared to match policy contract; actuator wiring deferred (OM 2-B).
-- Action layout: `[steering, throttle, brake]`. Each term has `action_dim=1`. Steering and throttle broadcast across their joint groups; brake is absorbed and discarded.
+- Shape: `(num_envs, 3)`, dtype: `torch.float32`. V1 reunification: brake channel matches policy contract and now actuates as a multiplicative throttle derate. Independent brake torque is still deferred to V2.
+- Action layout: `[steering, throttle, brake]`. Steering is 1-D and broadcasts across the two steering joints; throttle+brake is a 2-D term that fuses into one wheel velocity command per drive joint as `vel = 60.0 * throttle * (1 - brake)`.
 
 | Idx | Name      | Range          | Unit (post-scale)                      | Class                                                       | Joints driven                                                                            |
 | --- | --------- | -------------- | -------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | 0   | steering  | `[−1.0, +1.0]` | rad (joint position target, scale 1.0) | `GroupedJointPositionAction`                                | `Joint_Steer_L`, `Joint_Steer_R`                                                          |
 | 1   | throttle  | `[ 0.0, +1.0]` | rad/s (joint velocity target, scale 60.0) | `GroupedJointVelocityAction`                              | `Joint_Drive_FL`, `Joint_Drive_FR`, `Joint_Drive_RL`, `Joint_Drive_RR`                    |
-| 2   | brake     | `[ 0.0, +1.0]` | — (no-op; brake actuator not wired)    | `NoOpBrakeAction`                                           | none                                                                                      |
+| 2   | brake     | `[ 0.0, +1.0]` | derate factor `(1 - brake)` applied to throttle command | `ThrottleBrakeVelocityAction` (folded into throttle term)  | `Joint_Drive_FL`, `Joint_Drive_FR`, `Joint_Drive_RL`, `Joint_Drive_RR`                    |
 
 - Steering bound comes from `GroupedJointAction.action_space` default (`mdp/actions.py:46-58`).
-- Throttle bound comes from `clip={"throttle": (0.0, 1.0)}` on the cfg (`arcpro_env_cfg.py:145`) — non-negative on purpose: positive ω on drive joints = forward motion given the wheel-axis orientation in `F1Tenth_Metric.usd`.
+- Throttle and brake bounds come from per-channel clipping inside `ThrottleBrakeVelocityAction.process_actions` (`mdp/actions.py`). Both channels are clamped to `[0, 1]`; throttle is non-negative on purpose (positive ω on drive joints = forward motion given the wheel-axis orientation in `F1Tenth_Metric.usd`).
 - Final command sent to PhysX: `set_joint_position_target(scale·a + offset)` for steering, `set_joint_velocity_target(scale·a + offset)` for throttle (`mdp/actions.py:85-105`).
 
 ### Checkpoint Format

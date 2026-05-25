@@ -141,15 +141,15 @@ import mdp.actions as arcpro_actions
 @configclass
 class ActionCfg:
     steering = arcpro_actions.GroupedJointPositionActionCfg(asset_name="robot", joint_names=["Joint_Steer_L", "Joint_Steer_R"], scale=1.0)
-    throttle = arcpro_actions.GroupedJointVelocityActionCfg(
+    # Throttle + brake folded into one 2-D term. Outer action vector remains
+    # [steer (1), throttle (1), brake (1)] = 3 channels, matching the policy
+    # repo's (steer, throttle, brake) contract. Brake derates throttle:
+    # wheel_vel = 60.0 * throttle * (1 - brake), same as policy's isaac_direct_env.
+    throttle = arcpro_actions.ThrottleBrakeVelocityActionCfg(
         asset_name="robot",
         joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"],
         scale=60.0,
-        clip={"throttle": (0.0, 1.0)} # Force forward motion only
     )
-    # Brake channel declared so the sim action space matches the policy repo's
-    # (steer, throttle, brake) contract. Actuator wiring deferred per OM 2-B.
-    brake = arcpro_actions.NoOpBrakeActionCfg(asset_name="robot")
 
 @configclass
 class RewardCfg:
