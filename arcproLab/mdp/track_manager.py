@@ -92,11 +92,35 @@ class TrackManager:
     def compute_marker_distances(self, pos: torch.Tensor):
         """Returns distance to closest yellow and white markers."""
         self.ensure_synced()
-        
+
         dist_y = torch.min(torch.cdist(pos[:, :2], self.yellow_tensor), dim=1)[0]
         dist_w = torch.min(torch.cdist(pos[:, :2], self.white_tensor), dim=1)[0]
-        
+
         return dist_y, dist_w
+
+    def compute_marker_distances_with_positions(self, pos: torch.Tensor):
+        """Same as compute_marker_distances but also returns the XY position of
+        the closest yellow and white marker per env. Useful for debug logging
+        at termination time.
+
+        Returns:
+            dist_y, dist_w        -- shape (N,)
+            closest_y, closest_w  -- shape (N, 2) world XY (local frame, since
+                                     `pos` is already env_origin-subtracted by
+                                     the caller)
+        """
+        self.ensure_synced()
+
+        y_dists = torch.cdist(pos[:, :2], self.yellow_tensor)  # (N, Ny)
+        w_dists = torch.cdist(pos[:, :2], self.white_tensor)   # (N, Nw)
+
+        dist_y, idx_y = torch.min(y_dists, dim=1)
+        dist_w, idx_w = torch.min(w_dists, dim=1)
+
+        closest_y = self.yellow_tensor[idx_y]  # (N, 2)
+        closest_w = self.white_tensor[idx_w]   # (N, 2)
+
+        return dist_y, dist_w, closest_y, closest_w
 
     def refresh_visuals(self):
         try:
