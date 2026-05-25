@@ -103,3 +103,56 @@ class GroupedJointVelocityActionCfg(GroupedJointActionCfg):
 class GroupedJointVelocityAction(GroupedJointAction):
     def apply_actions(self):
         self._asset.set_joint_velocity_target(self._processed_actions, joint_ids=self._joint_ids)
+
+
+@dataclass
+class NoOpBrakeActionCfg(ActionTermCfg):
+    """Configuration for a no-op brake action term.
+
+    Declares a width-1 action channel that is clamped to [0, 1] and discarded.
+    Lets the sim expose the policy repo's 3-channel action contract
+    (steer, throttle, brake) before the actual brake actuator is wired
+    (OM 2-B deferred to V2). asset_name is required by the action manager's
+    asset resolution but the term touches no joints.
+    """
+    def __post_init__(self):
+        if self.class_type is None:
+            self.class_type = NoOpBrakeAction
+
+
+class NoOpBrakeAction(ActionTerm):
+    """Absorbs a single brake channel and discards it.
+
+    The brake channel is accepted into the action vector so policies trained
+    against a 3-D action space don't shape-mismatch the sim, but no joint
+    command is emitted.
+    """
+    cfg: NoOpBrakeActionCfg
+
+    def __init__(self, cfg: NoOpBrakeActionCfg, env: ManagerBasedEnv) -> None:
+        super().__init__(cfg, env)
+        self._raw_actions = torch.zeros(self.num_envs, 1, device=self.device)
+        self._processed_actions = torch.zeros(self.num_envs, 1, device=self.device)
+
+    @property
+    def action_dim(self) -> int:
+        return 1
+
+    @property
+    def action_space(self) -> gym.Space:
+        return gym.spaces.Box(low=0.0, high=1.0, shape=(1,))
+
+    @property
+    def raw_actions(self) -> torch.Tensor:
+        return self._raw_actions
+
+    @property
+    def processed_actions(self) -> torch.Tensor:
+        return self._processed_actions
+
+    def process_actions(self, actions: torch.Tensor):
+        self._raw_actions[:] = actions
+        self._processed_actions[:] = torch.clamp(actions, 0.0, 1.0)
+
+    def apply_actions(self):
+        pass

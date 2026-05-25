@@ -22,10 +22,10 @@ def main():
     env_cfg.scene.tiled_camera = None # Force remove from scene
     
     # Disable all observation groups that might use the camera
-    if hasattr(env_cfg.observations, "visual"):
-        env_cfg.observations.visual = None
-    if hasattr(env_cfg.observations.policy, "visual"):
-        env_cfg.observations.policy.visual = None
+    if hasattr(env_cfg.observations, "image"):
+        env_cfg.observations.image = None
+    if hasattr(env_cfg.observations.vec, "image"):
+        env_cfg.observations.vec.image = None
         
     env = ManagerBasedRLEnv(cfg=env_cfg)
     

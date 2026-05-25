@@ -20,7 +20,7 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     # Target Waypoint: Centerline (Yellow Line)
     # 8x pos: (-130.03, 44.48) -> 1x pos: (-16.25375, 5.56)
     local_spawn_x, local_spawn_y = -16.25375, 5.56
-    spawn_yaw = -1.5708 # -90 degrees (Face South)
+    spawn_yaw = 1.5708 # +90 degrees (heading +Y); conforms to policy IsaacDirectConfig.spawn_yaw (OM 3.3-A)
     
     # Get environment origins
     env_origins = env.scene.env_origins[env_ids]

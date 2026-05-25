@@ -102,34 +102,32 @@ def main():
         with torch.no_grad():
             # Get camera observations
             images = None
-            if "visual" in obs:
-                v_data = obs["visual"]
+            if "image" in obs:
+                v_data = obs["image"]
                 if isinstance(v_data, dict):
                     images = v_data.get("tiled_camera")
                 else:
-                    images = v_data 
-                
+                    images = v_data
+
             if images is not None:
-                # Action shape is 6 (2 steering + 4 throttle)
-                actions = torch.zeros((env.num_envs, 6), device=env.device)
-                
+                # Action shape is (num_envs, 3): [steer, throttle, brake].
+                # The action manager broadcasts steering to L/R steer joints and
+                # throttle (scale 60.0) to FL/FR/RL/RR drive joints. Brake is a
+                # no-op channel until OM 2-B lands.
+                actions = torch.zeros((env.num_envs, 3), device=env.device)
+
+                # Throttle scalar in [0, 1]; action manager scales to rad/s.
+                # 40 rad/s ~ 2.0 m/s wheel speed -> throttle = 40 / 60 ~ 0.67.
+                throttle_cmd = 0.67
+
                 for i in range(env.num_envs):
                     img = images[i]
                     prediction = policy.predict(img)
-                    steering, throttle = policy.get_action(prediction)
-                    
-                    # Target velocity (rad/s)
-                    target_rad_s = 40.0 # ~2.0 m/s
-                    
-                    # Steering (Indices 0, 1) -> Joint_Steer_L, Joint_Steer_R
-                    actions[i, 0] = steering
-                    actions[i, 1] = steering
-                    
-                    # Throttle (Indices 2, 3, 4, 5) -> Joint_Drive_FL, FR, RL, RR
-                    actions[i, 2] = -target_rad_s # FL
-                    actions[i, 3] = -target_rad_s # FR
-                    actions[i, 4] = -target_rad_s # RL
-                    actions[i, 5] = -target_rad_s # RR
+                    steering, _throttle_legacy = policy.get_action(prediction)
+
+                    actions[i, 0] = steering        # steer
+                    actions[i, 1] = throttle_cmd    # throttle
+                    actions[i, 2] = 0.0             # brake (unwired)
                     
                     # Telemetry for env 0
                     if i == 0:
@@ -158,11 +156,11 @@ def main():
                 # step environment
                 obs, _, _, _, _ = env.step(actions)
             else:
-                # Fallback: Just drive forward if no camera
-                actions = torch.zeros((env.num_envs, 6), device=env.device)
-                actions[:, 2:] = -40.0
+                # Fallback: drive forward if no camera. Action layout (steer, throttle, brake).
+                actions = torch.zeros((env.num_envs, 3), device=env.device)
+                actions[:, 1] = 0.67  # ~40 rad/s wheel speed
                 obs, _, _, _, _ = env.step(actions)
-                
+
                 if count % 20 == 0:
                     print(f"Step {count:4d} | Driving Blind (No visual obs)")
         

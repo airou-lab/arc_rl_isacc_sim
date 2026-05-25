@@ -42,20 +42,20 @@ def main():
     obs, _, _, _, _ = env.step(torch.zeros(env.action_manager.action.shape, device=env.device))
     
     # Observation shape check:
-    # Based on arcpro_env_cfg, 'visual' is (90, 160, 3)
-    if "visual" in env.observation_manager.compute():
-        img_tensor = env.observation_manager.compute()["visual"][0].cpu()
-        # Scale to 0-255 if needed, but Isaac Lab usually returns 0-255 uint8 or 0-1 float
+    # Based on arcpro_env_cfg, 'image' is (224, 224, 3) uint8
+    if "image" in env.observation_manager.compute():
+        img_tensor = env.observation_manager.compute()["image"][0].cpu()
+        # Sim now ships uint8 [0, 255]; legacy float32 [0, 1] handled defensively.
         if img_tensor.dtype == torch.float32:
             img_tensor = (img_tensor * 255).byte()
-        
+
         img_np = img_tensor.numpy()
         img = im.fromarray(img_np)
         img_path = os.path.join(os.path.dirname(__file__), "agent_view.png")
         img.save(img_path)
         print(f"[Info] Saved agent camera view to: {img_path}")
     else:
-        print("[Error] 'visual' observation group not found.")
+        print("[Error] 'image' observation group not found.")
 
     # 2. Measure Roadmark Mesh Positions
     # We look for roadmark meshes under env_0

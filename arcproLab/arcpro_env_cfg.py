@@ -94,7 +94,7 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         ),
         # 8x pos: (2.24, 0.0, 1.28) -> 1x pos: (0.28, 0.0, 0.16)
         offset=TiledCameraCfg.OffsetCfg(pos=(0.28, 0.0, 0.16), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
-        data_types=["rgb"], width=160, height=90,
+        data_types=["rgb"], width=224, height=224,
     )
 
     # Camera Visual Helper (Invisible to sensors, visible in GUI)
@@ -123,15 +123,18 @@ class ARCProSceneCfg(InteractiveSceneCfg):
 @configclass
 class ObservationCfg:
     @configclass
-    class PolicyCfg(ObservationGroupCfg):
+    class VecCfg(ObservationGroupCfg):
         telemetry = ObsTerm(func=mdp_obs.get_telemetry_vector)
-    policy: PolicyCfg = PolicyCfg()
-    
+    vec: VecCfg = VecCfg()
+
     @configclass
-    class VisualCfg(ObservationGroupCfg):
-        tiled_camera = ObsTerm(func=mdp.image, params={"sensor_cfg": SceneEntityCfg("tiled_camera"), "normalize": True})
-    
-    visual: VisualCfg | None = VisualCfg()
+    class ImageCfg(ObservationGroupCfg):
+        tiled_camera = ObsTerm(
+            func=mdp_obs.get_image_uint8,
+            params={"sensor_cfg": SceneEntityCfg("tiled_camera")},
+        )
+
+    image: ImageCfg | None = ImageCfg()
 
 import mdp.actions as arcpro_actions
 
@@ -139,11 +142,14 @@ import mdp.actions as arcpro_actions
 class ActionCfg:
     steering = arcpro_actions.GroupedJointPositionActionCfg(asset_name="robot", joint_names=["Joint_Steer_L", "Joint_Steer_R"], scale=1.0)
     throttle = arcpro_actions.GroupedJointVelocityActionCfg(
-        asset_name="robot", 
-        joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
+        asset_name="robot",
+        joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"],
         scale=60.0,
         clip={"throttle": (0.0, 1.0)} # Force forward motion only
     )
+    # Brake channel declared so the sim action space matches the policy repo's
+    # (steer, throttle, brake) contract. Actuator wiring deferred per OM 2-B.
+    brake = arcpro_actions.NoOpBrakeActionCfg(asset_name="robot")
 
 @configclass
 class RewardCfg:
@@ -211,5 +217,5 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
         self.viewer.camera_follow_prim_path = None
         
         if not self.enable_cameras:
-            self.observations.visual = None
+            self.observations.image = None
             self.scene.tiled_camera = None

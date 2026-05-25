@@ -9,7 +9,7 @@ def debug_termination(env: ManagerBasedRLEnv) -> torch.Tensor:
     chassis_crash = torch.any(forces > 100.0, dim=1)
     
     # 2. Roadmark hit
-    obs = env.observation_manager.compute()["policy"]
+    obs = env.observation_manager.compute()["vec"]
     lat_err = torch.abs(obs[:, 8])
     marker_hit = lat_err > 0.5
     
