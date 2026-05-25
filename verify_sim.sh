@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Configuration
-ISAACLAB_PATH="/home/arika/IsaacLab/isaaclab.sh"
-PROJECT_DIR="/home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim"
+ISAACLAB_PATH="${AARON_WORKSPACE:-$HOME/aaron_workspace}/isaac_setup/IsaacLab/isaaclab.sh"
+PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -17,6 +17,6 @@ if [ ! -f "$ISAACLAB_PATH" ]; then
 fi
 
 echo "Running spawn and physics verification..."
-"$ISAACLAB_PATH" -p arcproLab/scripts/verify_spawn.py --num_envs 1
+"$ISAACLAB_PATH" -p arcproLab/scripts/verify_spawn.py --num_envs 1 --enable_cameras
 
 echo -e "\n${GREEN}Verification script finished.${NC}"

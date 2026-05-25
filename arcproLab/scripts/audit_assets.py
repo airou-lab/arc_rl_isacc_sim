@@ -22,7 +22,9 @@ from pxr import Usd, UsdGeom
 
 def main():
     # Load the stage
-    usd_path = "/home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim/openStreetUSD/no_graph_sim_clean_1x.usda"
+    import os
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    usd_path = os.path.join(repo_root, "openStreetUSD", "no_graph_sim_clean_1x.usda")
     omni.usd.get_context().open_stage(usd_path)
     stage = omni.usd.get_context().get_stage()
     

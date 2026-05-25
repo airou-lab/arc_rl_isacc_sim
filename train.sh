@@ -4,7 +4,7 @@
 PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # Define the Isaac Lab path
-ISAACLAB_PATH="/home/arika/IsaacLab/isaaclab.sh"
+ISAACLAB_PATH="${AARON_WORKSPACE:-$HOME/aaron_workspace}/isaac_setup/IsaacLab/isaaclab.sh"
 
 echo "--------------------------------------------------"
 echo "Starting F1Tenth RL Training"
