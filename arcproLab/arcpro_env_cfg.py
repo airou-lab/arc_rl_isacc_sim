@@ -77,11 +77,14 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             scale=(1.0, 1.0, 1.0), # Revert to 1.0x
         ),
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
-            # Fixed Spawn Point: Centerline (Shifted to align with Waypoints)
-            # 8x pos: (-130.03, 44.48, 0.42) -> 1x pos: (-16.25, 5.56, 0.05)
-            pos=(-16.25375, 5.56, 0.05), 
-            rot=(0.7071, 0.0, 0.0, 0.7071) # +90 degrees Z-up
-        ), 
+            # Spawn point: right lane heading toward junction_18 intersection.
+            # Y/Z and yaw unchanged from prior centerline spawn; X shifted from
+            # -16.25375 -> -15.73 (a ~+0.52 m offset) to center the body in the
+            # right lane. Verified visually via inspect_world.py iterating
+            # -15.0 (off-road) -> -15.75 -> -15.70 -> -15.73.
+            pos=(-15.73, 5.56, 0.05),
+            rot=(0.7071, 0.0, 0.0, 0.7071) # +90 degrees Z-up (faces +Y)
+        ),
     )
     
     # Camera (Standard offset for 1x robot)
