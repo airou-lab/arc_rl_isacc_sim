@@ -172,18 +172,28 @@ class TrackManager:
         gate_prim_paths = []
         gate_fallback_pts = []
         for prim in Usd.PrimRange(stage.GetPseudoRoot()):
+            path_str = str(prim.GetPath())
+            is_gate_prim = False
+            
+            # Match by primvar (Standard)
             if prim.HasAttribute("primvars:ds_type"):
                 attr_val = prim.GetAttribute("primvars:ds_type").Get()
                 if attr_val == ["DSLaneGate"] or attr_val == "DSLaneGate":
-                    g_path = str(prim.GetPath())
-                    gate_prim_paths.append(g_path)
-                    
-                    # Fallback: Get center of gate prim in Local Env Frame
-                    xform = UsdGeom.Xformable(prim)
-                    world_transform = xform.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
-                    pw = world_transform.ExtractTranslation()
-                    pl = [pw[0] - env0_origin[0], pw[1] - env0_origin[1], pw[2] - env0_origin[2]]
-                    gate_fallback_pts.append(pl)
+                    is_gate_prim = True
+            
+            # Fallback: Match by name (Consistent with RoadManager)
+            if not is_gate_prim and "laneGate" in path_str:
+                is_gate_prim = True
+
+            if is_gate_prim:
+                gate_prim_paths.append(path_str)
+                
+                # Fallback: Get center of gate prim in Local Env Frame
+                xform = UsdGeom.Xformable(prim)
+                world_transform = xform.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+                pw = world_transform.ExtractTranslation()
+                pl = [pw[0] - env0_origin[0], pw[1] - env0_origin[1], pw[2] - env0_origin[2]]
+                gate_fallback_pts.append(pl)
         
         if len(gate_prim_paths) > 0:
             print(f"[TrackManager] Found {len(gate_prim_paths)} gate prims. Example: {gate_prim_paths[0]}")
@@ -281,7 +291,7 @@ class TrackManager:
             env0_prim = stage.GetPrimAtPath("/World/envs/env_0")
             origin = UsdGeom.Xformable(env0_prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default()).ExtractTranslation() if env0_prim.IsValid() else Gf.Vec3d(0,0,0)
 
-            def create_v(path, color, radius=0.02):
+            def create_v(path, color, radius=0.05):
                 cfg = VisualizationMarkersCfg(prim_path=path, markers={"dot": sim_utils.SphereCfg(radius=radius, visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=color))})
                 return VisualizationMarkers(cfg)
 
@@ -297,9 +307,9 @@ class TrackManager:
             if self.visualizer_waypoints is None: self.visualizer_waypoints = create_v("/World/Visuals/CyanPath", (0.0, 1.0, 1.0))
             if self.visualizer_target is None: self.visualizer_target = create_v("/World/Visuals/TargetLane", (1.0, 0.0, 1.0))
 
-            if self.raw_yellow_pts is not None: self.visualizer_yellow.visualize(to_w(self.raw_yellow_pts))
-            if self.raw_white_pts is not None: self.visualizer_white.visualize(to_w(self.raw_white_pts))
-            if self.raw_gate_pts is not None: self.visualizer_gate.visualize(to_w(self.raw_gate_pts, z_off=0.15))
+            if self.raw_yellow_pts is not None: self.visualizer_yellow.visualize(to_w(self.raw_yellow_pts[::4]))
+            if self.raw_white_pts is not None: self.visualizer_white.visualize(to_w(self.raw_white_pts[::4]))
+            if self.raw_gate_pts is not None: self.visualizer_gate.visualize(to_w(self.raw_gate_pts, z_off=0.08))
             
             if self.waypoints is not None:
                 wp_np = self.waypoints.cpu().numpy()

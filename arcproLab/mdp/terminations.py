@@ -63,8 +63,12 @@ def height_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     return asset.data.root_pos_w[:, 2] < 0.05
 
 def stagnation_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Terminates if the robot stays still for too long (stuck against wall)."""
-    return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+    """Terminates if the robot is crawling or stuck (speed < 0.1 m/s)."""
+    asset = env.scene[asset_cfg.name]
+    vel = asset.data.root_lin_vel_b[:, 0]
+    # Reset if speed is less than 0.1 m/s for more than 30 steps (~0.6s)
+    # This allows time for initial acceleration from a dead stop.
+    return (vel < 0.1) & (env.episode_length_buf > 30)
 
 def fov_visibility_termination(env: ManagerBasedRLEnv, horizontal_aperture: float, focal_length: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)

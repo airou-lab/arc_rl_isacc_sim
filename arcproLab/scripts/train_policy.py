@@ -188,7 +188,7 @@ def main():
     env = ManagerBasedRLEnv(cfg=env_cfg)
     
     # 3. Wrap for Hierarchical Tracking (Required for auxiliary loss)
-    env = WaypointTrackingWrapper(env, env_id=0)
+    env = WaypointTrackingWrapper(env)
     
     # 4. Bridge to SB3 and HPPP Contract
     env = HPPPDirectBridge(env)
@@ -241,9 +241,9 @@ def main():
             env,
             verbose=1,
             learning_rate=2e-4, # Increased for ResNet-18 complexity
-            n_steps=256,        # Small rollout for VRAM safety
-            batch_size=32,      # Small batch for backprop safety
-            n_epochs=15,
+            n_steps=128,        # Extremely small rollout to prevent OOM
+            batch_size=16,      # Tiny batch size for ResNet backprop
+            n_epochs=10,        # Reduced epochs to speed up updates
             gamma=0.99,
             gae_lambda=0.95,
             clip_range=0.2,

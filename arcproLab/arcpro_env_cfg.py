@@ -77,8 +77,8 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         ),
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
             # Exactly on the path center (X=-16.197) at stable height
-            pos=(-16.197, 5.50, 0.10),
-            rot=(0.7071, 0.0, 0.0, -0.7071) # Face South
+            pos=(-16.197, 5.50, 0.05),
+            rot=(0.7071, 0.0, 0.0, 0.7071) # Face North (Corrected from South)
         ),
 
  
@@ -146,10 +146,10 @@ class RewardCfg:
     speed = RewTerm(func=mdp_rew.speed_reward, weight=100.0)
     # Precision: Lane centering
     lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=10.0)
-    # Force movement: Standing still for 1s now costs as much as a crash (-25,000 points)
+    # Force movement: Relaxed to prevent 'Suicide Bias'
     stationary = RewTerm(
-        func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.5, -100.0, 0.0),
-        weight=5.0
+        func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.1, -100.0, 0.0),
+        weight=1.0
     )
     heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
     smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=30.0)
@@ -161,6 +161,8 @@ class RewardCfg:
 
 @configclass
 class TerminationCfg:
+    # Snap Reset: Touching the paint kills the robot
+    roadmark_contact = DoneTerm(func=mdp_done.white_line_contact, params={"threshold": 0.15})
     # height termination: Catch flying robots (falling into void)
     height = DoneTerm(func=mdp_done.height_termination)
     # Stagnation: Reset if stuck against a wall

@@ -1,91 +1,81 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-05-16
+**Analysis Date:** 2024-05-24
 
 ## Directory Layout
 
 ```
-arcproLab/
-├── assets/                 # Robot and environment USD assets
-├── mdp/                    # MDP logic (observations, rewards, terminations)
-│   ├── road_manager.py     # Multi-agent navigation state management
-│   ├── track_manager.py    # Track geometry and boundary management
-│   └── visual_analytics.py # Telemetry UI and visual monitoring
-├── policy_stack/           # RL Framework
-│   ├── agent/              # MARL arbitration and coordination logic
-│   ├── policies/           # Neural network architectures
-│   ├── tests/              # Unit and integration tests
-│   └── wrappers/           # Environment wrappers for RL
-├── scripts/                # Utility and entry-point scripts
-└── models/                 # Trained model checkpoints
-openStreetUSD/              # USD scene files and track definitions
-.planning/                  # Project roadmap and codebase maps
-relaunch_with_telemetry.sh  # Operational script for telemetry logging
+arc_rl_isacc_sim/
+├── arcproLab/                 # Core Autonomous Driving Simulation & Policy Package
+│   ├── assets/                # 3D geometries, textures, and USD scenes
+│   ├── mdp/                   # Markov Decision Process Term Implementations
+│   ├── models/                # Checkpoints and saved weights for trained models
+│   ├── policy_stack/          # Neural Architectures and Hierarchical Agent Logic
+│   └── scripts/               # Executable entry points for training, testing, and utilities
+├── openStreetUSD/             # OpenStreetMap to USD conversion and world generation tools
+└── logs/                      # Output logs, Tensorboard events, and execution runs
 ```
 
 ## Directory Purposes
 
-**arcproLab/mdp/:**
-- Purpose: Markov Decision Process components for Isaac Lab.
-- Contains: Logic for calculating observations, rewards, and environment reset events.
-- Key files: `road_manager.py`, `track_manager.py`, `rewards.py`, `observations.py`, `visual_analytics.py`.
+**`arcproLab/mdp/`:**
+- Purpose: Defines the rules of the reinforcement learning problem.
+- Contains: Standalone Python files handling observations, actions, rewards, terminations, and events.
+- Key files: `observations.py`, `rewards.py`, `actions.py`, `terminations.py`
 
-**arcproLab/policy_stack/agent/:**
-- Purpose: Multi-agent coordination and arbitration.
-- Contains: FCFS scheduler, intersection graph logic, and network transport facades.
-- Key files: `scheduler_core.py`, `worker_scheduler.py`, `intersection_node_server.py`.
+**`arcproLab/policy_stack/agent/`:**
+- Purpose: Implements the non-learned, classical logic of the autonomous agent.
+- Contains: Hierarchical node structures, topological routing, and scheduler logic.
+- Key files: `agent_node.py`, `worker_scheduler.py`, `intersection_graph.py`
 
-**arcproLab/policy_stack/policies/:**
-- Purpose: Policy network implementations.
-- Key files: `hierarchical_policy.py` (Waypoint planning), `fusion_policy.py` (Perception).
+**`arcproLab/policy_stack/policies/`:**
+- Purpose: Implements the neural network architectures used by the Stable-Baselines3 agents.
+- Contains: Custom PyTorch neural network classes.
+- Key files: `fusion_policy.py`, `hierarchical_policy.py`
 
-**arcproLab/scripts/:**
-- Purpose: Operational scripts for the project.
-- Key files: `train_policy.py`, `verify_policy.py`, `generate_track.py`.
+**`arcproLab/scripts/`:**
+- Purpose: The primary execution surface for users and CI pipelines.
+- Contains: Entry points to trigger simulation, training, policy deployment, or to verify aspects of the environment.
+- Key files: `train_policy.py`, `verify_policy.py`, `audit_live.py`
 
 ## Key File Locations
 
 **Entry Points:**
-- `arcproLab/scripts/train_policy.py`: Primary training script.
-- `relaunch_with_telemetry.sh`: Resume training with telemetry logging.
+- `arcproLab/scripts/train_policy.py`: The main script to bootstrap Isaac Lab, wrap it for Stable-Baselines3, and begin training.
 
 **Configuration:**
-- `arcproLab/arcpro_env_cfg.py`: Environment and scene configuration.
-- `arcproLab/arcpro_robot_cfg.py`: Robot sensor and actuator configuration.
+- `arcproLab/arcpro_env_cfg.py`: The central declarative configuration that maps Isaac Sim parameters, rendering targets, and physics specifics to the RL Environment.
+- `arcproLab/arcpro_robot_cfg.py`: Configuration specifically defining the F1Tenth vehicle's joints, articulation, and initial states.
 
 **Core Logic:**
-- `arcproLab/mdp/road_manager.py`: Navigation command management.
-- `arcproLab/policy_stack/agent/scheduler_core.py`: Arbitration logic.
+- `arcproLab/policy_stack/agent/agent_node.py`: Holds the main `AgentNode` mapping high-level "where to go" routing to neural "how to get there" logic.
 
 **Testing:**
-- `arcproLab/policy_stack/tests/`: Unit tests for arbitration and RL components.
+- `arcproLab/scripts/test_env.py` and `arcproLab/scripts/test_sb3_wrapper.py`: Validation scripts ensuring the environment steps correctly and interfaces cleanly with standard RL abstractions.
 
 ## Naming Conventions
 
 **Files:**
-- snake_case: `road_manager.py`, `hierarchical_policy.py`.
+- lowercase_with_underscores: Standard PEP8 module naming is rigorously used (e.g., `train_policy.py`, `fusion_policy.py`).
 
 **Directories:**
-- snake_case: `policy_stack`, `debug_frames`.
+- lowercase_with_underscores: `policy_stack`, `models`, `scripts`. The exception is the root package `arcproLab` and the sub-package `openStreetUSD`.
 
 ## Where to Add New Code
 
-**New MDP Term (Reward/Observation):**
-- Primary code: `arcproLab/mdp/` in the respective file (`rewards.py`, etc.).
-- Config: `arcproLab/arcpro_env_cfg.py`.
+**New Feature (RL Term):**
+- Primary code: Define a new function in the relevant `arcproLab/mdp/` file (e.g., `rewards.py`).
+- Integration: Instantiate the term inside a `@configclass` block within `arcproLab/arcpro_env_cfg.py`.
 
-**New Policy Feature:**
-- Implementation: `arcproLab/policy_stack/policies/`.
+**New Neural Architecture:**
+- Implementation: Add the new network design to `arcproLab/policy_stack/policies/`.
 
-**New Multi-Agent Coordination Logic:**
-- Implementation: `arcproLab/policy_stack/agent/scheduler_core.py`.
+**Utilities:**
+- Shared helpers: Add non-execution utilities to specific sub-folders like `arcproLab/policy_stack/agent/` if they are autonomous driving tools, or `arcproLab/mdp/` if they manipulate states.
 
 ## Special Directories
 
-**trash/:**
-- Purpose: Contains deprecated files like `road_graph.py.bak`.
-- Committed: No (ignored by .gitignore).
-
----
-
-*Structure analysis: 2026-05-16*
+**`logs/`:**
+- Purpose: Contains output logs from training runs, TensorBoard summaries, and wandb sync data.
+- Generated: Yes
+- Committed: No (usually ignored in version control).

@@ -30,7 +30,7 @@ This roadmap outlines the migration of the ARCPro RL system to NVIDIA Isaac Lab.
 - [x] **Phase 14: Procedural Multi-Agent Scaffolding** - Physically scaled USD geometry to 1x and established production training baseline for multi-agent support.
 - [x] **Phase 15: HD Vision ResNet** - Research into ResNet-18 vs Custom CNN and uint8 optimization.
 - [x] **Phase 15: Mastery Curriculum** - Single-Agent Lane-Following Mastery. Achieve full-lap capability (6000+ steps) using a dynamic boundary curriculum and memory-optimized HD vision.
-- [ ] **Phase 16: MARL Transition** - **ACTIVE** - Refactor singletons to vectorized managers and establish multi-agent scene config.
+- [x] **Phase 16: MARL Transition** - STABILIZED - Refactor singletons to vectorized managers and establish multi-agent scene config.
 - [ ] **Phase 17: Smart Intersection Infrastructure** - Implement intersection controllers (V2I/V2V) and dynamic traffic signaling in the USD.
 - [ ] **Phase 18: Coordination & Yielding Logic** - Develop social-norm based navigation (e.g., yielding at stop signs, 4-way stop logic) between Two Cars.
 - [ ] **Phase 19: MARL Training & Evaluation** - Train collaborative policies (MAPPO/IPPO) for high-density intersection throughput.

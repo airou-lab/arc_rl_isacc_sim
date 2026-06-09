@@ -21,15 +21,15 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     
     # Base Target: Lane Center (Sync with -16.2 centerline)
     base_spawn_x, base_spawn_y = -16.18, 5.30
-    base_spawn_yaw = -1.5708 # Face South
+    base_spawn_yaw = 1.5708 # Face North (Corrected from South)
     
     # 1. Domain Randomization (Hardening)
     # Randomize X-offset: ±4cm (tighter for initial learning)
     rand_offset_x = (torch.rand(num_resets, device=env.device) * 0.08) - 0.04
     # Randomize Heading: ±5 degrees (~0.08 rad)
     rand_yaw = (torch.rand(num_resets, device=env.device) * 0.16) - 0.08
-    # Randomize Initial Velocity: 0.0 to 1.5 m/s (force handling dynamic starts)
-    rand_vel_x = torch.rand(num_resets, device=env.device) * 1.5
+    # Randomize Initial Velocity: Disabled (Fixes wheelie jerk on reset)
+    rand_vel_x = torch.zeros(num_resets, device=env.device)
     
     # Get environment origins
     env_origins = env.scene.env_origins[env_ids]
@@ -55,9 +55,9 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
         q_final = Gf.Quatd(math.cos(half_yaw), Gf.Vec3d(0, 0, math.sin(half_yaw)))
 
         if hit["hit"]:
-            # Snap Z to road (10cm offset)
-            spawn_z = hit["position"][2] + 0.10
-            if spawn_z < 0.05: spawn_z = 0.05
+            # Snap Z to road (4cm offset)
+            spawn_z = hit["position"][2] + 0.04
+            if spawn_z < 0.02: spawn_z = 0.02
             final_pos[i, 2] = spawn_z
 
         # Update tensor (WXYZ)

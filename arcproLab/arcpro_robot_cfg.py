@@ -69,7 +69,7 @@ class ArcProRobotCfg(ArticulationCfg):
             effort_limit_sim=10.0, 
             velocity_limit_sim=100.0,
             stiffness=0.0,
-            damping=0.5, 
+            damping=1.0, 
             armature=0.01,
         ),
     }
