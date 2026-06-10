@@ -28,8 +28,9 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     rand_offset_x = (torch.rand(num_resets, device=env.device) * 0.08) - 0.04
     # Randomize Heading: ±5 degrees (~0.08 rad)
     rand_yaw = (torch.rand(num_resets, device=env.device) * 0.16) - 0.08
-    # Randomize Initial Velocity: Disabled (Fixes wheelie jerk on reset)
-    rand_vel_x = torch.zeros(num_resets, device=env.device)
+    # Randomize Initial Velocity: 0.2 to 0.5 m/s (Rolling Start)
+    # Required to survive the strict 10-step stagnation limit.
+    rand_vel_x = (torch.rand(num_resets, device=env.device) * 0.3) + 0.2
     
     # Get environment origins
     env_origins = env.scene.env_origins[env_ids]
@@ -38,7 +39,7 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     final_pos = torch.zeros((num_resets, 3), device=env.device)
     final_pos[:, 0] = env_origins[:, 0] + base_spawn_x + rand_offset_x
     final_pos[:, 1] = env_origins[:, 1] + base_spawn_y
-    final_pos[:, 2] = env_origins[:, 2]  # Clean drop height
+    final_pos[:, 2] = env_origins[:, 2] + 0.10 # Safe default drop height
 
     # 3. Compute final rotations (WXYZ)
     quats = torch.zeros((num_resets, 4), device=env.device)
@@ -49,27 +50,31 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
         world_x, world_y = final_pos[i, 0].item(), final_pos[i, 1].item()
         hit = query.raycast_closest((world_x, world_y, 100.0), (0.0, 0.0, -1.0), 200.0)
         
-        # Apply Randomized Yaw to base South-facing
+        # 180-degree Roll (X-axis) * Yaw (Z-axis)
+        # Roll 180: W=0, X=1, Y=0, Z=0
+        # Yaw: W=cos(a/2), X=0, Y=0, Z=sin(a/2)
+        # WXYZ result: W=0, X=cos(a/2), Y=sin(a/2), Z=0
+        
         yaw = base_spawn_yaw + rand_yaw[i].item()
         half_yaw = yaw / 2.0
-        q_final = Gf.Quatd(math.cos(half_yaw), Gf.Vec3d(0, 0, math.sin(half_yaw)))
+        
+        quats[i, 0] = 0.0                # W
+        quats[i, 1] = math.cos(half_yaw) # X
+        quats[i, 2] = math.sin(half_yaw) # Y
+        quats[i, 3] = 0.0                # Z
 
         if hit["hit"]:
-            # Snap Z to road (4cm offset)
-            spawn_z = hit["position"][2] + 0.04
-            if spawn_z < 0.02: spawn_z = 0.02
+            # Snap Z to road (8cm offset)
+            # F1Tenth wheels are ~5cm radius. 8cm ensures the chassis is above the road
+            spawn_z = hit["position"][2] + 0.08
+            if spawn_z < 0.05: spawn_z = 0.05
             final_pos[i, 2] = spawn_z
-
-        # Update tensor (WXYZ)
-        quats[i, 0] = q_final.GetReal()
-        quats[i, 1] = q_final.GetImaginary()[0]
-        quats[i, 2] = q_final.GetImaginary()[1]
-        quats[i, 3] = q_final.GetImaginary()[2]
     
-    # 4. Apply Initial Velocity (Local X)
+    # 4. Apply Initial Velocity (World Frame)
     velocities = torch.zeros((num_resets, 6), device=env.device)
-    # Convert local X velocity to world frame based on randomized yaw
-    # South-ish: Vy = -vel, Vx = rand_drift
+    
+    # Map local forward speed (rand_vel_x) to world frame based on yaw
+    # Vx = V * cos(yaw), Vy = V * sin(yaw)
     velocities[:, 0] = rand_vel_x * torch.cos(base_spawn_yaw + rand_yaw)
     velocities[:, 1] = rand_vel_x * torch.sin(base_spawn_yaw + rand_yaw)
 

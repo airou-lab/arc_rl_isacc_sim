@@ -307,8 +307,8 @@ class TrackManager:
             if self.visualizer_waypoints is None: self.visualizer_waypoints = create_v("/World/Visuals/CyanPath", (0.0, 1.0, 1.0))
             if self.visualizer_target is None: self.visualizer_target = create_v("/World/Visuals/TargetLane", (1.0, 0.0, 1.0))
 
-            if self.raw_yellow_pts is not None: self.visualizer_yellow.visualize(to_w(self.raw_yellow_pts[::4]))
-            if self.raw_white_pts is not None: self.visualizer_white.visualize(to_w(self.raw_white_pts[::4]))
+            if self.raw_yellow_pts is not None: self.visualizer_yellow.visualize(to_w(self.raw_yellow_pts[::8]))
+            if self.raw_white_pts is not None: self.visualizer_white.visualize(to_w(self.raw_white_pts[::8]))
             if self.raw_gate_pts is not None: self.visualizer_gate.visualize(to_w(self.raw_gate_pts, z_off=0.08))
             
             if self.waypoints is not None:

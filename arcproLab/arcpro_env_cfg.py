@@ -77,8 +77,8 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         ),
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
             # Exactly on the path center (X=-16.197) at stable height
-            pos=(-16.197, 5.50, 0.05),
-            rot=(0.7071, 0.0, 0.0, 0.7071) # Face North (Corrected from South)
+            pos=(-16.197, 5.50, 0.12),
+            rot=(0.7071, 0.0, 0.0, 0.7071) # Face North (WXYZ)
         ),
 
  
@@ -132,7 +132,7 @@ class ActionCfg:
     drive = arcpro_actions.CombinedDriveActionCfg(
         asset_name="robot", 
         joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
-        scale=-40.0,
+        scale=20.0,
         offset=0.0
     )
 
@@ -162,7 +162,8 @@ class RewardCfg:
 @configclass
 class TerminationCfg:
     # Snap Reset: Touching the paint kills the robot
-    roadmark_contact = DoneTerm(func=mdp_done.white_line_contact, params={"threshold": 0.15})
+    # Relaxed to 0.05 to give RL agent a buffer zone while learning to steer at high speeds
+    roadmark_contact = DoneTerm(func=mdp_done.white_line_contact, params={"threshold": 0.05})
     # height termination: Catch flying robots (falling into void)
     height = DoneTerm(func=mdp_done.height_termination)
     # Stagnation: Reset if stuck against a wall

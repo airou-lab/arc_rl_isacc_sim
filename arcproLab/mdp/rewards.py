@@ -10,8 +10,12 @@ from isaaclab.envs import ManagerBasedRLEnv
 def speed_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Rewards forward speed, heavily penalizes reverse driving."""
     asset = env.scene[asset_cfg.name]
-    speed = asset.data.root_lin_vel_b[:, 0]
-    # Penalize backwards driving 10x more than rewards for forward driving
+    # Use absolute speed if X is negative but robot is moving. 
+    # For now, we will reward magnitude to prevent 'wrong way' penalties from killing the learning process.
+    speed = torch.norm(asset.data.root_lin_vel_b[:, :2], dim=1)
+    
+    # Still want to penalize driving entirely backwards relative to the path, 
+    # but we need path tangent for that. For now, reward any movement over 0.
     reward = torch.where(speed > 0, speed, speed * 10.0)
     return reward
 
