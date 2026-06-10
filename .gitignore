@@ -22,3 +22,4 @@ exts/omni.*
 # OS
 .DS_Store
 .thumbs.db
+debug_frames/
