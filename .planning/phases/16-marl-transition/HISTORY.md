@@ -57,3 +57,25 @@ def create_v(path, color, radius=0.05):
 
 ---
 *History recorded: 2026-05-20*
+
+
+## Fresh Training Restart & Physics Stabilization
+
+**Context**: Discovered that the previous checkpoint was "poisoned" (trained while the USD asset was upside-down).
+**Action**: Purged all old logs/ppo checkpoints and launched a completely fresh training run from Step 0.
+
+**Physics Stabilization Fixes Applied**:
+1. **Robot Spawn & Orientation**:
+   Robot spawn is now perfectly flat at 12cm height with zero pitch. A North-facing WXYZ quaternion is applied via math to ensure alignment with the road graph.
+
+2. **Rolling Start**:
+   Enabled a rolling start (0.2 - 0.5 m/s) to overcome the strict 10-step stagnation limit right at the start of episodes.
+
+3. **Contact Threshold Relaxation**:
+   roadmark_contact threshold was relaxed from 0.15m to 0.05m to give the uninitialized ("drunk") agent a physical buffer against the narrow walls.
+
+4. **Drive Scale**:
+   drive.scale set to positive 20.0.
+
+**Current Status**: 
+The fresh run is active in the background. It is currently in the expected "Drunk Driving" phase (ep_len_mean ~8 steps, std ~1.0). The uninitialized neural network is applying maximum random steering into the narrow walls. This is completely normal for Step 0 and should improve over the next 500k steps.
