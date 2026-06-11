@@ -78,7 +78,7 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
             # Exactly on the path center (X=-16.197) at stable height
             pos=(-16.197, 5.50, 0.12),
-            rot=(0.7071, 0.0, 0.0, 0.7071) # Face North (WXYZ)
+            rot=(0.0, 0.7071, 0.7071, 0.0) # Upright & Face North (WXYZ)
         ),
 
  
@@ -132,15 +132,15 @@ class ActionCfg:
     drive = arcpro_actions.CombinedDriveActionCfg(
         asset_name="robot", 
         joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
-        scale=20.0,
+        scale=-20.0,
         offset=0.0
     )
 
 @configclass
 class RewardCfg:
     # Anti-Suicide: Massive penalty to discourage 'sprint and crash'
-    # A crash now costs -25,000 points (Weight 50.0 * penalty -500)
-    terminating = RewTerm(func=mdp_rew.termination_penalty, weight=50.0)
+    # Penalty function returns -500.0. Weight must be 1.0 to avoid exploding gradients (-25k).
+    terminating = RewTerm(func=mdp_rew.termination_penalty, weight=1.0)
     
     # Performance: Momentum
     speed = RewTerm(func=mdp_rew.speed_reward, weight=100.0)

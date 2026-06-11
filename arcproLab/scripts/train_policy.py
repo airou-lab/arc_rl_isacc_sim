@@ -275,10 +275,15 @@ def main():
             self.logger.record("rollout/dist_yellow_m", mean_dist_y)
 
             if self.n_calls % 1000 == 0:
-                info = infos[0]
-                ep_rew = info.get("episode", {}).get("r", 0.0)
-                ep_len = info.get("episode", {}).get("l", 0)
-                print(f"[PROGRESS] Step {self.n_calls} | EpRew: {ep_rew:.2f} | EpLen: {ep_len} | AvgSpeed: {mean_speed:.2f} m/s | DW: {mean_dist_w:.2f}m | DY: {mean_dist_y:.2f}m")
+                # Extract rolling averages from the model's ep_info_buffer
+                if len(self.model.ep_info_buffer) > 0:
+                    ep_rew = sum([ep_info["r"] for ep_info in self.model.ep_info_buffer]) / len(self.model.ep_info_buffer)
+                    ep_len = sum([ep_info["l"] for ep_info in self.model.ep_info_buffer]) / len(self.model.ep_info_buffer)
+                else:
+                    ep_rew = 0.0
+                    ep_len = 0.0
+                
+                print(f"[PROGRESS] Step {self.n_calls} | EpRew: {ep_rew:.2f} | EpLen: {ep_len:.1f} | AvgSpeed: {mean_speed:.2f} m/s | DW: {mean_dist_w:.2f}m | DY: {mean_dist_y:.2f}m")
                 sys.stdout.flush()
 
             return True

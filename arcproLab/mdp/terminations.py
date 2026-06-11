@@ -67,9 +67,9 @@ def stagnation_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = S
     asset = env.scene[asset_cfg.name]
     # Use absolute speed magnitude in the XY plane to avoid axis polarity issues
     vel = torch.norm(asset.data.root_lin_vel_b[:, :2], dim=1)
-    # Reset if speed is less than 0.1 m/s for more than 10 steps (~0.2s)
-    # This is a very strict limit as requested.
-    return (vel < 0.1) & (env.episode_length_buf > 10)
+    # Reset if speed is less than 0.1 m/s for more than 50 steps (~1.0s)
+    # This gives the RL agent a fair window to explore throttle from a dead stop.
+    return (vel < 0.1) & (env.episode_length_buf > 50)
 
 def fov_visibility_termination(env: ManagerBasedRLEnv, horizontal_aperture: float, focal_length: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)

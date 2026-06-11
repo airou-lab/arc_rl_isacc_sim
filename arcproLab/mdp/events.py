@@ -29,7 +29,6 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     # Randomize Heading: ±5 degrees (~0.08 rad)
     rand_yaw = (torch.rand(num_resets, device=env.device) * 0.16) - 0.08
     # Randomize Initial Velocity: 0.2 to 0.5 m/s (Rolling Start)
-    # Required to survive the strict 10-step stagnation limit.
     rand_vel_x = (torch.rand(num_resets, device=env.device) * 0.3) + 0.2
     
     # Get environment origins
@@ -50,18 +49,15 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
         world_x, world_y = final_pos[i, 0].item(), final_pos[i, 1].item()
         hit = query.raycast_closest((world_x, world_y, 100.0), (0.0, 0.0, -1.0), 200.0)
         
-        # 180-degree Roll (X-axis) * Yaw (Z-axis)
-        # Roll 180: W=0, X=1, Y=0, Z=0
-        # Yaw: W=cos(a/2), X=0, Y=0, Z=sin(a/2)
-        # WXYZ result: W=0, X=cos(a/2), Y=sin(a/2), Z=0
-        
+        # Apply Randomized Yaw to base North-facing
         yaw = base_spawn_yaw + rand_yaw[i].item()
         half_yaw = yaw / 2.0
         
-        quats[i, 0] = 0.0                # W
-        quats[i, 1] = math.cos(half_yaw) # X
-        quats[i, 2] = math.sin(half_yaw) # Y
-        quats[i, 3] = 0.0                # Z
+        # Explicitly build WXYZ quaternion for 1.0x native orientation
+        quats[i, 0] = math.cos(half_yaw) # W
+        quats[i, 1] = 0.0                # X
+        quats[i, 2] = 0.0                # Y
+        quats[i, 3] = math.sin(half_yaw) # Z
 
         if hit["hit"]:
             # Snap Z to road (8cm offset)
