@@ -93,18 +93,23 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             horizontal_aperture=3.86, # 90-degree HFOV (2 * atan(3.86 / (2 * 1.93)))
             focal_length=1.93,
         ),
-        # Moved to -0.3x (the front, since robot drives 'backwards') and rotated 180 deg Yaw to look forward
-        offset=TiledCameraCfg.OffsetCfg(pos=(-0.3, 0.0, 0.2), rot=(0.0, 0.0, 0.0, 1.0), convention="parent"),
+        # Moved to 0.3x (the other side) and looking away from the robot center
+        offset=TiledCameraCfg.OffsetCfg(pos=(0.3, 0.0, 0.2), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
         data_types=["rgb"], width=224, height=224,
         debug_vis=True, # ENABLED so user can see the camera frustum
     )
 
     # Visual Marker: Glow Red at Camera Location (Directional Pointer)
+    # Mounted to Chassis with same offset as camera (0.3x, looking outward)
     camera_marker = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraSensor/VisualMarker",
+        prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraMarker",
         spawn=sim_utils.CuboidCfg(
-            size=(0.3, 0.05, 0.05), # Long box pointing along the camera's local X axis
+            size=(0.3, 0.05, 0.05), # Long box pointing forward
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), emissive_color=(1.0, 0.0, 0.0))
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(
+            pos=(0.3, 0.0, 0.2), 
+            rot=(1.0, 0.0, 0.0, 0.0) # Looking forward relative to this side
         )
     )
 
@@ -143,7 +148,7 @@ class ActionCfg:
     drive = arcpro_actions.CombinedDriveActionCfg(
         asset_name="robot", 
         joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
-        scale=-20.0,
+        scale=20.0,
         offset=0.0
     )
 

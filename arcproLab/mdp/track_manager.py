@@ -266,6 +266,28 @@ class TrackManager:
         if self.raw_gate_pts is None and len(gate_fallback_pts) > 0:
             print("[TrackManager] No gate meshes found. Using prim centers as fallback.")
             self.raw_gate_pts = np.array(gate_fallback_pts)
+            
+        # 3. CRITICAL: Punch Holes for Gate Permeability
+        # If any white/yellow point is within 0.5m of a Gate point, REMOVE IT.
+        # This guarantees the robot can pass through gates without triggering termination.
+        if self.raw_gate_pts is not None:
+            gate_xy = self.raw_gate_pts[:, :2]
+            
+            def punch_holes(raw_pts, name):
+                if raw_pts is None: return None
+                # Vectorized distance check
+                pts_xy = raw_pts[:, :2]
+                dists = np.linalg.norm(pts_xy[:, np.newaxis] - gate_xy, axis=2)
+                min_dist_to_gate = np.min(dists, axis=1)
+                
+                # Keep only points further than 0.5m from any gate
+                mask = min_dist_to_gate > 0.5
+                filtered = raw_pts[mask]
+                print(f"[TrackManager] Punched holes in {name}: removed {len(raw_pts) - len(filtered)} overlapping points.")
+                return filtered
+
+            self.raw_yellow_pts = punch_holes(self.raw_yellow_pts, "Yellow")
+            self.raw_white_pts = punch_holes(self.raw_white_pts, "White")
 
     def compute_marker_distances(self, pos: torch.Tensor):
         self.ensure_synced()
@@ -313,7 +335,7 @@ class TrackManager:
 
             if self.raw_yellow_pts is not None: self.visualizer_yellow.visualize(to_w(self.raw_yellow_pts[::16]))
             if self.raw_white_pts is not None: self.visualizer_white.visualize(to_w(self.raw_white_pts[::16]))
-            if self.raw_gate_pts is not None: self.visualizer_gate.visualize(to_w(self.raw_gate_pts, z_off=0.30))
+            if self.raw_gate_pts is not None: self.visualizer_gate.visualize(to_w(self.raw_gate_pts, z_off=0.40))
             
             if self.waypoints is not None:
                 wp_np = self.waypoints.cpu().numpy()
