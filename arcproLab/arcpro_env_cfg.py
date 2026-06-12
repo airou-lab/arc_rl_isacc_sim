@@ -155,11 +155,11 @@ class ActionCfg:
 @configclass
 class RewardCfg:
     # Anti-Suicide: Massive penalty to discourage 'sprint and crash'
-    # Penalty function returns -500.0. Weight must be 1.0 to avoid exploding gradients (-25k).
-    terminating = RewTerm(func=mdp_rew.termination_penalty, weight=1.0)
+    # Penalty function returns -500.0. Weight 2.0 = -1000 per death.
+    terminating = RewTerm(func=mdp_rew.termination_penalty, weight=2.0)
     
-    # Performance: Momentum
-    speed = RewTerm(func=mdp_rew.speed_reward, weight=100.0)
+    # Performance: Momentum (Rebalanced to prevent 'Sprint and Die')
+    speed = RewTerm(func=mdp_rew.speed_reward, weight=2.0)
     # Precision: Lane centering
     lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=10.0)
     # Force movement: Relaxed to prevent 'Suicide Bias'
