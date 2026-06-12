@@ -294,6 +294,10 @@ class TrackManager:
             def create_v(path, color, radius=0.05):
                 cfg = VisualizationMarkersCfg(prim_path=path, markers={"dot": sim_utils.SphereCfg(radius=radius, visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=color))})
                 return VisualizationMarkers(cfg)
+                
+            def create_gate_v(path, color, radius=0.20):
+                cfg = VisualizationMarkersCfg(prim_path=path, markers={"dot": sim_utils.SphereCfg(radius=radius, visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=color))})
+                return VisualizationMarkers(cfg)
 
             def to_w(pts, z_off=0.05):
                 if pts is None: return None
@@ -303,13 +307,13 @@ class TrackManager:
 
             if self.visualizer_yellow is None: self.visualizer_yellow = create_v("/World/Visuals/YellowSpheres", (1.0, 1.0, 0.0))
             if self.visualizer_white is None: self.visualizer_white = create_v("/World/Visuals/WhiteSpheres", (1.0, 1.0, 1.0))
-            if self.visualizer_gate is None: self.visualizer_gate = create_v("/World/Visuals/GateSpheres", (0.0, 1.0, 0.0))
+            if self.visualizer_gate is None: self.visualizer_gate = create_gate_v("/World/Visuals/GateSpheres", (0.0, 1.0, 0.0), radius=0.20)
             if self.visualizer_waypoints is None: self.visualizer_waypoints = create_v("/World/Visuals/CyanPath", (0.0, 1.0, 1.0))
             if self.visualizer_target is None: self.visualizer_target = create_v("/World/Visuals/TargetLane", (1.0, 0.0, 1.0))
 
-            if self.raw_yellow_pts is not None: self.visualizer_yellow.visualize(to_w(self.raw_yellow_pts[::8]))
-            if self.raw_white_pts is not None: self.visualizer_white.visualize(to_w(self.raw_white_pts[::8]))
-            if self.raw_gate_pts is not None: self.visualizer_gate.visualize(to_w(self.raw_gate_pts, z_off=0.08))
+            if self.raw_yellow_pts is not None: self.visualizer_yellow.visualize(to_w(self.raw_yellow_pts[::16]))
+            if self.raw_white_pts is not None: self.visualizer_white.visualize(to_w(self.raw_white_pts[::16]))
+            if self.raw_gate_pts is not None: self.visualizer_gate.visualize(to_w(self.raw_gate_pts, z_off=0.30))
             
             if self.waypoints is not None:
                 wp_np = self.waypoints.cpu().numpy()

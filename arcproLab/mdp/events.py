@@ -21,7 +21,7 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     
     # Base Target: Lane Center (Sync with -16.2 centerline)
     base_spawn_x, base_spawn_y = -16.18, 5.30
-    base_spawn_yaw = 1.5708 # Face North (Corrected from South)
+    base_spawn_yaw = 1.5708 # Flipped 180 in Z (North)
     
     # 1. Domain Randomization (Hardening)
     # Randomize X-offset: ±4cm (tighter for initial learning)
@@ -49,11 +49,10 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
         world_x, world_y = final_pos[i, 0].item(), final_pos[i, 1].item()
         hit = query.raycast_closest((world_x, world_y, 100.0), (0.0, 0.0, -1.0), 200.0)
         
-        # Apply Randomized Yaw to base North-facing
+        # Apply Randomized Yaw to native (upside-down) South-facing
         yaw = base_spawn_yaw + rand_yaw[i].item()
         half_yaw = yaw / 2.0
         
-        # Explicitly build WXYZ quaternion for 1.0x native orientation
         quats[i, 0] = math.cos(half_yaw) # W
         quats[i, 1] = 0.0                # X
         quats[i, 2] = 0.0                # Y

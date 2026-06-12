@@ -78,12 +78,13 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
             # Exactly on the path center (X=-16.197) at stable height
             pos=(-16.197, 5.50, 0.12),
-            rot=(0.0, 0.7071, 0.7071, 0.0) # Upright & Face North (WXYZ)
+            rot=(0.7071, 0.0, 0.0, 0.7071) # Native upside-down USD orientation (Face North initially)
         ),
 
- 
+
+
     )
-    
+
     # Camera (Mimic Intel RealSense D435i Wide - 90° HFOV) with NO TILT
     tiled_camera = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraSensor",
@@ -92,9 +93,19 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             horizontal_aperture=3.86, # 90-degree HFOV (2 * atan(3.86 / (2 * 1.93)))
             focal_length=1.93,
         ),
-        offset=TiledCameraCfg.OffsetCfg(pos=(0.4, 0.0, 0.2), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
+        # Moved to -0.3x (the front, since robot drives 'backwards') and rotated 180 deg Yaw to look forward
+        offset=TiledCameraCfg.OffsetCfg(pos=(-0.3, 0.0, 0.2), rot=(0.0, 0.0, 0.0, 1.0), convention="parent"),
         data_types=["rgb"], width=224, height=224,
-        debug_vis=False,
+        debug_vis=True, # ENABLED so user can see the camera frustum
+    )
+
+    # Visual Marker: Glow Red at Camera Location (Directional Pointer)
+    camera_marker = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraSensor/VisualMarker",
+        spawn=sim_utils.CuboidCfg(
+            size=(0.3, 0.05, 0.05), # Long box pointing along the camera's local X axis
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), emissive_color=(1.0, 0.0, 0.0))
+        )
     )
 
     # Contact Sensor: Detect chassis collisions (crashes)
