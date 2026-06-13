@@ -162,17 +162,17 @@ class RewardCfg:
     speed = RewTerm(func=mdp_rew.speed_reward, weight=5.0)
     # Precision: Lane centering (Reduced to prevent lazy bureaucrats)
     lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=2.0)
-    # Force movement: Aggressive stick to prevent sitting still
+    # Force movement: Neutralized to -1.0 to prevent exploding gradients
     stationary = RewTerm(
-        func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.1, -100.0, 0.0),
+        func=lambda env: torch.where(torch.norm(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1) < 0.1, -1.0, 0.0),
         weight=1.0
     )
     heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
     smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=1.0)
-    # Jitter Suppression
-    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=1.0)
-    # Boundary Penalty: Corrective signal (Priority 2)
-    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=1.0)
+    # Jitter Suppression (Neutralized to allow initial exploration)
+    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.01)
+    # Boundary Penalty: (Neutralized: -100/step was causing suicide bias)
+    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.01)
 
 
 @configclass

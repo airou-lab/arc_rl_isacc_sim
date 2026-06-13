@@ -117,7 +117,8 @@ class HPPPDirectBridge(VecEnv):
         # Extraction for custom logging (Mastery v2.6)
         # We extract speed and boundary distances for fine-grained debugging
         robot_asset = self.venv.scene["robot"]
-        self.venv.extras["speed"] = robot_asset.data.root_lin_vel_b[:, 0].clone()
+        # Use absolute magnitude for logging to ensure positive values during Control Flip
+        self.venv.extras["speed"] = torch.norm(robot_asset.data.root_lin_vel_b[:, :2], dim=1).clone()
         
         # SB3 expects info to be a list of dicts, one for each env
         infos = [{} for _ in range(self.num_envs)]

@@ -41,8 +41,8 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     obs[:, 1] = go_signals.view(-1)
     obs[:, 2] = 0.0  # IDX_GOAL_DIST
 
-    # Index 3: Forward Speed (m/s) - Local X velocity
-    obs[:, 3] = asset.data.root_lin_vel_b[:, 0]
+    # Index 3: Forward Speed (m/s) - Absolute Magnitude for Control Flip support
+    obs[:, 3] = torch.norm(asset.data.root_lin_vel_b[:, :2], dim=1)
 
     # Index 4: Yaw Rate (rad/s) - Local Z angular velocity
     obs[:, 4] = asset.data.root_ang_vel_b[:, 2]
