@@ -52,6 +52,16 @@
 
 ## Key Abstractions
 
+**Progress-Based Speed Reward:**
+- Purpose: Incentivizes movement along the track path while penalizing lateral "sliding" or backwards driving.
+- Examples: `arcproLab/mdp/rewards.py`
+- Pattern: Projects the world velocity vector onto the track tangent vector at the robot's current waypoint. Only the dot product (forward progress) earns positive reward.
+
+**Control Flip Strategy:**
+- Purpose: Ensures physical stability of the F1Tenth asset which was built with an upside-down orientation in USD.
+- Examples: `arcproLab/arcpro_env_cfg.py`, `arcproLab/mdp/events.py`
+- Pattern: Accepts the native upside-down USD spawn and inverts the drive control polarity (scale=-20.0). This prevents PhysX suspension NaN crashes that occur when forcing the robot upright.
+
 **Manager-Based Configuration:**
 - Purpose: Declaratively maps logical environment components to the underlying Isaac Sim engine.
 - Examples: `arcproLab/arcpro_env_cfg.py`

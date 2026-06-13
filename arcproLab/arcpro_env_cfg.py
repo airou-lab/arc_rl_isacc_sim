@@ -94,7 +94,7 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             focal_length=1.93,
         ),
         # Moved to 0.3x (the other side) and looking away from the robot center
-        offset=TiledCameraCfg.OffsetCfg(pos=(0.3, 0.0, 0.2), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
+        offset=TiledCameraCfg.OffsetCfg(pos=(-0.3, 0.0, 0.2), rot=(0.0, 0.0, 0.0, 1.0), convention="parent"),
         data_types=["rgb"], width=224, height=224,
         debug_vis=True, # ENABLED so user can see the camera frustum
     )
@@ -108,8 +108,8 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), emissive_color=(1.0, 0.0, 0.0))
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.3, 0.0, 0.2), 
-            rot=(1.0, 0.0, 0.0, 0.0) # Looking forward relative to this side
+            pos=(-0.3, 0.0, 0.2), 
+            rot=(0.0, 0.0, 0.0, 1.0) # Looking forward relative to this side
         )
     )
 
@@ -148,7 +148,7 @@ class ActionCfg:
     drive = arcpro_actions.CombinedDriveActionCfg(
         asset_name="robot", 
         joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
-        scale=20.0,
+        scale=-20.0,
         offset=0.0
     )
 
@@ -158,17 +158,17 @@ class RewardCfg:
     # Penalty function returns -500.0. Weight 2.0 = -1000 per death.
     terminating = RewTerm(func=mdp_rew.termination_penalty, weight=2.0)
     
-    # Performance: Momentum (Rebalanced to prevent 'Sprint and Die')
-    speed = RewTerm(func=mdp_rew.speed_reward, weight=2.0)
-    # Precision: Lane centering
-    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=10.0)
-    # Force movement: Relaxed to prevent 'Suicide Bias'
+    # Performance: Momentum (Rewards actual forward progress)
+    speed = RewTerm(func=mdp_rew.speed_reward, weight=5.0)
+    # Precision: Lane centering (Reduced to prevent lazy bureaucrats)
+    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=2.0)
+    # Force movement: Aggressive stick to prevent sitting still
     stationary = RewTerm(
         func=lambda env: torch.where(env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.1, -100.0, 0.0),
         weight=1.0
     )
     heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
-    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=30.0)
+    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=1.0)
     # Jitter Suppression
     jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=1.0)
     # Boundary Penalty: Corrective signal (Priority 2)
