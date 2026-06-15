@@ -248,7 +248,7 @@ def main():
             gamma=0.99,
             gae_lambda=0.95,
             clip_range=0.2,
-            ent_coef=0.005,     # Slashed to force convergence and sober up the AI
+            ent_coef=0.01,      # Increased from 0.005 to prevent premature convergence
             tensorboard_log=os.path.join(log_dir, "tb"),
             seed=args_cli.seed,
             device="cuda",
