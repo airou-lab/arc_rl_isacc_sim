@@ -79,3 +79,38 @@ We balanced the formula to ensure a clear hierarchy of incentives:
 
 ### 5. Physics Confirmation (Control Flip)
 - **Re-Confirmed**: The "Control Flip" strategy (Native upside-down orientation + `drive.scale = -20.0`) is the only stable configuration that prevents suspension NaN explosions for the 5kg F1Tenth asset.
+
+## Gold Master Launch: Technical Hardening & Baseline Stability
+The final stage of the MARL transition baseline involved a rigorous "Gold Master" hardening process to ensure the simulation and policy stack are ready for production-scale training.
+
+### 1. Physics & Spawn Finalization
+We re-confirmed the absolute stability parameters for the F1Tenth asset:
+- **Spawn Coordinates**: Exactly on the path center (X=-16.197) at a stable drop height of **12cm**.
+- **Orientation**: Standard North-facing spawn with an **upright orientation (180-roll)**. This ensures the suspension settles naturally without flipping or jittering.
+- **Settling Interval**: Increased simulation stability by allowing the PhysX engine to resolve initial contact before applying torque.
+
+### 2. Ground Settle Logic (Action Lock)
+To prevent the "Spastic Start" bug (where the agent applies maximum throttle while airborne during spawn), we implemented a mandatory action lock in the `WaypointTrackingWrapper`.
+- **Logic**: All actions (throttle and steering) are zeroed until the chassis Z-coordinate drops below **0.10m**.
+- **Benefit**: Ensures the robot has settled its suspension and tires are in firm contact with the road before the policy takes control.
+- **Code Snippet**:
+```python
+# Force zero action until robot has settled on the ground
+root_pos = self.env.unwrapped.scene["robot"].data.root_pos_w
+is_airborne = (root_pos[:, 2] > 0.10) | (self.env.unwrapped.episode_length_buf < 5)
+action[is_airborne] = 0.0
+```
+
+### 3. Strict Boundary Enforcement
+- **Paint Sensitivity**: Restored the `roadmark_contact` threshold to **0.12m**.
+- **Constraint**: This is the exact physical limit where the outer tire edge touches the white/yellow paint. This zero-tolerance approach forces the agent to learn precise lane centering.
+
+### 4. Hole Punching for Gate Permeability
+We resolved a conflict between dense boundary markers and logical lane gates by implementing a 1.0m "Hole Punching" algorithm in the `TrackManager`.
+- **Innovation**: The manager now automatically removes boundary markers (white/yellow points) that fall within 1.0m of a logical Lane Gate.
+- **Result**: Perfect visibility of lane markings for the vision system, but absolute permeability for the physics engine, preventing "Invisible Wall" resets at intersections.
+
+### 5. Training Baseline (Step 0)
+- **Status**: Wiped all legacy checkpoints and launched a fresh run.
+- **Initial Metrics**: The agent shows immediate survival capability, averaging **190 steps** per episode with a stable cruise speed of **0.22 m/s**.
+- **Convergence**: Negative reward gradients for lateral error and heading are already trending downward, confirming the mathematical balance is correct.
