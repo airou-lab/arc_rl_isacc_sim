@@ -168,7 +168,7 @@ class RewardCfg:
         weight=1.0
     )
     heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
-    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=1.0)
+    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=15.0)
     # Jitter Suppression (Neutralized to allow initial exploration)
     jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.01)
     # Boundary Penalty: (Neutralized: -100/step was causing suicide bias)
