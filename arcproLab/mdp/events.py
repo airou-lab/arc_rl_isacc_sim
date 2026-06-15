@@ -21,7 +21,7 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     
     # Base Target: Lane Center (Sync with -16.2 centerline)
     base_spawn_x, base_spawn_y = -16.18, 5.30
-    base_spawn_yaw = -1.5708 # Flipped 180 in Z (South)
+    base_spawn_yaw = 1.5708 # Face North (Matching Track Direction)
     
     # 1. Domain Randomization (Hardening)
     # Randomize X-offset: ±4cm (tighter for initial learning)

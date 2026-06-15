@@ -268,7 +268,7 @@ class TrackManager:
             self.raw_gate_pts = np.array(gate_fallback_pts)
             
         # 3. CRITICAL: Punch Holes for Gate Permeability
-        # If any white/yellow point is within 0.5m of a Gate point, REMOVE IT.
+        # If any white/yellow point is within 1.0m of a Gate point, REMOVE IT.
         # This guarantees the robot can pass through gates without triggering termination.
         if self.raw_gate_pts is not None:
             gate_xy = self.raw_gate_pts[:, :2]
@@ -280,8 +280,8 @@ class TrackManager:
                 dists = np.linalg.norm(pts_xy[:, np.newaxis] - gate_xy, axis=2)
                 min_dist_to_gate = np.min(dists, axis=1)
                 
-                # Keep only points further than 0.5m from any gate
-                mask = min_dist_to_gate > 0.5
+                # Keep only points further than 1.0m from any gate
+                mask = min_dist_to_gate > 1.0
                 filtered = raw_pts[mask]
                 print(f"[TrackManager] Punched holes in {name}: removed {len(raw_pts) - len(filtered)} overlapping points.")
                 return filtered

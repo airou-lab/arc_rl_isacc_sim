@@ -95,7 +95,16 @@ class HPPPDirectBridge(VecEnv):
 
     def step_wait(self):
         actions_torch = torch.from_numpy(self._async_actions).to(self.device)
+
+        # Force zero action until robot has settled on the ground
+        # Chassis Z < 0.10m means wheels are in contact with road
+        raw_env = self.venv.unwrapped
+        root_pos = raw_env.scene["robot"].data.root_pos_w
+        is_airborne = (root_pos[:, 2] > 0.10) | (raw_env.episode_length_buf < 5)
+        actions_torch[is_airborne] = 0.0
+
         obs_dict, rewards, terminated, truncated, info = self.venv.step(actions_torch)
+
         dones = (terminated | truncated).cpu().numpy()
         
         infos = [{} for _ in range(self.num_envs)]

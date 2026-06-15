@@ -178,8 +178,8 @@ class RewardCfg:
 @configclass
 class TerminationCfg:
     # Snap Reset: Touching the paint kills the robot
-    # Relaxed to 0.05 to give RL agent a buffer zone while learning to steer at high speeds
-    roadmark_contact = DoneTerm(func=mdp_done.white_line_contact, params={"threshold": 0.05})
+    # 0.12m is the exact threshold where tires touch the paint
+    roadmark_contact = DoneTerm(func=mdp_done.white_line_contact, params={"threshold": 0.12})
     # height termination: Catch flying robots (falling into void)
     height = DoneTerm(func=mdp_done.height_termination)
     # Stagnation: Reset if stuck against a wall

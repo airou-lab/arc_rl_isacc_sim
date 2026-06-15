@@ -11,6 +11,25 @@
 **RL Algorithms:**
 - Stable Baselines 3 & SB3-Contrib - Provides PPO and Recurrent PPO implementations.
 
+## Reward Logic: Mastery Formula (v2.8)
+
+**Implementation:** `arcproLab/mdp/rewards.py`
+**Configuration:** `arcproLab/arcpro_env_cfg.py`
+
+| Component | Math / Logic | Weight |
+|-----------|--------------|--------|
+| **Progress Speed** | `torch.sum(vel_world * tangent, dim=1)` | 5.0 |
+| **Lateral Error** | `1.0 - (clamp(abs_lat - 0.10, min=0) * 2.0)` | 2.0 |
+| **Heading Align** | `torch.cos(head_err)` | 2.0 |
+| **Action Rate** | `-1.0 * torch.square(act - prev_act)` | 1.0 |
+| **Jerk Penalty** | `-100.0 * torch.square(steer_delta)` | **0.01** (Neutralized) |
+| **Boundary Penalty** | `-100.0` if near white line | **0.01** (Neutralized) |
+| **Termination** | `-500.0` fixed penalty | 2.0 |
+
+**Control Strategy:**
+- **Control Flip:** Drive scale set to `-20.0` in `arcproLab/arcpro_env_cfg.py`.
+- **Orientation:** Uses native USD orientation `(0.7071, 0.0, 0.0, 0.7071)` (Faces North).
+
 ## Data Storage
 
 **Databases:**

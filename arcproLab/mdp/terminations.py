@@ -28,9 +28,9 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     boundary_hit = (dist_w < threshold) | (dist_y < threshold)
     
     # 2. Gate permeability check (Phase 11-17)
-    # Mask the boundary reset if we are inside a gate zone (dist_g < 0.20m)
+    # Mask the boundary reset if we are inside a gate zone (dist_g < 0.50m)
     # This allows the robot to cross white lines that belong to gates
-    in_gate_zone = dist_g < 0.20
+    in_gate_zone = dist_g < 0.50
     masked_boundary_hit = boundary_hit & (~in_gate_zone)
     
     # 3. Gate contact logic: Still resets if entering gate with bad alignment
@@ -67,9 +67,9 @@ def stagnation_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = S
     asset = env.scene[asset_cfg.name]
     # Use absolute speed magnitude in the XY plane to avoid axis polarity issues
     vel = torch.norm(asset.data.root_lin_vel_b[:, :2], dim=1)
-    # Reset if speed is less than 0.1 m/s for more than 50 steps (~1.0s)
-    # This gives the RL agent a fair window to explore throttle from a dead stop.
-    return (vel < 0.1) & (env.episode_length_buf > 50)
+    # Reset if speed is less than 0.1 m/s for more than 200 steps (~4.0s)
+    # Increased to give the agent room to explore higher speeds without early timer resets.
+    return (vel < 0.1) & (env.episode_length_buf > 200)
 
 def fov_visibility_termination(env: ManagerBasedRLEnv, horizontal_aperture: float, focal_length: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)

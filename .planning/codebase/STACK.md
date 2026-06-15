@@ -51,7 +51,10 @@
 
 **MDP Logic (MARL & Mastery):**
 - **RoadManager:** Vectorized navigation state management (`(num_envs, num_agents)`).
-- **Hybrid Boundary Logic:** Implemented via `mdp/rewards.py` and `mdp/terminations.py`.
+- **Mastery Formula (v2.8):** Implemented in `arcproLab/mdp/rewards.py` to balance performance vs. survival.
+  - **Progress-Based Speed:** Projects world velocity onto track tangent. $Reward = \text{clamp}(\vec{v}_{world} \cdot \vec{t}_{track}, \text{min}=-1.0)$.
+  - **Control Flip:** Native USD orientation `rot=(0.7071, 0.0, 0.0, 0.7071)` with `-20.0` drive scale in `arcproLab/arcpro_env_cfg.py`.
+  - **Penalty Neutralization:** Weights for Jerk and Boundary reduced to `0.01` to prevent "suicide bias" (terminating early to avoid penalties).
 
 **Build:**
 - `pytest.ini` for testing configuration in `arcproLab/policy_stack/`.

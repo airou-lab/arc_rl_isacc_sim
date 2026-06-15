@@ -241,14 +241,14 @@ def main():
             HierarchicalPathPlanningPolicy,
             env,
             verbose=1,
-            learning_rate=2e-4, # Increased for ResNet-18 complexity
-            n_steps=128,        # Extremely small rollout to prevent OOM
-            batch_size=16,      # Tiny batch size for ResNet backprop
-            n_epochs=10,        # Reduced epochs to speed up updates
+            learning_rate=5e-5, # Reduced for more stable, deliberate updates
+            n_steps=512,        # 4096 samples per update
+            batch_size=64,      # Increased for better gradient averaging
+            n_epochs=10,        
             gamma=0.99,
             gae_lambda=0.95,
             clip_range=0.2,
-            ent_coef=0.01,     # Focused exploration for HD
+            ent_coef=0.005,     # Slashed to force convergence and sober up the AI
             tensorboard_log=os.path.join(log_dir, "tb"),
             seed=args_cli.seed,
             device="cuda",
