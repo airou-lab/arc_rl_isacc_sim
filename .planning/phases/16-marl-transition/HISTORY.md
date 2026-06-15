@@ -114,3 +114,6 @@ We resolved a conflict between dense boundary markers and logical lane gates by 
 - **Status**: Wiped all legacy checkpoints and launched a fresh run.
 - **Initial Metrics**: The agent shows immediate survival capability, averaging **190 steps** per episode with a stable cruise speed of **0.22 m/s**.
 - **Convergence**: Negative reward gradients for lateral error and heading are already trending downward, confirming the mathematical balance is correct.
+
+## Final Verification Required
+**The Phase 16 "Gold Master" baseline documented above still requires final user verification once the 5,000,000 timestep training goal is reached.** This verification must confirm that the long-term convergence remains stable and that the resulting vision policy achieves the intended lap-time mastery without physical or mathematical regressions.
