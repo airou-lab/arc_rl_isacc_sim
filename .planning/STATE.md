@@ -1,9 +1,9 @@
-# Project State: ARCPro RL v2.9-gold-master
+# Project State: ARCPro RL v2.9 (Hardened Mastery)
 
 **RESUME HERE**
-- **Milestone**: Milestone 3
-- **Phase**: Phase 16 (MARL Transition)
-- **Next Todo**: Proceed with MARL Architecture Discussion and multi-agent refactoring. Single-agent baseline is now "Gold Master" stabilized. Focus on refactoring RoadGraph from singleton to agent-indexed tensors.
+- **Milestone**: Milestone 3: HD Perception & Production Hardening
+- **Phase**: Phase 16: MARL Transition
+- **Next Todo**: Proceed with MARL Architecture Discussion. Focus on refactoring RoadGraph from singleton to agent-indexed tensors. Single-agent "Hardened Mastery" baseline is finalized.
 
 ---
 
@@ -14,26 +14,26 @@
 **Phase 16: MARL Transition** (ACTIVE)
 
 ## Summary
-The project has reached the "Gold Master" training baseline for Phase 16. We have successfully stabilized the single-agent physics, reward mathematics, and environment boundary logic. A fresh Step 0 training run is currently active with high survival metrics and stable convergence.
+The project has reached the **Hardened Mastery v2.9** training baseline. This version focuses on extreme lateral precision and steering stability, suppressing the "jitter" observed in earlier v2.x iterations. Single-agent performance is now highly stable, providing a robust foundation for the upcoming Multi-Agent Reinforcement Learning (MARL) transition.
 
-Key Stabilizations (Gold Master):
-- **Ground Settle Logic**: Mandatory action lock (zero throttle/steer) until chassis drops below Z=0.10m, ensuring suspension stability.
-- **Physics Fidelity**: North-facing spawn, upright orientation (180-roll), and 12cm drop height confirmed as the production baseline.
-- **Boundary Precision**: Strict 0.12m paint-contact threshold restored for high-precision lane following.
-- **Intersection Permeability**: Implemented 1.0m "Hole Punching" in boundary markers at lane gates to allow seamless intersection navigation.
+Key Stabilizations (Hardened Mastery v2.9):
+- **Lateral Precision**: Shrinked safety plateau from 0.10m to **0.05m** and increased penalty slope to **10.0** in `lateral_error_reward`.
+- **Steering Stabilization**: Increased `smoothness` reward weight to **15.0** to suppress traction-breaking jitters.
+- **Exploration Balance**: Restored `ent_coef` to **0.01** to ensure the agent explores the now-stricter reward manifold.
+- **Survival Metrics**: Initial Step 0 metrics show high survival (**199+ steps**) and stable convergence.
 
-## Recent Activity (Gold Master Launch)
-- **Environment Hardening**: Implemented Hole Punching in `TrackManager` and Action Locking in `WaypointTrackingWrapper`.
-- **Training Reset**: Wiped legacy checkpoints and initiated a fresh PPO run from Step 0.
-- **Metric Verification**: Confirmed average survival of 190 steps and 0.22 m/s cruise speed in early Step 0 logs.
+## Recent Activity
+- **Reward Tuning**: Hardened the lateral error penalty and smoothness rewards to improve lane-centering and reduce jitter.
+- **Hyperparameter Optimization**: Adjusted entropy coefficient for better exploration-exploitation balance under stricter constraints.
+- **Training Relaunch**: Initiated a fresh 5M step training run to validate the hardened parameters.
 
 ## Reference State (v2.9)
 - **Model**: ResNet-18 (Fusion Policy)
 - **Scale**: 1.0x True Physics
-- **Orientation**: Upright (180-roll)
-- **Drive Polarity**: `scale=-20.0` (Native drive scaling)
-- **Spawn Height**: 0.12m (Drop height)
-- **Settling Threshold**: 0.10m (Action lock release)
+- **Lateral Plateau**: 0.05m (Strict)
+- **Smoothness Weight**: 15.0
+- **Entropy Coef**: 0.01
+- **Spawn Height**: 0.12m
 - **Boundary Threshold**: 0.12m
 - **Envs**: 32
 - **Sensors**: Enabled (Camera 224x224)
