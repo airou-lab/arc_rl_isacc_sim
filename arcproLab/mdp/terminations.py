@@ -57,19 +57,19 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     # Apply grace period to both boundaries and gates
     return (~is_spawn) & (masked_boundary_hit | gate_hit)
 
-def height_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Terminates if the robot flips or falls."""
+def height_termination(env: ManagerBasedRLEnv, threshold: float = 0.05, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Terminates if the robot flips or falls below a threshold."""
     asset = env.scene[asset_cfg.name]
-    return asset.data.root_pos_w[:, 2] < 0.05
+    return asset.data.root_pos_w[:, 2] < threshold
 
 def stagnation_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Terminates if the robot is crawling or stuck (speed < 0.1 m/s)."""
     asset = env.scene[asset_cfg.name]
     # Use absolute speed magnitude in the XY plane to avoid axis polarity issues
     vel = torch.norm(asset.data.root_lin_vel_b[:, :2], dim=1)
-    # Reset if speed is less than 0.1 m/s for more than 200 steps (~4.0s)
-    # Increased to give the agent room to explore higher speeds without early timer resets.
-    return (vel < 0.1) & (env.episode_length_buf > 200)
+    # Reset if speed is less than 0.1 m/s for more than 1000 steps (~20.0s)
+    # Relaxed to allow the agent to explore longer paths without being killed by the timer.
+    return (vel < 0.1) & (env.episode_length_buf > 1000)
 
 def fov_visibility_termination(env: ManagerBasedRLEnv, horizontal_aperture: float, focal_length: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)

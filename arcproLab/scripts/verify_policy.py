@@ -222,30 +222,53 @@ def main():
             obs, rewards, dones, infos = env.step(actions)
             
             # Action Debug
-            # actions is (B, 3) -> [steer, throttle, brake]
-            steer = actions[0, 0]
-            throttle = actions[0, 1]
-            brake = actions[0, 2]
-            if count % 5 == 0:
-                print(f"  [ACT] Step {count:4d} | Steer: {steer:6.3f} | Throttle: {throttle:6.3f} | Brake: {brake:6.3f}")
+            # The env chain is VecNormalize -> HPPPDirectBridge -> ManagerBasedRLEnv
+            raw_env = env.venv.venv.unwrapped
+            z = raw_env.scene["robot"].data.root_pos_w[0, 2].item()
+            
+            # Get distances from TrackManager
+            from mdp.track_manager import get_track_manager
+            tm = get_track_manager(device=raw_env.device)
+            local_pos = raw_env.scene["robot"].data.root_pos_w - raw_env.scene.env_origins
+            dist_y, dist_w, dist_g = tm.compute_marker_distances(local_pos)
+            
+            if count % 1 == 0: # Print every step for 50 steps
+                print(f"  Step {count:3d} | Z: {z:.3f} | DY: {dist_y[0]:.3f} | DW: {dist_w[0]:.3f} | Term: {dones[0]}")
 
-            # Save debug frames every 50 steps (if single env)
+            # SHOW LIVE CAMERA (if single env) - DISABLED due to OpenCV GUI limitations
+            if args_cli.num_envs == 1 and False: 
+                # Get unnormalized observations
+                raw_obs = env.get_original_obs()
+                img_np = raw_obs["image"][0] # (C, H, W)
+                img_hwc = np.transpose(img_np, (1, 2, 0))
+                img_uint8 = (img_hwc * 255).clip(0, 255).astype(np.uint8)
+                img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
+                
+                # Render to popup window
+                cv2.imshow("ARCPro AI Vision", img_bgr)
+                cv2.waitKey(1)
+
+            # Save debug frames every 50 steps
             if args_cli.num_envs == 1 and count % 50 == 0:
                 debug_dir = "debug_frames"
                 os.makedirs(debug_dir, exist_ok=True)
+                
                 # Get unnormalized observations
                 raw_obs = env.get_original_obs()
-                # obs is from VecNormalize -> HPPPDirectBridge
-                # obs["image"] is (B, C, H, W). We want the first env [0]
-                img_np = raw_obs["image"][0] # (C, H, W)
-                # Convert from CHW to HWC for cv2
-                img_hwc = np.transpose(img_np, (1, 2, 0))
-                # It's [0, 1] float, convert to [0, 255] uint8
-                img_uint8 = (img_hwc * 255).clip(0, 255).astype(np.uint8)
-                # Convert RGB to BGR for cv2
-                img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
-                cv2.imwrite(os.path.join(debug_dir, f"frame_{count}.png"), img_bgr)
-                print(f"  [DEBUG] Saved camera frame {count} to {debug_dir}/frame_{count}.png")
+                
+                # HPPPBridge renames visual -> image
+                if "image" in raw_obs:
+                    img_np = raw_obs["image"][0] # (C, H, W)
+                    # Convert from CHW to HWC for cv2
+                    img_hwc = np.transpose(img_np, (1, 2, 0))
+                    # It's [0, 1] float, convert to [0, 255] uint8
+                    img_uint8 = (img_hwc * 255).clip(0, 255).astype(np.uint8)
+                    # Convert RGB to BGR for cv2
+                    img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
+                    cv2.imwrite(os.path.join(debug_dir, f"frame_{count}.png"), img_bgr)
+                    print(f"  [DEBUG] Saved camera frame {count} to {debug_dir}/frame_{count}.png")
+                else:
+                    print(f"  [ERROR] 'image' key not found. Available: {raw_obs.keys()}")
 
             # Update episode starts for LSTM reset logic
             episode_starts = dones

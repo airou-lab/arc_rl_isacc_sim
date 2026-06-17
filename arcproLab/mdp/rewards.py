@@ -42,14 +42,14 @@ def termination_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
 def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
     Reward based on lateral offset from track centerline.
-    Features a 5cm Plateau: Full reward if within 5cm, then drops off sharply.
+    Continuous Gradient: No plateau. Every mm closer to center increases reward.
+    Zero reward at 0.10m, negative beyond.
     """
     lat_err = env.extras.get("lat_err", torch.zeros(env.num_envs, device=env.device))
     abs_lat = torch.abs(lat_err)
     
-    # Plateau: 1.0 if within 0.05m
-    # Penalty: 10.0 per meter outside the plateau (Rapid dropoff)
-    reward = torch.clamp(1.0 - (torch.clamp(abs_lat - 0.05, min=0.0) * 10.0), min=-1.0)
+    # 1.0 at center (0.0m), 0.0 at 0.10m. Linear dropoff.
+    reward = torch.clamp(1.0 - (abs_lat * 10.0), min=-1.0)
     return reward
 
 def jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:

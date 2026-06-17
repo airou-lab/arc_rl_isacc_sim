@@ -21,15 +21,15 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     
     # Base Target: Lane Center (Sync with -16.2 centerline)
     base_spawn_x, base_spawn_y = -16.18, 5.30
-    base_spawn_yaw = 1.5708 # Face North (Matching Track Direction)
+    base_spawn_yaw = -1.5708 # Flipped 180 in Z (South)
     
     # 1. Domain Randomization (Hardening)
     # Randomize X-offset: ±4cm (tighter for initial learning)
     rand_offset_x = (torch.rand(num_resets, device=env.device) * 0.08) - 0.04
     # Randomize Heading: ±5 degrees (~0.08 rad)
     rand_yaw = (torch.rand(num_resets, device=env.device) * 0.16) - 0.08
-    # Randomize Initial Velocity: 0.2 to 0.5 m/s (Rolling Start)
-    rand_vel_x = (torch.rand(num_resets, device=env.device) * 0.3) + 0.2
+    # Randomize Initial Velocity: Disabled for stability during drop
+    rand_vel_x = torch.zeros(num_resets, device=env.device)
     
     # Get environment origins
     env_origins = env.scene.env_origins[env_ids]
@@ -38,7 +38,7 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     final_pos = torch.zeros((num_resets, 3), device=env.device)
     final_pos[:, 0] = env_origins[:, 0] + base_spawn_x + rand_offset_x
     final_pos[:, 1] = env_origins[:, 1] + base_spawn_y
-    final_pos[:, 2] = env_origins[:, 2] + 0.10 # Safe default drop height
+    final_pos[:, 2] = env_origins[:, 2] + 0.20 # Safe drop height
 
     # 3. Compute final rotations (WXYZ)
     quats = torch.zeros((num_resets, 4), device=env.device)
@@ -49,20 +49,35 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
         world_x, world_y = final_pos[i, 0].item(), final_pos[i, 1].item()
         hit = query.raycast_closest((world_x, world_y, 100.0), (0.0, 0.0, -1.0), 200.0)
         
-        # Apply Randomized Yaw to native (upside-down) South-facing
-        yaw = base_spawn_yaw + rand_yaw[i].item()
-        half_yaw = yaw / 2.0
+        # 180-degree Roll (X-axis) * Yaw (Z-axis)
+        # Combine: q_final = q_yaw * q_roll
+        # Base North+Upright: w=0, x=0.7071, y=0.7071, z=0
         
-        quats[i, 0] = math.cos(half_yaw) # W
-        quats[i, 1] = 0.0                # X
-        quats[i, 2] = 0.0                # Y
-        quats[i, 3] = math.sin(half_yaw) # Z
+        yaw_offset = rand_yaw[i].item()
+        half_yaw = (base_spawn_yaw + yaw_offset) / 2.0
+        c = math.cos(half_yaw)
+        s = math.sin(half_yaw)
+        
+        # Combined WXYZ result:
+        quats[i, 0] = 0.0 * c - 1.0 * 0.0 # W
+        quats[i, 1] = 0.7071 * c + 0.7071 * s # X
+        quats[i, 2] = 0.7071 * c - 0.7071 * s # Y
+        quats[i, 3] = 0.0 * c + 0.0 * s # Z
+        
+        # Actually let's just use the strict confirmed math:
+        # For 180 roll + Yaw:
+        # W = 0
+        # X = cos(yaw/2)
+        # Y = sin(yaw/2)
+        # Z = 0
+        quats[i, 0] = 0.0
+        quats[i, 1] = math.cos(half_yaw)
+        quats[i, 2] = math.sin(half_yaw)
+        quats[i, 3] = 0.0
 
         if hit["hit"]:
-            # Snap Z to road (8cm offset)
-            # F1Tenth wheels are ~5cm radius. 8cm ensures the chassis is above the road
-            spawn_z = hit["position"][2] + 0.08
-            if spawn_z < 0.05: spawn_z = 0.05
+            # Snap Z to road (20cm offset)
+            spawn_z = hit["position"][2] + 0.20
             final_pos[i, 2] = spawn_z
     
     # 4. Apply Initial Velocity (World Frame)

@@ -51,8 +51,8 @@ def main():
                 failure = f"DIVERGENCE: STD exploded to {s}. The neural network has gone insane."
             
             # 2. Stagnation Check (Glass Ceiling)
-            elif t > 500000 and e < 40.0:
-                failure = f"STAGNATION: Surviving only {e} steps after 500k timesteps. The agent is likely stuck in a local minimum."
+            elif t > 500000 and e < 200.0:
+                failure = f"STAGNATION: Surviving only {e} steps after 500k timesteps. The agent is likely stuck in a crawling local minimum."
             
             # 3. Crash Check (Resource Lock)
             elif t > 10000 and f < 2:

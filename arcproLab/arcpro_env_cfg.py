@@ -76,9 +76,9 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             scale=(1.0, 1.0, 1.0), # Revert to 1.0x
         ),
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
-            # Exactly on the path center (X=-16.197) at stable height
+            # Exactly on the path center (X=-16.197) at safe drop height
             pos=(-16.197, 5.50, 0.12),
-            rot=(0.7071, 0.0, 0.0, 0.7071) # Native upside-down USD orientation (Face North initially)
+            rot=(0.0, 0.7071, 0.7071, 0.0) # Upright & Face North (WXYZ)
         ),
 
 
@@ -87,29 +87,30 @@ class ARCProSceneCfg(InteractiveSceneCfg):
 
     # Camera (Mimic Intel RealSense D435i Wide - 90° HFOV) with NO TILT
     tiled_camera = TiledCameraCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraSensor",
+        prim_path="{ENV_REGEX_NS}/Robot/CameraSensor",
         update_period=0.0,
         spawn=sim_utils.PinholeCameraCfg(
             horizontal_aperture=3.86, # 90-degree HFOV (2 * atan(3.86 / (2 * 1.93)))
             focal_length=1.93,
         ),
-        # Moved to 0.3x (the other side) and looking away from the robot center
-        offset=TiledCameraCfg.OffsetCfg(pos=(-0.3, 0.0, 0.2), rot=(0.0, 0.0, 0.0, 1.0), convention="parent"),
+        # Raised to 0.35m and tilted 30 degrees down to see the road
+        # Pitch Down 30 deg: W=0.966, Y=0.258
+        offset=TiledCameraCfg.OffsetCfg(pos=(0.3, 0.0, 0.35), rot=(0.966, 0.0, 0.258, 0.0), convention="parent"),
         data_types=["rgb"], width=224, height=224,
         debug_vis=True, # ENABLED so user can see the camera frustum
     )
 
     # Visual Marker: Glow Red at Camera Location (Directional Pointer)
-    # Mounted to Chassis with same offset as camera (0.3x, looking outward)
+    # Mounted to Robot root with same offset as camera
     camera_marker = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraMarker",
+        prim_path="{ENV_REGEX_NS}/Robot/CameraMarker",
         spawn=sim_utils.CuboidCfg(
-            size=(0.3, 0.05, 0.05), # Long box pointing forward
+            size=(1.0, 0.02, 0.02), # 1 meter long 'laser' pointer
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), emissive_color=(1.0, 0.0, 0.0))
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(-0.3, 0.0, 0.2), 
-            rot=(0.0, 0.0, 0.0, 1.0) # Looking forward relative to this side
+            pos=(0.3, 0.0, 0.35), 
+            rot=(1.0, 0.0, 0.0, 0.0) # Normal facing
         )
     )
 
@@ -148,7 +149,7 @@ class ActionCfg:
     drive = arcpro_actions.CombinedDriveActionCfg(
         asset_name="robot", 
         joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
-        scale=-20.0,
+        scale=20.0,
         offset=0.0
     )
 
@@ -159,16 +160,16 @@ class RewardCfg:
     terminating = RewTerm(func=mdp_rew.termination_penalty, weight=2.0)
     
     # Performance: Momentum (Rewards actual forward progress)
-    speed = RewTerm(func=mdp_rew.speed_reward, weight=5.0)
-    # Precision: Lane centering (Reduced to prevent lazy bureaucrats)
-    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=2.0)
+    speed = RewTerm(func=mdp_rew.speed_reward, weight=10.0)
+    # Precision: Lane centering (Increased pressure to stay in center)
+    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=10.0)
     # Force movement: Neutralized to -1.0 to prevent exploding gradients
     stationary = RewTerm(
         func=lambda env: torch.where(torch.norm(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1) < 0.1, -1.0, 0.0),
         weight=1.0
     )
     heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
-    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=15.0)
+    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=5.0)
     # Jitter Suppression (Neutralized to allow initial exploration)
     jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.01)
     # Boundary Penalty: (Neutralized: -100/step was causing suicide bias)
@@ -181,7 +182,8 @@ class TerminationCfg:
     # 0.12m is the exact threshold where tires touch the paint
     roadmark_contact = DoneTerm(func=mdp_done.white_line_contact, params={"threshold": 0.12})
     # height termination: Catch flying robots (falling into void)
-    height = DoneTerm(func=mdp_done.height_termination)
+    # Lowered to 0.02m to give suspension room to breathe upon impact
+    height = DoneTerm(func=mdp_done.height_termination, params={"threshold": 0.02})
     # Stagnation: Reset if stuck against a wall
     stagnation = DoneTerm(func=mdp_done.stagnation_termination)
     # FOV Driving: Reset if driving into areas not visible to the camera
@@ -224,7 +226,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
 
     def __post_init__(self):
         self.decimation = 10 # 500Hz / 10 = 50Hz control (Nyquist stability for 6cm clearance)
-        self.episode_length_s = 120.0 
+        self.episode_length_s = 300.0 
         self.viewer.camera_follow_prim_path = None
         
         if not self.enable_cameras:
