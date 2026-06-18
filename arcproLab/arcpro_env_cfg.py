@@ -96,23 +96,11 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             focal_length=1.93,
         ),
         # 8x pos: (2.24, 0.0, 1.28) -> 1x pos: (0.28, 0.0, 0.16)
-        offset=TiledCameraCfg.OffsetCfg(pos=(0.28, 0.0, 0.16), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
+        # convention="world": forward=+X (chassis fwd), up=+Z. Identity rot = level look-ahead.
+        # Prior config used "parent" which IsaacLab silently treats as opengl (forward=-Z),
+        # which pointed the camera straight at the ground.
+        offset=TiledCameraCfg.OffsetCfg(pos=(0.28, 0.0, 0.16), rot=(1.0, 0.0, 0.0, 0.0), convention="world"),
         data_types=["rgb"], width=224, height=224,
-    )
-
-    # Camera Visual Helper (Invisible to sensors, visible in GUI)
-    camera_cone = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraVisualCone",
-        spawn=sim_utils.ConeCfg(
-            func=arcpro_spawner.spawn_guide_cone,
-            radius=0.03,
-            height=0.1,
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 1.0), opacity=0.5),
-        ),
-        init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.35, 0.0, 0.16), # Slightly in front of camera lens
-            rot=(0.7071, 0.0, 0.7071, 0.0) # Point along X-axis (Forward)
-        ),
     )
 
     # Contact Sensor: Detect chassis collisions (crashes)

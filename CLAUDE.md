@@ -93,7 +93,7 @@ Raw `lat_err` / `head_err` from `TrackManager.compute_errors` still flow into `e
 - Shape: `(num_envs, 224, 224, 3)` (H, W, C — Isaac Lab `TiledCamera` convention).
 - dtype: `torch.uint8`, values in `[0, 255]` (V1 reunification: matches policy `Box(0, 255, uint8)` declaration, OM 1.3-B). Produced by `mdp/observations.py::get_image_uint8`.
 - Resolution `224 × 224`, `data_types=["rgb"]`, horizontal aperture 2.65, focal length 1.93 → ≈ 69° horizontal FOV.
-- Camera offset relative to chassis: `(0.28, 0.0, 0.16) m`, identity rotation, `convention="parent"`.
+- Camera offset relative to chassis: `(0.28, 0.0, 0.16) m`, identity rotation, `convention="world"` (forward axis +X = chassis forward, up axis +Z). Do NOT use `convention="parent"` — IsaacLab does not recognize that string and silently treats it as `"opengl"` (forward=-Z), which points the camera straight down at the ground.
 - The `tiled_camera` term inside the policy group and the camera sensor are both set to `None` when `enable_cameras=False` (`arcpro_env_cfg.py` `__post_init__`).
 
 `Sb3VecEnvWrapper` passes the `policy` group through as a Dict (with `concatenate_terms=False` on `PolicyCfg`); SB3's `MultiInputPolicy` consumes the Dict natively — NatureCNN on the `(224, 224, 3)` uint8 image (channels-first transpose handled by the wrapper) and an MLP on the 12-D telemetry, fused for the actor/critic heads (`scripts/train_policy.py`).

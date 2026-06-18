@@ -58,6 +58,10 @@ class StopLineDetection:
     confidence: float = 0.0
     image_row: Optional[int] = None
     source: str = "none"
+    # Visualization hints (populated only when detected=True).
+    band_top_row: Optional[int] = None
+    band_bottom_row: Optional[int] = None
+    white_threshold: Optional[int] = None
 
 
 @dataclass
@@ -85,7 +89,7 @@ class StopLineDetectorConfig:
     camera_pitch_rad: float = 0.0
 
     roi_top_ratio: float = 0.5
-    white_threshold: int = 200
+    white_threshold: int = 220
     # Pixel thresholds inherited from the policy repo's 224x224 retune.
     min_line_width_px: int = 56
     max_line_thickness_px: int = 20
@@ -107,6 +111,24 @@ class StopLineDetectorBase:
 
 
 # Visual
+
+def _longest_run_per_row(binary: np.ndarray) -> np.ndarray:
+    """For each row of a 2-D bool array, length of the longest contiguous
+    True run. Returns int array of shape (binary.shape[0],).
+    """
+    h, w = binary.shape
+    out = np.zeros(h, dtype=np.int32)
+    for r in range(h):
+        row = binary[r]
+        if not row.any():
+            continue
+        padded = np.concatenate(([0], row.astype(np.int8), [0]))
+        diff = np.diff(padded)
+        starts = np.where(diff == 1)[0]
+        ends = np.where(diff == -1)[0]
+        out[r] = int((ends - starts).max())
+    return out
+
 
 class VisualStopLineDetector(StopLineDetectorBase):
     """Classical CV stop-line detector.
@@ -161,8 +183,12 @@ class VisualStopLineDetector(StopLineDetectorBase):
             mask, self.config.white_threshold, 255, cv2.THRESH_BINARY
         )
 
-        # Horizontal whiteness per row
-        row_counts = np.sum(white > 0, axis=1)
+        # Horizontal whiteness per row — LONGEST CONTIGUOUS run, not total
+        # count. Two narrow lane curbs (~28% left + ~10% right) summing to
+        # 38% of the width would otherwise pass min_fraction=0.35 and be
+        # mistaken for a real stop bar, which is exactly the false-positive
+        # mode we saw in the post-spawn capture sequence.
+        row_counts = _longest_run_per_row(white > 0)
         if row_counts.max() == 0:
             return StopLineDetection(source=self.source)
 
@@ -179,13 +205,17 @@ class VisualStopLineDetector(StopLineDetectorBase):
         )
         above_thresh = row_counts >= neighborhood_threshold
         run_len = 1
+        band_top = peak_row
+        band_bottom = peak_row
         r = peak_row - 1
         while r >= 0 and above_thresh[r]:
             run_len += 1
+            band_top = r
             r -= 1
         r = peak_row + 1
         while r < h and above_thresh[r]:
             run_len += 1
+            band_bottom = r
             r += 1
         if run_len > self.config.max_line_thickness_px:
             return StopLineDetection(source=self.source)
@@ -207,6 +237,9 @@ class VisualStopLineDetector(StopLineDetectorBase):
             confidence=float(confidence),
             image_row=peak_row,
             source=self.source,
+            band_top_row=int(band_top),
+            band_bottom_row=int(band_bottom),
+            white_threshold=int(self.config.white_threshold),
         )
 
     def _row_to_distance(self, row: int) -> Optional[float]:
@@ -225,8 +258,15 @@ class VisualStopLineDetector(StopLineDetectorBase):
 def visualize_stop_line_detection(
     image: np.ndarray,
     result: StopLineDetection,
+    mask_alpha: float = 0.55,
 ) -> np.ndarray:
-    """Annotate `image` with the detection (line + text). Requires cv2.
+    """Annotate `image` with the detection. Requires cv2.
+
+    Paints a translucent green mask over the actual bright pixels that
+    drove the detection — i.e. every pixel >= white_threshold in the
+    vertical band [band_top_row, band_bottom_row]. This makes it visually
+    obvious whether the detector locked onto a real stop bar or onto
+    curbs / lane edges / texture artifacts.
 
     Returns a new annotated image (RGB) regardless of detection outcome.
     """
@@ -234,14 +274,41 @@ def visualize_stop_line_detection(
         return image
     vis = image.copy()
     h, w = vis.shape[:2]
+    color = (0, 255, 0)
 
-    if result.detected and result.image_row is not None:
-        color = (0, 255, 0)
-        cv2.line(vis, (0, result.image_row), (w - 1, result.image_row), color, 2)
+    if (
+        result.detected
+        and result.image_row is not None
+        and result.band_top_row is not None
+        and result.band_bottom_row is not None
+        and result.white_threshold is not None
+    ):
+        top = max(0, int(result.band_top_row))
+        bot = min(h - 1, int(result.band_bottom_row))
+        # Re-derive the threshold mask in the band.
+        if image.ndim == 3 and image.shape[2] >= 3:
+            gray = cv2.cvtColor(image[:, :, :3], cv2.COLOR_RGB2GRAY)
+        else:
+            gray = image
+        band_gray = gray[top:bot + 1, :]
+        bright = band_gray >= int(result.white_threshold)
+        band_vis = vis[top:bot + 1, :]
+        green = np.array(color, dtype=np.float32)
+        # Alpha-blend: bright pixels get tinted green, others untouched.
+        if bright.any():
+            blended = (
+                mask_alpha * green
+                + (1.0 - mask_alpha) * band_vis[bright].astype(np.float32)
+            ).clip(0, 255).astype(np.uint8)
+            band_vis[bright] = blended
+        # Thin outline at the peak row, plus distance label.
+        cv2.line(vis, (0, result.image_row), (w - 1, result.image_row), color, 1)
         cv2.putText(
-            vis, f"{result.distance_m:.2f}m", (5, max(12, result.image_row - 3)),
+            vis, f"{result.distance_m:.2f}m",
+            (5, max(12, result.image_row - 3)),
             cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1,
         )
+
     cv2.putText(
         vis, f"src={result.source} conf={result.confidence:.2f} det={result.detected}",
         (5, h - 6),
