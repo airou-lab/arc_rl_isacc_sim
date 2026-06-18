@@ -62,4 +62,13 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     joint_vel = torch.zeros_like(asset.data.joint_vel[env_ids])
     asset.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
+    # Reset the cumulative distance obs accumulator for these envs (F2).
+    # observations.py slot 11 (`distance`) integrates root_lin_vel_b[:,0]*0.05
+    # every step and was previously never zeroed across resets — it drifted
+    # unbounded and VecNormalize's running stats never stabilized. Zero it
+    # only for the env_ids being reset (preserves accumulators for others
+    # in the same vec batch).
+    if "distance" in env.extras:
+        env.extras["distance"][env_ids] = 0.0
+
 
