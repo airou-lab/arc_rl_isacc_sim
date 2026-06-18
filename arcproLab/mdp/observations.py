@@ -26,20 +26,35 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     env_origins = env.scene.env_origins
     local_pos = asset.data.root_pos_w - env_origins
 
-    # Indices 0-2: Navigation intent (Vectorized RoadManager)
-    from mdp.road_manager import get_road_manager
-    # Note: Milestone 4 uses 2 agents, but for now we assume 1 agent per env in single-agent mode.
-    num_agents = 1
-    rm = get_road_manager(num_envs=env.num_envs, num_agents=num_agents, device=env.device)
-    rm.update(env)
-    
-    turn_tokens, go_signals = rm.get_nav_commands()
+    # Slot 0: turn_token — still PVP-masked to 0 (sim has no Worker).
+    obs[:, 0] = 0.0
 
-    # Map (B, N) to obs (B, 12) - Current assumption: N=1
-    # We use .view(-1) to ensure it fits into the (B,) slice of obs
-    obs[:, 0] = turn_tokens.view(-1)
-    obs[:, 1] = go_signals.view(-1)
-    obs[:, 2] = 0.0  # IDX_GOAL_DIST
+    # Slot 1: go_signal — UNMASKED. Driven by GoSignalManager from the camera
+    #         feed (T3.2). When go_signal=0 the policy should brake;
+    #         T3.3 also enforces this in the action term as a safety gate.
+    try:
+        from mdp.go_signal_manager import get_go_signal_manager
+        mgr = get_go_signal_manager(num_envs=env.num_envs, device=env.device)
+        camera = env.scene.get("tiled_camera") if hasattr(env.scene, "get") else None
+        if camera is None:
+            # Fallback for non-Dict scenes (older IsaacLab).
+            try:
+                camera = env.scene["tiled_camera"]
+            except KeyError:
+                camera = None
+        images = None
+        if camera is not None and hasattr(camera, "data") and "rgb" in camera.data.output:
+            images = camera.data.output["rgb"]  # (N, H, W, 3) uint8
+        go_signal = mgr.update(images)
+        env.extras["go_signal"] = go_signal
+        obs[:, 1] = go_signal
+    except Exception:
+        # Defensive: detector or camera failure must not crash training.
+        # Falls back to "always go" (slot 1 stays 0 — telemetry obs init).
+        obs[:, 1] = 1.0
+
+    # Slot 2: goal_dist — PVP-masked to 0.
+    obs[:, 2] = 0.0
 
     # Index 3: Forward Speed (m/s) - Absolute Magnitude for Control Flip support
     obs[:, 3] = torch.norm(asset.data.root_lin_vel_b[:, :2], dim=1)
