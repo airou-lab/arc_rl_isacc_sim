@@ -40,7 +40,31 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     env_origins = env.scene.env_origins
     local_pos = asset.data.root_pos_w - env_origins
 
-    # Slots 0, 1, 2: zeroed (no Worker / Scheduler on sim side; PVP mask).
+    # Slot 0: turn_token — still PVP-masked to 0 (sim has no Worker).
+    # Slot 1: go_signal — UNMASKED. Driven by GoSignalManager from the camera
+    #         feed (T3.2). When go_signal=0 the policy should brake;
+    #         T3.3 also enforces this in the action term as a safety gate.
+    try:
+        from mdp.go_signal_manager import get_go_signal_manager
+        mgr = get_go_signal_manager(num_envs=env.num_envs, device=env.device)
+        camera = env.scene.get("tiled_camera") if hasattr(env.scene, "get") else None
+        if camera is None:
+            # Fallback for non-Dict scenes (older IsaacLab).
+            try:
+                camera = env.scene["tiled_camera"]
+            except KeyError:
+                camera = None
+        images = None
+        if camera is not None and hasattr(camera, "data") and "rgb" in camera.data.output:
+            images = camera.data.output["rgb"]  # (N, H, W, 3) uint8
+        go_signal = mgr.update(images)
+        env.extras["go_signal"] = go_signal
+        obs[:, 1] = go_signal
+    except Exception:
+        # Defensive: detector or camera failure must not crash training.
+        # Falls back to "always go" (slot 1 stays 0 — telemetry obs init).
+        pass
+    # Slot 2: goal_dist — PVP-masked to 0.
     # Slot 3: forward speed (body-frame X).
     obs[:, 3] = asset.data.root_lin_vel_b[:, 0]
 

@@ -145,6 +145,20 @@ class ThrottleBrakeVelocityAction(GroupedJointAction):
         self._raw_actions[:] = actions
         throttle = torch.clamp(actions[:, 0:1], 0.0, 1.0)
         brake    = torch.clamp(actions[:, 1:2], 0.0, 1.0)
+        # T3.3 go_signal action gate. When the GoSignalManager places this
+        # env in STOP (bar detected within stop_distance_threshold),
+        # env.extras["go_signal"] is 0 and we force throttle to 0 here at
+        # the env boundary regardless of what the network commanded. This
+        # is a hard safety gate, not reward shaping. The policy still sees
+        # go_signal in slot 1 of its telemetry obs so it can learn to issue
+        # throttle=0 itself, but the gate guarantees the behavior even
+        # mid-learning.
+        try:
+            go_signal = self._env.extras.get("go_signal", None)
+            if go_signal is not None:
+                throttle = throttle * go_signal.unsqueeze(-1).to(throttle.dtype)
+        except Exception:
+            pass
         drive    = throttle * (1.0 - brake)        # (num_envs, 1)
         self._processed_actions[:] = self._offset + self._scale * drive.repeat(1, self._num_joints)
 
