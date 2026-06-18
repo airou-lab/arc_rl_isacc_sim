@@ -1,99 +1,90 @@
 # Architecture
 
-**Analysis Date:** 2024-05-24
+**Analysis Date:** 2024-06-16
 
 ## Pattern Overview
 
-**Overall:** Hierarchical Deep Reinforcement Learning with Isaac Lab (Manager-Based RL)
+**Overall:** Manager-Based Reinforcement Learning Framework (IsaacLab) bridged with Multi-Agent (SKRL) and continuous monitoring.
 
 **Key Characteristics:**
-- **Simulation Engine:** Powered by NVIDIA Omniverse Isaac Sim and managed via the Isaac Lab framework.
-- **Hierarchical Agent:** Uses a Driver-Worker architecture where a classical planner (`WorkerNode`) decides "where to go" topologically, and a learned neural policy (`MainNode`) handles visual-motor "how to get there."
-- **Multi-Modal Perception:** Combines high-dimensional visual input (processed via an early-pooled ResNet-18 backbone) with low-dimensional physical telemetry.
+- **Vectorized Environments**: Isaac Sim physics processes all agents and environments in parallel tensors (GPU).
+- **Decoupled Management**: Domain specifics (Road, Track, Policies) are isolated into vectorized managers.
+- **Auto-Monitoring**: An independent watchdog service monitors training metrics to halt collapsing sessions automatically.
 
 ## Layers
 
-**Simulation Layer:**
-- Purpose: Defines the physical world, rendering settings, and asset configurations using PhysX 5.
-- Location: `arcproLab/`
-- Contains: Environment definition (`arcpro_env_cfg.py`) and robot configuration (`arcpro_robot_cfg.py`).
-- Depends on: Isaac Lab (`isaaclab.envs.ManagerBasedRLEnvCfg`), PyTorch.
-- Used by: Training and evaluation scripts.
+**Environment Layer:**
+- Purpose: Defines the rules, state, and physics constraints of the simulation.
+- Location: `arcproLab/arcpro_env_cfg.py`, `arcproLab/mdp/`
+- Contains: MDP managers (rewards, terminations, observations, actions).
+- Depends on: Isaac Sim, Omniverse USD APIs.
+- Used by: RL policies during training.
 
-**MDP (Markov Decision Process) Layer:**
-- Purpose: Defines the RL problem structure modularly.
-- Location: `arcproLab/mdp/`
-- Contains: State functions (`observations.py`), environment reactions (`events.py`), penalties/incentives (`rewards.py`), terminal conditions (`terminations.py`), and action space mappings (`actions.py`).
-- Depends on: Isaac Lab `isaaclab.managers`, PyTorch.
-- Used by: The Simulation Layer configuration.
-
-**Policy Layer:**
-- Purpose: Holds the neural network backbone, training wrappers, and high-level behavioral logic.
+**Policy & Agent Layer:**
+- Purpose: Handles the decision-making network, hierarchy, and neural outputs.
 - Location: `arcproLab/policy_stack/`
-- Contains: The neural network extractor (`policies/fusion_policy.py`), SB3 environment wrappers, and the hierarchical agent (`agent/agent_node.py`).
-- Depends on: Stable-Baselines3, PyTorch, Torchvision.
-- Used by: Training scripts.
+- Contains: SKRL integration, hierarchical policies, agent wrappers.
+- Depends on: `arcproLab/mdp` state vectors, PyTorch.
+- Used by: Inference nodes, ROS2 bridges.
+
+**Monitoring Layer:**
+- Purpose: Provides safety checks and diagnoses training divergence.
+- Location: `arcproLab/scripts/watchdog.py`
+- Contains: Continuous regex log parsers and subprocess control.
+- Depends on: Live log outputs in `logs/`.
+- Used by: Training launch scripts.
 
 ## Data Flow
 
-**Hierarchical Control Flow:**
+**Multi-Agent State Pipeline (Phase 16):**
 
-1. **Observation Extraction:** The simulation layer extracts a raw observation consisting of a Camera Image and a Telemetry Vector.
-2. **Topological Planning (WorkerNode):** The `WorkerNode` queries an intersection graph based on current world-frame coordinates. It computes a discrete turn command (`turn_token`) and requests permission from a multi-agent scheduler (`go_signal`).
-3. **Observation Enrichment:** The `turn_token` and `go_signal` are injected into the first two indices of the observation telemetry vector.
-4. **Policy Forward Pass:** SB3's `RecurrentPPO` processes the enriched observation via `FusionFeaturesExtractor`. The image passes through a ResNet-18 backbone and concatenates with the telemetry vector to output raw control signals.
-5. **Safety Override (MainNode):** The `MainNode` applies a safety gate to the raw action. If the `go_signal` indicates wait, it forcibly zeros the throttle and applies the brake. Otherwise, the learned action is preserved.
-6. **Action Application:** The final action is mapped to vehicle joint commands by the MDP action manager.
+1. Isaac Sim updates vehicle physics.
+2. `arcproLab/mdp/road_manager.py` (Vectorized) computes per-agent navigation intents and intersection states, replacing the legacy `RoadGraph` singleton.
+3. `arcproLab/mdp/track_manager.py` syncs nearest waypoints and local offsets.
+4. Observations and rewards are calculated via `arcproLab/mdp/rewards.py` using tracked index vectors.
+5. SKRL processes the tensor batch and outputs new motor actions.
 
 **State Management:**
-- Physics state is managed by Isaac Sim (PhysX).
-- Policy state (e.g., LSTM hidden states) is managed by Stable-Baselines3.
-- Agent route state (e.g., intersection cooldown, current plan) is managed intrinsically within the `WorkerNode`.
+- Maintained as `(num_envs, num_agents)` PyTorch tensors on the device (`cuda:0`).
+- State caching (like previous actions) occurs inside `env.extras` dictionary in IsaacLab.
 
 ## Key Abstractions
 
-**Progress-Based Speed Reward:**
-- Purpose: Incentivizes movement along the track path while penalizing lateral "sliding" or backwards driving.
-- Examples: `arcproLab/mdp/rewards.py`
-- Pattern: Projects the world velocity vector onto the track tangent vector at the robot's current waypoint. Only the dot product (forward progress) earns positive reward.
+**`RoadManager`:**
+- Purpose: Manages high-level routing, turn tokens, and multi-agent coordination.
+- Examples: `arcproLab/mdp/road_manager.py`
+- Pattern: Vectorized singleton (returned via `get_road_manager()`).
 
-**Control Flip Strategy:**
-- Purpose: Ensures physical stability of the F1Tenth asset which was built with an upside-down orientation in USD.
-- Examples: `arcproLab/arcpro_env_cfg.py`, `arcproLab/mdp/events.py`
-- Pattern: Accepts the native upside-down USD spawn and inverts the drive control polarity (scale=-20.0). This prevents PhysX suspension NaN crashes that occur when forcing the robot upright.
-
-**Manager-Based Configuration:**
-- Purpose: Declaratively maps logical environment components to the underlying Isaac Sim engine.
-- Examples: `arcproLab/arcpro_env_cfg.py`
-- Pattern: Configuration classes using the `@configclass` decorator.
-
-**Agent Hierarchy:**
-- Purpose: Separates discrete route planning from continuous motor control.
-- Examples: `arcproLab/policy_stack/agent/agent_node.py`
-- Pattern: The wrapper intercepts observations before the policy and intercepts actions after the policy, ensuring non-learned logic safely guides learned behavior.
-
-**Fusion Features Extractor:**
-- Purpose: Fuses multi-modal inputs in a VRAM-efficient manner.
-- Examples: `arcproLab/policy_stack/policies/fusion_policy.py`
-- Pattern: Custom `BaseFeaturesExtractor` that unfreezes only the deepest layers of an ImageNet-pretrained ResNet-18 backbone to balance rapid convergence with memory constraints.
+**`TrackManager`:**
+- Purpose: Handles geometric distance mapping, waypoints, and centerline offsets.
+- Examples: `arcproLab/mdp/track_manager.py`
+- Pattern: Vectorized singleton with caching (`last_indices`) to prevent expensive nearest-neighbor recalculations every step.
 
 ## Entry Points
 
-**Training Execution:**
+**Training Pipeline:**
 - Location: `arcproLab/scripts/train_policy.py`
-- Triggers: User execution from the CLI.
-- Responsibilities: Bootstraps the Omniverse app, instantiates the Isaac Lab environment, wraps it in the custom `HPPPDirectBridge` VecEnv, configures SB3's `RecurrentPPO`, and initiates the training loop.
+- Triggers: Shell execution (`run_train_bg.sh`).
+- Responsibilities: Initializes IsaacLab, registers environments, and launches the RL loop.
+
+**Watchdog Monitor:**
+- Location: `arcproLab/scripts/watchdog.py`
+- Triggers: Background execution alongside training.
+- Responsibilities: Parses logs for scientific notation standard deviation and FPS drops, issuing `tmux kill-session` if divergence or stagnation is detected.
 
 ## Error Handling
 
-**Strategy:** Immediate Episode Reset via Terminal Conditions
+**Strategy:** Fail-fast at the training/monitoring level, continuous gradients at the reward level.
 
 **Patterns:**
-- **Boundary Collisions:** If the agent contacts track demarcations (`mdp/terminations.py`), an immediate reset is issued with a large penalty.
-- **Stagnation:** Agents that get stuck and fall below a stationary threshold trigger an episode reset to prevent training stagnation.
-- **Out of Bounds:** Height and field-of-view terminations catch agents that fly off the map or drive into unrenderable spaces.
+- **Rewards**: Continuous penalty scaling (`lateral_error_reward`, `jerk_penalty`) prevents sudden value drop-offs, aiding stabilization.
+- **Monitoring**: `watchdog.py` generates `WATCHDOG_DIAGNOSIS.md` upon failure, ensuring failures are documented before killing the process.
 
 ## Cross-Cutting Concerns
 
-**Logging:** Integrated via Stable-Baselines3's logging callbacks and Isaac Lab's internal wandb/tensorboard hooks.
-**VRAM Efficiency:** Early pooling in CNN backbones and strict image data types (`uint8` in the replay buffer) are heavily enforced to mitigate the massive footprint of multi-agent HD rendering.
+**Logging:** Standard output routed to `logs/` directory, parsed dynamically.
+**Vectorization:** Every component in `arcproLab/mdp/` must accept and return tensors shaped for `(num_envs, num_agents)` to conform to the Phase 16 multi-agent transition.
+
+---
+
+*Architecture analysis: 2024-06-16*
