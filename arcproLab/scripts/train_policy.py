@@ -163,20 +163,50 @@ def main():
     vec_norm_callback = SaveVecNormalizeCallback(save_path=log_dir, save_freq=5000)
     reward_logger_callback = RewardLoggerCallback()
 
-    # 8. Train
+    # 8. Train.
+    #
+    # learn() is wrapped in try/finally so any uncaught exception
+    # (KeyboardInterrupt from Ctrl-C, SIGTERM, OOM, etc.) still triggers
+    # the final save below. Without this wrapper, any termination short
+    # of natural completion discards everything since the last
+    # CheckpointCallback save_freq=5000 vec-step boundary — up to
+    # 40000 wasted timesteps (with num_envs=8). The final save is
+    # named `model_interrupted` so it's distinguishable from a clean
+    # `model_final` end-of-training save.
     print(f"Starting training for {args_cli.total_timesteps} steps...")
-    model.learn(
-        total_timesteps=args_cli.total_timesteps,
-        callback=[checkpoint_callback, vec_norm_callback, reward_logger_callback],
-        progress_bar=True
-    )
+    interrupted = False
+    try:
+        model.learn(
+            total_timesteps=args_cli.total_timesteps,
+            callback=[checkpoint_callback, vec_norm_callback, reward_logger_callback],
+            progress_bar=True
+        )
+    except KeyboardInterrupt:
+        print("\n[train] KeyboardInterrupt — flushing partial-run checkpoint.")
+        interrupted = True
+    except Exception as exc:
+        print(f"\n[train] Unhandled exception in learn(): {exc!r}")
+        print("[train] Flushing partial-run checkpoint before re-raising.")
+        interrupted = True
+        _exc_to_reraise = exc
+    finally:
+        # 9. Save (final OR partial).
+        try:
+            save_name = "model_interrupted" if interrupted else "model_final"
+            model.save(os.path.join(log_dir, save_name))
+            env.save(os.path.join(log_dir, "vec_normalize.pkl"))
+            print(f"[train] Saved {save_name}.zip + vec_normalize.pkl "
+                  f"to {log_dir}")
+        except Exception as save_exc:
+            print(f"[train] WARNING: shutdown save failed: {save_exc!r}")
+        # 10. Close.
+        try:
+            env.close()
+        except Exception:
+            pass
 
-    # 9. Save Final Model
-    model.save(os.path.join(log_dir, "model_final"))
-    env.save(os.path.join(log_dir, "vec_normalize.pkl"))
-    
-    # 10. Close
-    env.close()
+    if interrupted and "_exc_to_reraise" in locals():
+        raise _exc_to_reraise
 
 if __name__ == "__main__":
     main()
