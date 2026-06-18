@@ -59,8 +59,8 @@ class GoSignalManager:
         num_envs: int,
         device: str,
         detector_config: Optional[StopLineDetectorConfig] = None,
-        stop_distance_threshold: float = 0.8,
-        dwell_steps: int = 20,
+        stop_distance_threshold: float = 0.45,
+        dwell_steps: int = 40,
         depart_clear_steps: int = 15,
     ):
         self.num_envs = num_envs
