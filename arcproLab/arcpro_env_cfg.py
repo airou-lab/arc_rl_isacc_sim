@@ -76,9 +76,13 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             scale=(1.0, 1.0, 1.0), # Revert to 1.0x
         ),
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
-            # Exactly on the path center (X=-16.197) at safe drop height
-            pos=(-16.197, 5.50, 0.12),
-            rot=(0.7071, 0.0, 0.0, 0.7071) # Upright & Face North (WXYZ)
+            # Spawn point: right lane heading toward junction_18 intersection.
+            # Y/Z and yaw unchanged from prior centerline spawn; X shifted from
+            # -16.25375 -> -15.73 (a ~+0.52 m offset) to center the body in the
+            # right lane. Verified visually via inspect_world.py iterating
+            # -15.0 (off-road) -> -15.75 -> -15.70 -> -15.73.
+            pos=(-15.73, 4.92, 0.05),
+            rot=(0.7071, 0.0, 0.0, 0.7071) # +90 degrees Z-up (faces +Y)
         ),
 
 
@@ -198,7 +202,7 @@ class TerminationCfg:
 class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     # Adjust viewer to see the robot at its new world position
     # 8x eye: (-120.0, 55.0, 10.0) -> 1x eye: (-15.0, 6.875, 1.25)
-    viewer: ViewerCfg = ViewerCfg(eye=(-15.0, 6.875, 1.25), lookat=(-16.25, 5.56, 0.0))
+    viewer: ViewerCfg = ViewerCfg(eye=(-15.0, 6.25, 1.25), lookat=(-16.25, 4.92, 0.0))
     
     enable_cameras: bool = True
     scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=32, env_spacing=30.0)

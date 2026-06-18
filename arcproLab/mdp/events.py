@@ -19,8 +19,9 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     asset = env.scene[asset_cfg.name]
     num_resets = len(env_ids)
     
-    # Base Target: Lane Center (Sync with -16.2 centerline)
-    base_spawn_x, base_spawn_y = -16.18, 5.30
+    # Spawn point: right lane heading toward junction_18 intersection.
+    # X shifted to center the body in the right lane.
+    base_spawn_x, base_spawn_y = -15.73, 4.92
     base_spawn_yaw = 1.5708 # Face North
     
     # 1. Domain Randomization (Hardening)
