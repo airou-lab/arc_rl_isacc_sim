@@ -96,7 +96,9 @@ Raw `lat_err` / `head_err` from `TrackManager.compute_errors` still flow into `e
 - Camera offset relative to chassis: `(0.28, 0.0, 0.16) m`, identity rotation, `convention="world"` (forward axis +X = chassis forward, up axis +Z). Do NOT use `convention="parent"` — IsaacLab does not recognize that string and silently treats it as `"opengl"` (forward=-Z), which points the camera straight down at the ground.
 - The `tiled_camera` term inside the policy group and the camera sensor are both set to `None` when `enable_cameras=False` (`arcpro_env_cfg.py` `__post_init__`).
 
-`Sb3VecEnvWrapper` passes the `policy` group through as a Dict (with `concatenate_terms=False` on `PolicyCfg`); SB3's `MultiInputPolicy` consumes the Dict natively — NatureCNN on the `(224, 224, 3)` uint8 image (channels-first transpose handled by the wrapper) and an MLP on the 12-D telemetry, fused for the actor/critic heads (`scripts/train_policy.py`).
+`Sb3VecEnvWrapper` passes the `policy` group through as a Dict (with `concatenate_terms=False` on `PolicyCfg`); SB3's `MultiInputPolicy` consumes the Dict natively. The features extractor is `FusionFeaturesExtractor` (`arcproLab/policy_stack/policies/fusion_policy.py`): ImageNet-pretrained ResNet-18 on the `(224, 224, 3)` uint8 image → 512 → Linear(512, 256)+ReLU → 256-d visual features; identity passthrough on the 12-D telemetry; concatenate + LayerNorm to a 268-d output. BatchNorm in the ResNet is pinned to eval mode (gradients still flow through affine params) — standard RL pattern for pretrained CNN backbones. Wired in via `policy_kwargs={"features_extractor_class": FusionFeaturesExtractor, ...}` in `scripts/train_policy.py`.
+
+`VecNormalize` is constructed with `norm_obs_keys=["telemetry"]` so it ONLY normalizes the telemetry vector; the `tiled_camera` key stays uint8 in [0, 255] so SB3's preprocessing applies the standard `/ 255` step before the ResNet sees it (which then applies ImageNet mean/std internally when `pretrained=True`). Without this, VecNormalize would running-mean/std the image and break the pretrained ResNet's input distribution.
 
 ### Action Vector Layout
 

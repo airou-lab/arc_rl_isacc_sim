@@ -47,6 +47,7 @@ from stable_baselines3.common.vec_env import VecNormalize
 from isaaclab.envs import ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
 from isaaclab_rl.sb3 import Sb3VecEnvWrapper
+from policy_stack.policies.fusion_policy import FusionFeaturesExtractor
 
 def main():
     # 1. Setup Environment Configuration
@@ -63,7 +64,20 @@ def main():
     env = Sb3VecEnvWrapper(env)
     
     # 4. Add Normalization
-    env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.)
+    #
+    # `norm_obs_keys=["telemetry"]` is critical: by default VecNormalize on a
+    # Dict obs normalizes EVERY key including `tiled_camera`, which would
+    # convert the uint8 image to running-mean/std float32 and break the
+    # pretrained ResNet's input pipeline (it expects uint8 -> SB3 /255 ->
+    # ImageNet mean/std). Telemetry still gets normalized, which is what we
+    # want for the 12-D heterogeneous-scale vector.
+    env = VecNormalize(
+        env,
+        norm_obs=True,
+        norm_obs_keys=["telemetry"],
+        norm_reward=True,
+        clip_obs=10.0,
+    )
 
     # 5. Define Log Directory
     log_dir = os.path.join("logs", "ppo", datetime.now().strftime("%Y%m%d-%H%M%S"))
@@ -82,12 +96,27 @@ def main():
         )
     else:
         # MultiInputPolicy handles the Dict observation (telemetry + tiled_camera)
-        # natively: NatureCNN feature extractor on the image, MLP on the
-        # 12-D telemetry, fused for the actor/critic heads. Requires
-        # PolicyCfg.concatenate_terms=False in arcpro_env_cfg.py.
+        # natively. We override SB3's default CombinedExtractor with
+        # FusionFeaturesExtractor: ImageNet-pretrained ResNet-18 on the image
+        # (224x224x3 uint8 -> 512-d feats -> Linear(512,256)+ReLU), identity
+        # passthrough on the 12-D telemetry, concatenate + LayerNorm to 268-d.
+        # Requires PolicyCfg.concatenate_terms=False in arcpro_env_cfg.py.
+        policy_kwargs = dict(
+            features_extractor_class=FusionFeaturesExtractor,
+            features_extractor_kwargs=dict(
+                pretrained=True,
+                cifar_stem=False,
+                freeze_backbone=False,
+                image_key="tiled_camera",
+                vec_key="telemetry",
+            ),
+            # FusionFeaturesExtractor emits 268-d already; let the SB3 actor
+            # / critic heads run their default MLPs on top.
+        )
         model = PPO(
             "MultiInputPolicy",
             env,
+            policy_kwargs=policy_kwargs,
             verbose=1,
             learning_rate=3e-4,
             n_steps=2048,
