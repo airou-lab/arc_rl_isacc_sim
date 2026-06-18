@@ -24,9 +24,10 @@ Key Stabilizations (Gold Master Finalization):
 - **Steering Stabilization**: Increased `smoothness` reward weight to **15.0** to suppress traction-breaking jitters.
 
 ## Recent Activity
-- **Physics Debugging**: Solved false-positive base-height terminations and explosions upon spawn.
-- **Camera Calibration**: Adjusted camera orientation to solve FOV blind spots.
-- **Training Launch**: Launched Phase 16 "Gold Master" training from Step 0, immediately achieving ~177 steps of survival. Active watchdog monitoring is running.
+- **Reward Fix**: Increased `stationary` penalty weight to 15.0 to resolve 'Lazy Bureaucrat' stagnation (+11/step minimum by standing still).
+- **Watchdog Fix**: Patched regex bug in `watchdog.py` that misparsed scientific notation for episode length.
+- **Monitoring**: Updated `LOG_FILE` pointer in watchdog to track `production_mastery_8_relaunch.log`.
+- **System Cleanup**: Ran GSD health and consistency checks; codebase map marked for subagent refresh.
 
 ## Reference State (Gold Master)
 - **Model**: ResNet-18 (Fusion Policy)

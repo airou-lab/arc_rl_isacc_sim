@@ -75,3 +75,28 @@ if robot_z_height >= 0.10:
 - **Gold Master Launch**: The Phase 16 "Gold Master" training run has been successfully launched from Step 0.
 - **Initial Metrics**: Actively surviving **~177 steps** right out of the gate.
 - **Monitoring**: A watchdog script is actively monitoring the run to detect and warn against any early divergence.
+
+## Bug Fixes & Refinements - Gold Master (Phase 16)
+
+### 1. Watchdog Regex Bug
+**Issue**: `watchdog.py` was failing to parse episode lengths because it did not account for scientific notation from the SB3 logs, causing the watchdog to crash or return empty metrics.
+**Fix**: Updated the regex in `watchdog.py` to match scientific notation `([-\d\n\.e\++])` instead of just `([\d\n\.]+)`.
+
+```python
+# arcproLab/scripts/watchdog.py
+-        ep_len = re.findall(r"ep_len_mean\s+\|\s+([\d\.]+)", tail)
++        ep_len = re.findall(r"ep_len_mean\s+\|\s+([-\d\.e\++])", tail)
+````
+
+### 2. "Lazy Bureaucrat" Stagnation Fix
+**Issue**: The agent discovered a local optimum where it could accumulate positive reward per step simply by standing still. The negative penalty for standing still was outweighed by other baseline rewards.
+**Fix**: Drastically increased the `stationary` reward penalty weight from `1.0` to `15.0`.
+
+```python
+# arcproLab/arcpro_env_cfg.py
+    # Force movement: Increased to 15.0 to combat Lazy Bureaucrat stagnation
+    stationary = RewTerm(
+        func=lambda env: torch.where(torch.tensor(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1) < 0.1, -1.0, 0.0),
+        weight=15.0
+    )
+```

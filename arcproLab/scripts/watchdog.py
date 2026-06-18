@@ -4,7 +4,7 @@ import os
 import subprocess
 import re
 
-LOG_FILE = "logs/production_mastery_8_fresh.log"
+LOG_FILE = "logs/production_mastery_8_relaunch.log"
 DIAGNOSIS_FILE = "logs/WATCHDOG_DIAGNOSIS.md"
 
 def get_latest_metrics():
@@ -15,10 +15,10 @@ def get_latest_metrics():
         # Read last 200 lines to find the latest table
         tail = subprocess.check_output(["tail", "-n", "200", LOG_FILE]).decode('utf-8')
         
-        timesteps = re.findall(r"total_timesteps\s+\|\s+([\d\.]+)", tail)
-        ep_len = re.findall(r"ep_len_mean\s+\|\s+([\d\.]+)", tail)
-        std = re.findall(r"std\s+\|\s+([\d\.]+)", tail)
-        fps = re.findall(r"fps\s+\|\s+([\d\.]+)", tail)
+        timesteps = re.findall(r"total_timesteps\s+\|\s+([-\d\.e\+]+)", tail)
+        ep_len = re.findall(r"ep_len_mean\s+\|\s+([-\d\.e\+]+)", tail)
+        std = re.findall(r"std\s+\|\s+([-\d\.e\+]+)", tail)
+        fps = re.findall(r"fps\s+\|\s+([-\d\.e\+]+)", tail)
         
         return {
             "timesteps": int(float(timesteps[-1])) if timesteps else 0,

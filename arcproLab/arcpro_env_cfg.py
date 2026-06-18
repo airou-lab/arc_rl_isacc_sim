@@ -163,10 +163,10 @@ class RewardCfg:
     speed = RewTerm(func=mdp_rew.speed_reward, weight=10.0)
     # Precision: Lane centering (Increased pressure to stay in center)
     lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=10.0)
-    # Force movement: Neutralized to -1.0 to prevent exploding gradients
+    # Force movement: Increased to 15.0 to combat Lazy Bureaucrat stagnation (+11/step for standing still)
     stationary = RewTerm(
         func=lambda env: torch.where(torch.norm(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1) < 0.1, -1.0, 0.0),
-        weight=1.0
+        weight=15.0
     )
     heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
     smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=5.0)
