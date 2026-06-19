@@ -39,7 +39,7 @@ class TrackManager:
         
         self.sync_attempts = 0
         self.max_sync_attempts = 10 
-        self.wp_path = os.path.join(os.path.dirname(__file__), "track_centerline_1x.npy")
+        self.wp_path = os.path.join(os.path.dirname(__file__), "track_centerline.npy")
         self.cache_path = os.path.join(os.path.dirname(__file__), "track_boundaries_1x.npz")
 
     def ensure_synced(self, target_lane_offset: float = 0.11):
@@ -274,14 +274,13 @@ class TrackManager:
             gate_xy = self.raw_gate_pts[:, :2]
             
             def punch_holes(raw_pts, name):
-                if raw_pts is None: return None
-                # Vectorized distance check
-                pts_xy = raw_pts[:, :2]
-                dists = np.linalg.norm(pts_xy[:, np.newaxis] - gate_xy, axis=2)
-                min_dist_to_gate = np.min(dists, axis=1)
+                if raw_pts is None or len(raw_pts) == 0: return None
+                from scipy.spatial import KDTree
+                tree = KDTree(gate_xy)
+                dists, _ = tree.query(raw_pts[:, :2], k=1)
                 
                 # Keep only points further than 1.0m from any gate
-                mask = min_dist_to_gate > 1.0
+                mask = dists > 1.0
                 filtered = raw_pts[mask]
                 print(f"[TrackManager] Punched holes in {name}: removed {len(raw_pts) - len(filtered)} overlapping points.")
                 return filtered
@@ -335,26 +334,27 @@ class TrackManager:
 
             if self.raw_yellow_pts is not None: self.visualizer_yellow.visualize(to_w(self.raw_yellow_pts[::16]))
             if self.raw_white_pts is not None: self.visualizer_white.visualize(to_w(self.raw_white_pts[::16]))
-            if self.raw_gate_pts is not None: self.visualizer_gate.visualize(to_w(self.raw_gate_pts, z_off=0.40))
             
-            if self.waypoints is not None:
-                wp_np = self.waypoints.cpu().numpy()
-                
-                # 1. Visualize Centerline (Cyan)
-                wp_viz = np.zeros((len(wp_np), 3))
-                wp_viz[:, :2] = wp_np[:, :2]
-                wp_viz[:, 2] = 0.0
-                self.visualizer_waypoints.visualize(to_w(wp_viz, z_off=0.15))
-                
-                # 2. Visualize Target Offset Path (Magenta)
-                # Offset waypoints along their normals: [X, Y] + offset * [-sin(yaw), cos(yaw)]
-                yaws = wp_np[:, 2]
-                normals = np.stack([-np.sin(yaws), np.cos(yaws)], axis=1)
-                target_pts = wp_np[:, :2] + target_lane_offset * normals
-                target_viz = np.zeros((len(wp_np), 3))
-                target_viz[:, :2] = target_pts
-                target_viz[:, 2] = 0.0
-                self.visualizer_target.visualize(to_w(target_viz, z_off=0.18))
+            # User request: "remove the green spheres"
+            # if self.raw_gate_pts is not None: self.visualizer_gate.visualize(to_w(self.raw_gate_pts, z_off=0.40))
+            
+            # User request: "cyan and purple are wrong direction though. But i thought we arent using them"
+            # We will disable the visualization to avoid confusion, since the policy is vision-only.
+            # (Note: the reward function still uses them for lateral error!)
+            # if self.waypoints is not None:
+            #     wp_np = self.waypoints.cpu().numpy()
+            #     
+            #     # 1. Visualize Base Centerline (Cyan)
+            #     self.visualizer_waypoints.visualize(to_w(wp_np[:, :2]))
+            #     
+            #     # 2. Visualize Target Offset Path (Magenta)
+            #     yaws = wp_np[:, 2]
+            #     normals = np.stack([-np.sin(yaws), np.cos(yaws)], axis=1)
+            #     target_pts = wp_np[:, :2] + target_lane_offset * normals
+            #     target_viz = np.zeros((len(wp_np), 3))
+            #     target_viz[:, :2] = target_pts
+            #     target_viz[:, 2] = 0.0
+            #     self.visualizer_target.visualize(to_w(target_viz, z_off=0.18))
         except: pass
 
     def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor, target_lane_offset: torch.Tensor | float = 0.0):

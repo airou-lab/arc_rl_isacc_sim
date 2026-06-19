@@ -1,0 +1,1 @@
+- [ ] Track Centerline Regeneration: Write a KD-Tree script to properly map the right-turn intersection into track_centerline.npy so the reward function correctly rewards turning.

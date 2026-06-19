@@ -78,7 +78,7 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
             # Exactly on the path center (X=-16.197) at safe drop height
             pos=(-16.197, 5.50, 0.12),
-            rot=(0.0, 0.7071, 0.7071, 0.0) # Upright & Face North (WXYZ)
+            rot=(0.7071, 0.0, 0.0, 0.7071) # Upright & Face North (WXYZ)
         ),
 
 
@@ -87,30 +87,31 @@ class ARCProSceneCfg(InteractiveSceneCfg):
 
     # Camera (Mimic Intel RealSense D435i Wide - 90° HFOV) with NO TILT
     tiled_camera = TiledCameraCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/CameraSensor",
+        prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraSensor",
         update_period=0.0,
         spawn=sim_utils.PinholeCameraCfg(
             horizontal_aperture=3.86, # 90-degree HFOV (2 * atan(3.86 / (2 * 1.93)))
             focal_length=1.93,
         ),
         # Raised to 0.35m and tilted 30 degrees down to see the road
-        # Pitch Down 30 deg: W=0.966, Y=0.258
-        offset=TiledCameraCfg.OffsetCfg(pos=(0.3, 0.0, 0.35), rot=(0.966, 0.0, 0.258, 0.0), convention="parent"),
+        offset=TiledCameraCfg.OffsetCfg(pos=(-0.3, 0.0, 0.35), rot=(0.0, -0.258, 0.0, 0.966), convention="parent"),
         data_types=["rgb"], width=224, height=224,
-        debug_vis=True, # ENABLED so user can see the camera frustum
     )
 
-    # Visual Marker: Glow Red at Camera Location (Directional Pointer)
-    # Mounted to Robot root with same offset as camera
+    # Visual Marker for Camera (Tiny red cone, virtually zero mass, no collision)
     camera_marker = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/CameraMarker",
-        spawn=sim_utils.CuboidCfg(
-            size=(1.0, 0.02, 0.02), # 1 meter long 'laser' pointer
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), emissive_color=(1.0, 0.0, 0.0))
+        prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraMarker",
+        spawn=sim_utils.ConeCfg(
+            radius=0.03, # 3cm base
+            height=0.1,  # 10cm long
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), emissive_color=(1.0, 0.0, 0.0)),
+            rigid_props=None,
+            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=0.001) # Explicitly 1 gram so it doesn't tip the car
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.3, 0.0, 0.35), 
-            rot=(1.0, 0.0, 0.0, 0.0) # Normal facing
+            pos=(-0.3, 0.0, 0.35),
+            rot=(0.0, -0.866, 0.0, 0.5) # Points X forward correctly based on chassis
         )
     )
 
@@ -149,7 +150,7 @@ class ActionCfg:
     drive = arcpro_actions.CombinedDriveActionCfg(
         asset_name="robot", 
         joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
-        scale=20.0,
+        scale=-20.0,
         offset=0.0
     )
 
@@ -160,15 +161,17 @@ class RewardCfg:
     terminating = RewTerm(func=mdp_rew.termination_penalty, weight=2.0)
     
     # Performance: Momentum (Rewards actual forward progress)
-    speed = RewTerm(func=mdp_rew.speed_reward, weight=10.0)
+    speed = RewTerm(func=mdp_rew.speed_reward, weight=20.0)
     # Precision: Lane centering (Increased pressure to stay in center)
-    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=10.0)
-    # Force movement: Increased to 15.0 to combat Lazy Bureaucrat stagnation (+11/step for standing still)
+    # Disabled per user request for pure boundary-based lane following
+    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=0.0)
+    # Force movement: Lowered to 5.0. If too high, agent commits suicide to escape penalty.
     stationary = RewTerm(
         func=lambda env: torch.where(torch.norm(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1) < 0.1, -1.0, 0.0),
-        weight=15.0
+        weight=5.0
     )
-    heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
+    # Disabled per user request
+    heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=0.0)
     smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=5.0)
     # Jitter Suppression (Neutralized to allow initial exploration)
     jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.01)

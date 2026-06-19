@@ -8,32 +8,18 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
 def speed_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Rewards actual forward progress along the track path."""
+    """Rewards actual forward progress in the robot's current facing direction."""
     asset = env.scene[asset_cfg.name]
     
-    # 1. Get Track Tangent at current position
-    from mdp.track_manager import get_track_manager
-    tm = get_track_manager(device=env.device)
+    # The car's forward direction is -X in its local frame.
+    # We can get local velocity directly from root_lin_vel_b
+    local_vel = asset.data.root_lin_vel_b
     
-    # Position in local env frame
-    env_origins = env.scene.env_origins
-    local_pos = asset.data.root_pos_w - env_origins
-    
-    # We need the waypoint index to find the tangent
-    # TrackManager caches last_indices, so this is fast
-    _, _, _ = tm.compute_errors(local_pos, asset.data.root_quat_w[:, 0]) # Syncs indices
-    closest_idx = tm.last_indices
-    
-    # Tangent vector from waypoint yaw: [cos(yaw), sin(yaw)]
-    wp_yaw = tm.waypoints[closest_idx, 2]
-    tangent = torch.stack([torch.cos(wp_yaw), torch.sin(wp_yaw)], dim=1)
-    
-    # 2. Project World Velocity onto Tangent
-    vel_world = asset.data.root_lin_vel_w[:, :2]
-    progress_speed = torch.sum(vel_world * tangent, dim=1)
+    # Extract the forward speed (negative X is forward)
+    forward_speed = -local_vel[:, 0]
     
     # Reward positive progress, clip negative (reverse)
-    return torch.clamp(progress_speed, min=-1.0)
+    return torch.clamp(forward_speed, min=-1.0)
 
 def termination_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     """Large penalty triggered only when a termination occurs."""

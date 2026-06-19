@@ -3,7 +3,7 @@
 **RESUME HERE**
 - **Milestone**: Milestone 3: HD Perception & Production Hardening
 - **Phase**: Phase 16: MARL Transition
-- **Next Todo**: Proceed with MARL Architecture Discussion. Focus on refactoring RoadGraph from singleton to agent-indexed tensors and resolving VRAM constraints for multi-agent HD vision (Adaptive CNN).
+- **Next Todo**: Wait for user to verify the dry run (`verify_policy.py --max_steps 50`) and confirm if pure vision lane following training started successfully. Once confirmed, proceed with MARL Architecture Discussion.
 
 ---
 
@@ -14,14 +14,14 @@
 **Phase 16: MARL Transition** (ACTIVE)
 
 ## Summary
-The project has reached the **Gold Master** training baseline for Phase 16, building upon the Hardened Mastery v2.9 state. Single-agent performance is highly stable, with critical mechanical and physical bugs resolved, providing a robust foundation for the upcoming Multi-Agent Reinforcement Learning (MARL) transition. The final Phase 16 training run is actively surviving and monitored.
+The project has reached the **Gold Master** training baseline for Phase 16, building upon the Hardened Mastery v2.9 state. We have transitioned strictly to **Pure Vision-Based Lane Following**, completely removing reliance on waypoint track rewards to ensure the ResNet policy learns naturally without penalty-driven stagnation at curves.
 
 Key Stabilizations (Gold Master Finalization):
 - **Upright Physics & Settle**: Solved suspension-bounce reset by lowering spawn height to 12cm and height termination threshold to 2cm.
-- **Ground Settle Logic**: Intercepted actions in `WaypointTrackingWrapper`, forcing 0.0 actions until robot Z height < 0.10m to prevent mid-air wheel spin.
-- **Vision FOV**: Camera re-mounted `pos=(0.3, 0.0, 0.35)` and tilted 30 degrees down to ensure full track visibility.
-- **Lateral Precision**: Shrinked safety plateau from 0.10m to **0.05m** and increased penalty slope to **10.0** in `lateral_error_reward`.
-- **Steering Stabilization**: Increased `smoothness` reward weight to **15.0** to suppress traction-breaking jitters.
+- **Ground Settle Logic**: Intercepted actions in `WaypointTrackingWrapper`, forcing 0.0 actions until robot Z height < 0.10m.
+- **Vision FOV**: Camera re-mounted to `pos=(-0.3, 0.0, 0.35)` and rotated 180 deg to correctly face forward relative to the chassis (-X axis).
+- **Pure Vision Lane Following**: Set weights for `lateral_error` and `heading` rewards to 0.0, to stop the agent from receiving penalties at curves due to straight-line waypoints.
+- **Dynamic Speed Reward**: Updated `speed_reward` to purely reward the robot's local forward velocity (-X), completely detaching it from the old waypoint tangent logic.
 
 ## Recent Activity
 - **Reward Fix**: Increased `stationary` penalty weight to 15.0 to resolve 'Lazy Bureaucrat' stagnation (+11/step minimum by standing still).
