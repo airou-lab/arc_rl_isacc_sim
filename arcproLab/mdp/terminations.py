@@ -57,10 +57,11 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     # Apply grace period to both boundaries and gates
     return (~is_spawn) & (masked_boundary_hit | gate_hit)
 
-def height_termination(env: ManagerBasedRLEnv, threshold: float = 0.05, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Terminates if the robot flips or falls below a threshold."""
+def height_termination(env: ManagerBasedRLEnv, threshold: float = 0.05, max_height: float = 0.50, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Terminates if the robot flips, falls below a threshold, or flies too high."""
     asset = env.scene[asset_cfg.name]
-    return asset.data.root_pos_w[:, 2] < threshold
+    z_pos = asset.data.root_pos_w[:, 2]
+    return (z_pos < threshold) | (z_pos > max_height)
 
 def stagnation_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Terminates if the robot is crawling or stuck (speed < 0.1 m/s)."""

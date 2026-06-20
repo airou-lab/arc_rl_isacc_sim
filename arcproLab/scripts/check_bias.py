@@ -43,8 +43,8 @@ def main():
         print("[Bias Check] Resetting environment...")
         env.reset()
         
-        # Action [Steer, Throttle]
-        action = torch.zeros((1, 2), device=env.device)
+        # Action [Steer, Throttle, (Unused)]
+        action = torch.zeros((1, 3), device=env.device)
         action[0, 1] = 0.5 
         
         f.write(f"Applying action: {action}\n")

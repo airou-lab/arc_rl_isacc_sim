@@ -14,7 +14,7 @@ import mdp.spawner as arcpro_spawner
 def spawn_f1tenth_preset(prim_path, cfg, translation=None, orientation=None):
     """Preset spawner that includes mass overrides for F1Tenth."""
     mass_overrides = {
-        "Chassis": 3.192,
+        "Chassis": 3.342,
         "Wheel_.*": 0.15,
         "Knuckle_.*": 0.075,
     }

@@ -115,3 +115,11 @@
 ### 5. Production Retraining Initiated
 - **Configuration**: 32 environments, 5M steps, 1e-5 learning rate, headless with cameras.
 - **Goal**: Establish a clean, zero-bias baseline for autonomous urban navigation.
+
+### 2026-06-20: Mass, Torque, and Trim Refinements
+- **Achievement**: Re-synced the physics simulation parameters to match the real-world 4.092kg F1Tenth model, removing "kangaroo hopping".
+- **Solution**:
+    - Reduced `effort_limit_sim` for the motors from 10.0 to 0.5.
+    - Corrected the `Chassis` mass override to 3.342kg so that the total mass of the car (with 2 knuckles and 4 wheels) equals exactly 4.092kg.
+    - **Mistake Documented**: Attempted to "fix" `drive_scale` to 40.0 because the car's Y-coordinate was decreasing while facing North. Realized this was the correct behavior for driving "forward" relative to the straightaway, and setting it to 40.0 actually made the car drive backwards. `drive_scale` remains `-40.0`.
+    - Corrected physical left-drift by adding a constant `-0.015` steering trim offset to `AckermannSteeringActionCfg`.
