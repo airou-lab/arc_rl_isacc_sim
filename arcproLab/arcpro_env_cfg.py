@@ -145,7 +145,8 @@ class ActionCfg:
         joint_names=["Joint_Steer_L", "Joint_Steer_R"], 
         wheelbase=0.33, 
         track_width=0.28, 
-        max_steering_angle=0.5
+        max_steering_angle=0.5,
+        offset=0.0
     )
     drive = arcpro_actions.CombinedDriveActionCfg(
         asset_name="robot", 
@@ -181,8 +182,6 @@ class RewardCfg:
 
 @configclass
 class TerminationCfg:
-    # Snap Reset: Touching the paint kills the robot
-    # 0.12m is the exact threshold where tires touch the paint
     roadmark_contact = DoneTerm(func=mdp_done.white_line_contact, params={"threshold": 0.12})
     # height termination: Catch flying robots (falling into void)
     # Lowered to 0.02m to give suspension room to breathe upon impact

@@ -138,8 +138,8 @@ class AckermannSteeringAction(ActionTerm):
         # actions is (num_envs, 1) in range [-1, 1]
         self._raw_actions[:] = actions
         
-        # Convert normalized action to target steering angle (rad)
-        steering_angle = actions.squeeze(1) * self.cfg.max_steering_angle
+        # Convert normalized action to target steering angle (rad) and apply offset
+        steering_angle = actions.squeeze(1) * self.cfg.max_steering_angle + self.cfg.offset
         
         # Handle Straight case (to avoid division by zero)
         is_straight = torch.abs(steering_angle) < 1e-4
