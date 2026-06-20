@@ -21,13 +21,12 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     
     # Base Target: Lane Center (Sync with -16.2 centerline)
     base_spawn_x, base_spawn_y = -16.18, 5.30
-    base_spawn_yaw = -1.5708 # Flipped 180 in Z (South)
+    base_spawn_yaw = 1.5708 # Face North
     
     # 1. Domain Randomization (Hardening)
-    # Randomize X-offset: ±4cm (tighter for initial learning)
-    rand_offset_x = (torch.rand(num_resets, device=env.device) * 0.08) - 0.04
-    # Randomize Heading: ±5 degrees (~0.08 rad)
-    rand_yaw = (torch.rand(num_resets, device=env.device) * 0.16) - 0.08
+    # Disabled for debugging pure straight-line traversal
+    rand_offset_x = torch.zeros(num_resets, device=env.device)
+    rand_yaw = torch.zeros(num_resets, device=env.device)
     # Randomize Initial Velocity: Disabled for stability during drop
     rand_vel_x = torch.zeros(num_resets, device=env.device)
     
@@ -64,16 +63,15 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
         quats[i, 2] = 0.7071 * c - 0.7071 * s # Y
         quats[i, 3] = 0.0 * c + 0.0 * s # Z
         
-        # Actually let's just use the strict confirmed math:
-        # For 180 roll + Yaw:
-        # W = 0
-        # X = cos(yaw/2)
-        # Y = sin(yaw/2)
-        # Z = 0
-        quats[i, 0] = 0.0
-        quats[i, 1] = math.cos(half_yaw)
-        quats[i, 2] = math.sin(half_yaw)
-        quats[i, 3] = 0.0
+        # Standard upright Yaw rotation (Z-axis)
+        # W = cos(yaw/2)
+        # X = 0
+        # Y = 0
+        # Z = sin(yaw/2)
+        quats[i, 0] = math.cos(half_yaw)
+        quats[i, 1] = 0.0
+        quats[i, 2] = 0.0
+        quats[i, 3] = math.sin(half_yaw)
 
         if hit["hit"]:
             # Snap Z to road (20cm offset)

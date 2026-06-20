@@ -44,8 +44,11 @@ def main():
     action_stop = torch.tensor([[0.0, 0.0, 0.0]], device=env.device)
     
     for i in range(500):
-        # Apply full throttle immediately
-        curr_action = action_move
+        # Apply zero throttle until the car lands, then full throttle
+        if i < 10:
+            curr_action = action_stop
+        else:
+            curr_action = action_move
         obs_dict, rewards, terminated, truncated, info = env.step(curr_action)
         
         if i < 10:

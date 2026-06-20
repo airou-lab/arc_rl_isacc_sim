@@ -213,9 +213,9 @@ def main():
             else:
                 # Fallback dummy forward-crawl if no model is loaded
                 actions = np.zeros((args_cli.num_envs, 3), dtype=np.float32)
-                # DRIVE STRAIGHT: Zero steering, 0.2 Throttle
+                # DRIVE STRAIGHT: Zero steering, Full Throttle
                 actions[:, 0] = 0.0 
-                actions[:, 1] = 0.2
+                actions[:, 1] = 1.0
                 lstm_states = None
             
             # Step environment
