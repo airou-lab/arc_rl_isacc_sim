@@ -12,6 +12,7 @@ parser.add_argument("--num_envs", type=int, default=16, help="Number of parallel
 parser.add_argument("--seed", type=int, default=42, help="Seed for the environment.")
 parser.add_argument("--total_timesteps", type=int, default=5000000, help="Total timesteps to train (5M recommended for HPPP).")
 parser.add_argument("--checkpoint", type=str, default=None, help="Path to a checkpoint to resume from.")
+parser.add_argument("--batch_size", type=int, default=64, help="PPO minibatch size.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -37,7 +38,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 ARCPRO_LAB_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-POLICY_STACK_DIR = os.path.join(ARCPRO_LAB_DIR, "policy_stack")
+POLICY_STACK_DIR = os.path.abspath(os.path.join(ROOT_DIR, "..", "arc_rl_isacc_policy"))
 
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
@@ -136,11 +137,52 @@ class HPPPDirectBridge(VecEnv):
         dist_w = self.venv.extras.get("dist_w", torch.zeros(self.num_envs)).cpu().numpy()
         speed = self.venv.extras["speed"].cpu().numpy()
 
+        # go_signal telemetry (Path A diagnostic instrumentation).
+        # We pull both the published gate value and the underlying FSM state so
+        # we can tell apart "policy crawls because gate held it down" from
+        # "policy crawls anyway." If the manager isn't initialized (e.g. cameras
+        # off) we fill zeros; logging will show that as gate-always-open.
+        go_signal_np = self.venv.extras.get(
+            "go_signal", torch.ones(self.num_envs, device=self.device)
+        ).cpu().numpy()
+        try:
+            from mdp.go_signal_manager import get_go_signal_manager
+            gsm = get_go_signal_manager(self.num_envs, str(self.device))
+            go_state_np = gsm.state.cpu().numpy()
+            stop_bar_dist_np = gsm.last_distance.cpu().numpy()
+            stop_bar_det_np = gsm.last_detected.cpu().numpy().astype(np.float32)
+        except Exception:
+            go_state_np = np.zeros(self.num_envs, dtype=np.int64)
+            stop_bar_dist_np = np.full(self.num_envs, float("nan"), dtype=np.float32)
+            stop_bar_det_np = np.zeros(self.num_envs, dtype=np.float32)
+
+        # Per-termination flags + episode length at done. We read directly off
+        # the termination manager's per-term buffer so we can attribute each
+        # reset to a specific cause (boundary vs gate-hit vs stagnation etc.).
+        term_flags = {}
+        try:
+            tm_mgr = self.venv.termination_manager
+            for term_name in tm_mgr.active_terms:
+                term_flags[term_name] = tm_mgr.get_term(term_name).cpu().numpy()
+        except Exception:
+            pass
+        ep_len_buf = self.venv.episode_length_buf.cpu().numpy()
+
         for i in range(self.num_envs):
             infos[i]["dist_yellow"] = dist_y[i]
             infos[i]["dist_white"] = dist_w[i]
             infos[i]["speed"] = speed[i]
-                    
+            infos[i]["go_signal"] = float(go_signal_np[i])
+            infos[i]["go_state"] = int(go_state_np[i])
+            infos[i]["stop_bar_dist"] = float(stop_bar_dist_np[i])
+            infos[i]["stop_bar_detected"] = float(stop_bar_det_np[i])
+            # When this step ended the episode, record which terms fired and the length.
+            if dones[i]:
+                infos[i]["ep_len_at_done"] = int(ep_len_buf[i])
+                for term_name, flags in term_flags.items():
+                    if bool(flags[i]):
+                        infos[i][f"term_{term_name}"] = 1.0
+
         return self._process_obs(obs_dict), rewards.cpu().numpy(), dones, infos
 
     def _process_obs(self, obs_dict):
@@ -212,6 +254,9 @@ def main():
         n_lstm_layers=1,
         enable_critic_lstm=True,
         share_features_extractor=True,
+        # Reduce initial action variance for continuous bounded control
+        # Default is log_std=0.0 (std=1.0). -0.5 is std=0.6. Prevents instant boundary crashes.
+        log_std_init=-0.5,
         # Hierarchical parameters
         num_waypoints=5,
         waypoint_horizon=2.5,
@@ -231,7 +276,9 @@ def main():
             args_cli.checkpoint,
             env,
             verbose=1,
-            learning_rate=5e-5, # Explicitly override high checkpoint value
+            learning_rate=5e-5,
+            clip_range=0.2,
+            ent_coef=0.0,
             tensorboard_log=os.path.join(log_dir, "tb"),
             seed=args_cli.seed,
             device="cuda"
@@ -241,14 +288,15 @@ def main():
             HierarchicalPathPlanningPolicy,
             env,
             verbose=1,
-            learning_rate=5e-5, # Reduced for more stable, deliberate updates
+            learning_rate=5e-5,
             n_steps=512,        # 4096 samples per update
-            batch_size=64,      # Increased for better gradient averaging
-            n_epochs=10,        
+            batch_size=args_cli.batch_size,
+            n_epochs=4,         # Reduced from 10 to stabilize KL/clip explosions
             gamma=0.99,
             gae_lambda=0.95,
             clip_range=0.2,
-            ent_coef=0.01,      # Increased from 0.005 to prevent premature convergence
+            ent_coef=0.0,       # Killed entropy bonus to stop forced random crashing
+            target_kl=0.015,    # Circuit breaker to stop updates if KL blows up
             tensorboard_log=os.path.join(log_dir, "tb"),
             seed=args_cli.seed,
             device="cuda",
@@ -257,37 +305,103 @@ def main():
 
     # 8. Callbacks
     class RewardLoggerCallback(BaseCallback):
+        # Path A diagnostic instrumentation. Rolling sums reset on rollout
+        # start so TB sees one accurate scalar per update instead of whichever
+        # value `record()` happened to write last.
         def __init__(self, verbose: int = 0):
             super().__init__(verbose)
-        
-        def _on_step(self) -> bool:
-            # Mastery v2.6: Log raw speed and boundary distances to TensorBoard every step
-            infos = self.locals.get("infos", [{}])
-            speeds = [info.get("speed", 0.0) for info in infos]
-            dist_w = [info.get("dist_white", 0.0) for info in infos]
-            dist_y = [info.get("dist_yellow", 0.0) for info in infos]
-            
-            mean_speed = sum(speeds) / len(speeds)
-            mean_dist_w = sum(dist_w) / len(dist_w)
-            mean_dist_y = sum(dist_y) / len(dist_y)
-            
-            self.logger.record("rollout/speed_mps", mean_speed)
-            self.logger.record("rollout/dist_white_m", mean_dist_w)
-            self.logger.record("rollout/dist_yellow_m", mean_dist_y)
+            self._reset_accumulators()
 
-            if self.n_calls % 1000 == 0:
-                # Extract rolling averages from the model's ep_info_buffer
+        def _reset_accumulators(self) -> None:
+            self._n_samples = 0
+            self._sum_speed = 0.0
+            self._sum_dist_w = 0.0
+            self._sum_dist_y = 0.0
+            self._sum_go_signal = 0.0
+            self._sum_in_stop = 0.0
+            self._sum_in_depart = 0.0
+            self._sum_bar_detected = 0.0
+            self._sum_bar_dist = 0.0
+            self._n_bar_detected = 0
+            self._term_counts: dict[str, int] = {}
+            self._n_done = 0
+            self._sum_ep_len_at_done = 0.0
+
+        def _on_rollout_start(self) -> None:
+            self._reset_accumulators()
+
+        def _on_step(self) -> bool:
+            infos = self.locals.get("infos", [{}])
+            dones = self.locals.get("dones", [False] * len(infos))
+            n = len(infos)
+
+            for i, info in enumerate(infos):
+                self._sum_speed   += float(info.get("speed", 0.0))
+                self._sum_dist_w  += float(info.get("dist_white", 0.0))
+                self._sum_dist_y  += float(info.get("dist_yellow", 0.0))
+                self._sum_go_signal += float(info.get("go_signal", 1.0))
+                gs = int(info.get("go_state", 0))
+                if gs == 1:
+                    self._sum_in_stop += 1.0
+                elif gs == 2:
+                    self._sum_in_depart += 1.0
+                if float(info.get("stop_bar_detected", 0.0)) > 0.5:
+                    self._sum_bar_detected += 1.0
+                    d = float(info.get("stop_bar_dist", float("nan")))
+                    if d == d:  # NaN-safe
+                        self._sum_bar_dist += d
+                        self._n_bar_detected += 1
+
+                if bool(dones[i]):
+                    self._n_done += 1
+                    self._sum_ep_len_at_done += float(info.get("ep_len_at_done", 0))
+                    for key in info:
+                        if key.startswith("term_"):
+                            self._term_counts[key] = self._term_counts.get(key, 0) + 1
+            self._n_samples += n
+
+            if self.n_calls % 1000 == 0 and self._n_samples > 0:
+                mean_speed = self._sum_speed / self._n_samples
+                mean_dist_w = self._sum_dist_w / self._n_samples
+                mean_dist_y = self._sum_dist_y / self._n_samples
+                go_mean = self._sum_go_signal / self._n_samples
+                stop_frac = self._sum_in_stop / self._n_samples
                 if len(self.model.ep_info_buffer) > 0:
-                    ep_rew = sum([ep_info["r"] for ep_info in self.model.ep_info_buffer]) / len(self.model.ep_info_buffer)
-                    ep_len = sum([ep_info["l"] for ep_info in self.model.ep_info_buffer]) / len(self.model.ep_info_buffer)
+                    ep_rew = sum(e["r"] for e in self.model.ep_info_buffer) / len(self.model.ep_info_buffer)
+                    ep_len = sum(e["l"] for e in self.model.ep_info_buffer) / len(self.model.ep_info_buffer)
                 else:
                     ep_rew = 0.0
                     ep_len = 0.0
-                
-                print(f"[PROGRESS] Step {self.n_calls} | EpRew: {ep_rew:.2f} | EpLen: {ep_len:.1f} | AvgSpeed: {mean_speed:.2f} m/s | DW: {mean_dist_w:.2f}m | DY: {mean_dist_y:.2f}m")
+                print(
+                    f"[PROGRESS] Step {self.n_calls} | EpRew: {ep_rew:.2f} | EpLen: {ep_len:.1f} "
+                    f"| AvgSpeed: {mean_speed:.2f} m/s | DW: {mean_dist_w:.2f}m | DY: {mean_dist_y:.2f}m "
+                    f"| GoMean: {go_mean:.2f} | StopFrac: {stop_frac:.2%}"
+                )
                 sys.stdout.flush()
 
             return True
+
+        def _on_rollout_end(self) -> None:
+            if self._n_samples == 0:
+                return
+            n = self._n_samples
+            self.logger.record("rollout/speed_mps",   self._sum_speed   / n)
+            self.logger.record("rollout/dist_white_m", self._sum_dist_w / n)
+            self.logger.record("rollout/dist_yellow_m", self._sum_dist_y / n)
+            self.logger.record("go_signal/mean",       self._sum_go_signal   / n)
+            self.logger.record("go_signal/stop_frac",  self._sum_in_stop     / n)
+            self.logger.record("go_signal/depart_frac", self._sum_in_depart  / n)
+            self.logger.record("go_signal/bar_detected_frac", self._sum_bar_detected / n)
+            if self._n_bar_detected > 0:
+                self.logger.record("go_signal/bar_dist_when_detected_m",
+                                   self._sum_bar_dist / self._n_bar_detected)
+            # Termination attribution: count per cause and mean ep length at death.
+            for term_key, count in self._term_counts.items():
+                self.logger.record(f"terminations/{term_key}_count", count)
+            self.logger.record("terminations/total_done", self._n_done)
+            if self._n_done > 0:
+                self.logger.record("terminations/ep_len_at_done_mean",
+                                   self._sum_ep_len_at_done / self._n_done)
 
     class SaveVecNormalizeCallback(BaseCallback):
         def __init__(self, save_path: str, save_freq: int, verbose: int = 0):

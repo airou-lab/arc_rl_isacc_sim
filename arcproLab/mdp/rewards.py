@@ -7,19 +7,27 @@ import torch
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
-def speed_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Rewards actual forward progress in the robot's current facing direction."""
+def progress_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """
+    Rewards the agent heavily for moving forward efficiently.
+    Subtracts a baseline so creeping (e.g. < 0.5 m/s) yields little to no reward,
+    forcing the agent to discover that real speed pays off.
+    """
     asset = env.scene[asset_cfg.name]
     
     # The car's forward direction is -X in its local frame.
-    # We can get local velocity directly from root_lin_vel_b
     local_vel = asset.data.root_lin_vel_b
-    
-    # Extract the forward speed (negative X is forward)
     forward_speed = -local_vel[:, 0]
     
-    # Reward positive progress, clip negative (reverse)
-    return torch.clamp(forward_speed, min=-1.0)
+    # Baseline speed of 0.5 m/s. Anything below this gets 0 bonus.
+    # Anything above scales linearly, capped at 3.0 m/s relative (so 3.5 m/s absolute).
+    speed_bonus = torch.clamp((forward_speed - 0.5) * 5.0, min=0.0, max=15.0)
+    
+    # Keep a small baseline reward just for not being negative, but make the 
+    # bonus the dominant signal.
+    base_speed = torch.clamp(forward_speed, min=-1.0) * 2.0
+    
+    return base_speed + speed_bonus
 
 def termination_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     """Large penalty triggered only when a termination occurs."""

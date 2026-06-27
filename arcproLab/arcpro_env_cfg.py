@@ -165,8 +165,8 @@ class RewardCfg:
     # Penalty function returns -500.0. Weight 2.0 = -1000 per death.
     terminating = RewTerm(func=mdp_rew.termination_penalty, weight=2.0)
     
-    # Performance: Momentum (Rewards actual forward progress)
-    speed = RewTerm(func=mdp_rew.speed_reward, weight=20.0)
+    # Performance: Momentum (Rewards actual forward progress, punishes creeping)
+    progress_reward = RewTerm(func=mdp_rew.progress_reward, weight=1.0) # Weight handled inside the function
     # Precision: Lane centering (Increased pressure to stay in center)
     # Disabled per user request for pure boundary-based lane following
     lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=0.0)
