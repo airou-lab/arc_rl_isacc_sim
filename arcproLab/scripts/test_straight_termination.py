@@ -29,6 +29,7 @@ def main():
     # Disable cameras for headless test
     env_cfg.observations.visual = None
     env_cfg.scene.tiled_camera = None
+    env_cfg.observations.policy.tiled_camera = None
     # Force 0.0 steering and high throttle
     env = ManagerBasedRLEnv(cfg=env_cfg)
     
@@ -62,6 +63,9 @@ def main():
 
         if terminated[0]:
             print(f"\nTERMINATED at step {i}! Final Pos: X={env.scene['robot'].data.root_pos_w[0,0]:.2f}, Y={env.scene['robot'].data.root_pos_w[0,1]:.2f}")
+            head_err = env.extras.get("head_err")
+            if head_err is not None:
+                print(f"head_err: {head_err[0].item():.4f} rad ({math.degrees(head_err[0].item()):.1f} deg)")
             break
 
     simulation_app.close()

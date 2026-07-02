@@ -77,12 +77,9 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         ),
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
             # Spawn point: right lane heading toward junction_18 intersection.
-            # Y/Z and yaw unchanged from prior centerline spawn; X shifted from
-            # -16.25375 -> -15.73 (a ~+0.52 m offset) to center the body in the
-            # right lane. Verified visually via inspect_world.py iterating
-            # -15.0 (off-road) -> -15.75 -> -15.70 -> -15.73.
-            pos=(-15.73, 4.92, 0.05),
-            rot=(0.7071, 0.0, 0.0, 0.7071) # +90 degrees Z-up (faces +Y)
+            # Exactly on the path center (X=-16.197) at safe drop height
+            pos=(-16.197, 5.50, 0.12),
+            rot=(0.7071, 0.0, 0.0, 0.7071) # Upright & Face North (WXYZ)
         ),
 
 
@@ -97,8 +94,8 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             horizontal_aperture=3.86, # 90-degree HFOV (2 * atan(3.86 / (2 * 1.93)))
             focal_length=1.93,
         ),
-        # Raised to 0.35m and tilted 30 degrees down to see the road
-        offset=TiledCameraCfg.OffsetCfg(pos=(-0.3, 0.0, 0.35), rot=(0.0, -0.258, 0.0, 0.966), convention="parent"),
+        # Raised to 0.35m with no tilt to see further down the track
+        offset=TiledCameraCfg.OffsetCfg(pos=(-0.3, 0.0, 0.35), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
         data_types=["rgb"], width=224, height=224,
     )
 
@@ -131,14 +128,15 @@ class ARCProSceneCfg(InteractiveSceneCfg):
 class ObservationCfg:
     @configclass
     class PolicyCfg(ObservationGroupCfg):
+        concatenate_terms = False
         telemetry = ObsTerm(func=mdp_obs.get_telemetry_vector)
-    policy: PolicyCfg = PolicyCfg()
-    
-    @configclass
-    class VisualCfg(ObservationGroupCfg):
         tiled_camera = ObsTerm(func=mdp.image, params={"sensor_cfg": SceneEntityCfg("tiled_camera"), "normalize": True})
-    
-    visual: VisualCfg | None = VisualCfg()
+    policy: PolicyCfg = PolicyCfg()
+
+    @configclass
+    class CriticCfg(ObservationGroupCfg):
+        telemetry = ObsTerm(func=mdp_obs.get_critic_state_vector)
+    critic: CriticCfg = CriticCfg()
 
 import mdp.actions as arcpro_actions
 
@@ -150,7 +148,7 @@ class ActionCfg:
         wheelbase=0.33, 
         track_width=0.28, 
         max_steering_angle=0.5,
-        offset=0.0
+        offset=-0.005
     )
     drive = arcpro_actions.CombinedDriveActionCfg(
         asset_name="robot", 
@@ -162,26 +160,27 @@ class ActionCfg:
 @configclass
 class RewardCfg:
     # Anti-Suicide: Massive penalty to discourage 'sprint and crash'
-    # Penalty function returns -500.0. Weight 2.0 = -1000 per death.
-    terminating = RewTerm(func=mdp_rew.termination_penalty, weight=2.0)
+    # Terminal Penalty (Curriculum Phase 1: DISABLED. We want it to learn speed before survival)
+    termination_penalty = RewTerm(func=mdp_rew.termination_penalty, weight=0.0)
     
     # Performance: Momentum (Rewards actual forward progress, punishes creeping)
     progress_reward = RewTerm(func=mdp_rew.progress_reward, weight=1.0) # Weight handled inside the function
     # Precision: Lane centering (Increased pressure to stay in center)
-    # Disabled per user request for pure boundary-based lane following
-    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=0.0)
-    # Force movement: Lowered to 5.0. If too high, agent commits suicide to escape penalty.
+    # Re-enabled to force the agent to learn to steer straight early on
+    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=1.0)
+    # Force movement: Agent was exploiting lateral_error by sitting still. Penalty forces it to move!
     stationary = RewTerm(
         func=lambda env: torch.where(torch.norm(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1) < 0.1, -1.0, 0.0),
-        weight=5.0
+        weight=2.0
     )
     # Disabled per user request
     heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=0.0)
-    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=5.0)
+    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=0.0) # Curriculum Phase 1: Disabled
     # Jitter Suppression (Neutralized to allow initial exploration)
-    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.01)
+    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.0) # Curriculum Phase 1: Disabled
+    termination = RewTerm(func=mdp_rew.termination_penalty, weight=1.0)
     # Boundary Penalty: (Neutralized: -100/step was causing suicide bias)
-    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.01)
+    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.0) # Curriculum Phase 1: Disabled
 
 
 @configclass
@@ -193,10 +192,10 @@ class TerminationCfg:
     # Stagnation: Reset if stuck against a wall
     stagnation = DoneTerm(func=mdp_done.stagnation_termination)
     # FOV Driving: Reset if driving into areas not visible to the camera
-    driving_blind = DoneTerm(
-        func=mdp_done.fov_visibility_termination,
-        params={"horizontal_aperture": 2.65, "focal_length": 1.93}
-    )
+    # driving_blind = DoneTerm(
+    #     func=mdp_done.fov_visibility_termination,
+    #     params={"horizontal_aperture": 3.86, "focal_length": 1.93}
+    # )
 
 @configclass
 class ARCProEnvCfg(ManagerBasedRLEnvCfg):
@@ -234,7 +233,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
         self.decimation = 10 # 500Hz / 10 = 50Hz control (Nyquist stability for 6cm clearance)
         self.episode_length_s = 300.0 
         self.viewer.camera_follow_prim_path = None
-        
+        # Enable cameras conditionally
         if not self.enable_cameras:
-            self.observations.visual = None
             self.scene.tiled_camera = None
+            self.observations.policy.tiled_camera = None

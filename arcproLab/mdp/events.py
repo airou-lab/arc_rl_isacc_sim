@@ -19,9 +19,8 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     asset = env.scene[asset_cfg.name]
     num_resets = len(env_ids)
     
-    # Spawn point: right lane heading toward junction_18 intersection.
-    # X shifted to center the body in the right lane.
-    base_spawn_x, base_spawn_y = -15.73, 4.92
+    # Exactly on the path center (X=-16.197) at safe drop height
+    base_spawn_x, base_spawn_y = -16.197, 5.50
     base_spawn_yaw = 1.5708 # Face North
     
     # 1. Domain Randomization (Hardening)
@@ -38,7 +37,7 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     final_pos = torch.zeros((num_resets, 3), device=env.device)
     final_pos[:, 0] = env_origins[:, 0] + base_spawn_x + rand_offset_x
     final_pos[:, 1] = env_origins[:, 1] + base_spawn_y
-    final_pos[:, 2] = env_origins[:, 2] + 0.20 # Safe drop height
+    final_pos[:, 2] = env_origins[:, 2] + 0.12 # Safe drop height
 
     # 3. Compute final rotations (WXYZ)
     quats = torch.zeros((num_resets, 4), device=env.device)
@@ -75,8 +74,8 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
         quats[i, 3] = math.sin(half_yaw)
 
         if hit["hit"]:
-            # Snap Z to road (20cm offset)
-            spawn_z = hit["position"][2] + 0.20
+            # Snap Z to road
+            spawn_z = hit["position"][2] + 0.12
             final_pos[i, 2] = spawn_z
     
     # 4. Apply Initial Velocity (World Frame)
