@@ -37,7 +37,7 @@ import cv2
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 ARCPRO_LAB_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-POLICY_STACK_DIR = os.path.join(ARCPRO_LAB_DIR, "policy_stack")
+POLICY_STACK_DIR = os.path.abspath(os.path.join(ROOT_DIR, "..", "arc_rl_isacc_policy"))
 
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)

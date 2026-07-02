@@ -241,3 +241,4 @@ visualization-msgs==5.3.6
 Werkzeug==3.1.8
 xacro==2.1.1
 zed-msgs==5.1.1
+skrl

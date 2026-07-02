@@ -274,14 +274,15 @@ def main():
             
         model = RecurrentPPO.load(
             args_cli.checkpoint,
-            env,
-            verbose=1,
-            learning_rate=5e-5,
-            clip_range=0.2,
-            ent_coef=0.0,
-            tensorboard_log=os.path.join(log_dir, "tb"),
-            seed=args_cli.seed,
-            device="cuda"
+            env=env,
+            device="cuda",
+            custom_objects={
+                "learning_rate": 1e-5,
+                "target_kl": 0.01,
+                "clip_range": 0.2,
+                "ent_coef": 0.0,
+                "tensorboard_log": os.path.join(log_dir, "tb")
+            }
         )
     else:
         model = RecurrentPPO(

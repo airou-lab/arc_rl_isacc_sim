@@ -4,7 +4,7 @@ import os
 import subprocess
 import re
 
-LOG_FILE = "logs/production_mastery_8_relaunch.log"
+LOG_FILE = "logs/curriculum_phase1.log"
 DIAGNOSIS_FILE = "logs/WATCHDOG_DIAGNOSIS.md"
 
 def get_latest_metrics():
@@ -51,7 +51,7 @@ def main():
                 failure = f"DIVERGENCE: STD exploded to {s}. The neural network has gone insane."
             
             # 2. Stagnation Check (Glass Ceiling)
-            elif t > 500000 and e < 200.0:
+            elif t > 500000 and e < 100.0:
                 failure = f"STAGNATION: Surviving only {e} steps after 500k timesteps. The agent is likely stuck in a crawling local minimum."
             
             # 3. Crash Check (Resource Lock)
@@ -60,12 +60,13 @@ def main():
 
             if failure:
                 print(f"!!! CRITICAL FAILURE DETECTED: {failure}")
-                # 1. Kill the training
-                subprocess.run(["tmux", "kill-session", "-t", "training"])
                 
-                # 2. Write the report
+                # 1. Write the report FIRST (so it doesn't kill itself before writing)
                 with open(DIAGNOSIS_FILE, "w") as f_out:
                     f_out.write(f"# WATCHDOG DIAGNOSIS\n\n**Failure Detected at T={t}**\n\n> {failure}\n\n**Action Taken**: Training session 'training' has been killed to save GPU time.\n\n**Next Steps**: Please ask Gemini to analyze the logs and apply a 'Stabilization Patch'.")
+                
+                # 2. Kill the training
+                subprocess.run(["tmux", "kill-session", "-t", "training"])
                 
                 print("Training killed. Diagnosis report written. Watchdog exiting.")
                 break
