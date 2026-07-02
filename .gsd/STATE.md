@@ -9,10 +9,9 @@
 - 🔄 **M001:** Milestone 3: HD Perception and Production Hardening
 
 ## Recent Decisions
-- None recorded
-
+- **D008:** Resolved environment physics/camera orientation bugs (camera native backward offset vs drive direction) and pushed cleanup to `dev` branch.
 ## Blockers
 - None
 
 ## Next Action
-Evaluate 2 quality gate(s) for S01 before execution.
+Awaiting agent training and verification. Ensure training process launches correctly with updated physics constraints.
