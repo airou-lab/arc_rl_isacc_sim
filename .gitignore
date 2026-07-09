@@ -24,3 +24,6 @@ exts/omni.*
 .thumbs.db
 debug_frames/
 *.npz
+vram_runs/
+logs/
+docs/
