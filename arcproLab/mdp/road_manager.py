@@ -41,6 +41,7 @@ class RoadManager:
         # TODO(sync): derive approach groups from spawn/route geometry.
         self.agent_groups = torch.zeros((num_envs, num_agents), dtype=torch.long, device=self.device)
         self.time_to_change = torch.zeros((num_envs, num_agents), device=self.device)
+        self.stoplight = None  # built during gate discovery (needs stage)
         
         # Random initial missions
         self.randomize_missions(torch.ones(num_envs, dtype=torch.bool, device=self.device))
@@ -58,6 +59,7 @@ class RoadManager:
         
         gate_positions = []
         gate_intents = []
+        gate_records = []  # (prim_path, (x, y, z)) for stoplight placement
         
         for prim in stage.Traverse():
             if "laneGate" in prim.GetName():
@@ -78,11 +80,18 @@ class RoadManager:
                 
                 gate_positions.append([pos[0], pos[1]])
                 gate_intents.append(intent)
+                gate_records.append((str(prim.GetPath()), (float(pos[0]), float(pos[1]), float(pos[2]))))
         
         if gate_positions:
             self.gates_pos = torch.tensor(gate_positions, device=self.device, dtype=torch.float32)
             self.gates_intent = torch.tensor(gate_intents, device=self.device, dtype=torch.float32)
             print(f"[RoadManager] Discovered {len(gate_positions)} navigation gates.")
+            try:
+                from mdp.stoplight_visual import StoplightVisual
+            except ImportError:
+                from stoplight_visual import StoplightVisual
+            self.stoplight = StoplightVisual()
+            self.stoplight.build(stage, gate_records)
         
         self.initialized = True
 
@@ -108,9 +117,11 @@ class RoadManager:
             if reset_buf is not None and reset_buf.any():
                 self.intersection.reset(reset_buf)
             self.intersection.step()
-            go, ttc, _ = self.intersection.get_spat(self.agent_groups)
+            go, ttc, phase = self.intersection.get_spat(self.agent_groups)
             self.go_signals = go
             self.time_to_change = ttc / self.intersection.cycle_s
+            if self.stoplight is not None:
+                self.stoplight.sync(phase[:, 0])
         else:
             self.go_signals[:] = 1.0
 
