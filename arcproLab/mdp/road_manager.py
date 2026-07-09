@@ -6,6 +6,11 @@
 import torch
 import numpy as np
 
+try:
+    from mdp.intersection_manager import IntersectionManager
+except ImportError:
+    from intersection_manager import IntersectionManager
+
 class RoadManager:
     """
     Vectorized Road Manager for Multi-Agent Navigation.
@@ -21,6 +26,21 @@ class RoadManager:
         # Turn Tokens: -1.0 = LEFT, 0.0 = STRAIGHT, 1.0 = RIGHT
         self.turn_tokens = torch.zeros((num_envs, num_agents), device=self.device)
         self.go_signals = torch.ones((num_envs, num_agents), device=self.device)
+
+        # V2I smart intersection (signalized authority, oracle comms).
+        # Set to None to restore legacy always-green behavior.
+        self.intersection = IntersectionManager(
+            num_envs=num_envs,
+            green_s=(8.0, 8.0),
+            yellow_s=2.0,
+            max_green_s=20.0,
+            step_dt=0.02,  # control rate: sim dt 0.002 * decimation 10
+            randomize_phase=True,
+            device=self.device,
+        )
+        # TODO(sync): derive approach groups from spawn/route geometry.
+        self.agent_groups = torch.zeros((num_envs, num_agents), dtype=torch.long, device=self.device)
+        self.time_to_change = torch.zeros((num_envs, num_agents), device=self.device)
         
         # Random initial missions
         self.randomize_missions(torch.ones(num_envs, dtype=torch.bool, device=self.device))
@@ -83,8 +103,16 @@ class RoadManager:
         if reset_buf is not None and reset_buf.any():
             self.randomize_missions(reset_buf)
         
-        # Future: FIFO Queue logic for intersections (Milestone 4)
-        self.go_signals[:] = 1.0
+        # V2I smart intersection (Milestone 4): signalized authority.
+        if self.intersection is not None:
+            if reset_buf is not None and reset_buf.any():
+                self.intersection.reset(reset_buf)
+            self.intersection.step()
+            go, ttc, _ = self.intersection.get_spat(self.agent_groups)
+            self.go_signals = go
+            self.time_to_change = ttc / self.intersection.cycle_s
+        else:
+            self.go_signals[:] = 1.0
 
     def get_nav_commands(self):
         """Returns (turn_tokens, go_signals) as tensors of shape (B, N)."""

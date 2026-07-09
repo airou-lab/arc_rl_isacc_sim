@@ -39,7 +39,10 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     # We use .view(-1) to ensure it fits into the (B,) slice of obs
     obs[:, 0] = turn_tokens.view(-1)
     obs[:, 1] = go_signals.view(-1)
-    obs[:, 2] = 0.0  # IDX_GOAL_DIST
+    # Index 2: V2I permission horizon (time to next signal change, /cycle)
+    obs[:, 2] = rm.time_to_change.view(-1)
+    # Publish for reward terms (mdp.intersection_rewards reads extras only)
+    env.extras["go_signal"] = go_signals.view(-1)
 
     # Index 3: Forward Speed (m/s) - Absolute Magnitude for Control Flip support
     obs[:, 3] = torch.norm(asset.data.root_lin_vel_b[:, :2], dim=1)

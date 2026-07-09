@@ -25,6 +25,7 @@ import isaaclab.envs.mdp as mdp
 
 from arcpro_robot_cfg import ARCPRO_ROBOT_CFG
 import mdp.observations as mdp_obs, mdp.rewards as mdp_rew, mdp.terminations as mdp_done, mdp.events as mdp_events
+import mdp.intersection_rewards as mdp_ir
 import mdp.spawner as arcpro_spawner
 from mdp.debug_terminations import debug_termination
 
@@ -161,15 +162,16 @@ class RewardCfg:
     terminating = RewTerm(func=mdp_rew.termination_penalty, weight=2.0)
     
     # Performance: Momentum (Rewards actual forward progress)
-    speed = RewTerm(func=mdp_rew.speed_reward, weight=20.0)
+    # Gated on go_signal: forward progress earns nothing while approaching a red
+    speed = RewTerm(func=mdp_ir.gated_speed_reward, weight=20.0)
     # Precision: Lane centering (Increased pressure to stay in center)
     # Disabled per user request for pure boundary-based lane following
     lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=0.0)
     # Force movement: Lowered to 5.0. If too high, agent commits suicide to escape penalty.
-    stationary = RewTerm(
-        func=lambda env: torch.where(torch.norm(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1) < 0.1, -1.0, 0.0),
-        weight=5.0
-    )
+    stationary = RewTerm(func=mdp_ir.gated_stationary_penalty, weight=5.0)
+    # V2I intersection compliance
+    hold_at_red = RewTerm(func=mdp_ir.hold_at_red_reward, weight=10.0)
+    red_light = RewTerm(func=mdp_ir.red_light_violation, weight=100.0)
     # Disabled per user request
     heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=0.0)
     smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=5.0)
