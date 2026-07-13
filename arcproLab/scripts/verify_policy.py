@@ -64,7 +64,8 @@ class HPPPDirectBridge(VecEnv):
         
         # Note: In modern Isaac Lab, groups with single terms are already Boxes
         single_obs_space = env.get_wrapper_attr("single_observation_space")
-        img_space = single_obs_space.spaces["visual"]
+        img_space = single_obs_space.spaces["policy"].spaces["tiled_camera"]
+        vec_space = single_obs_space.spaces["policy"].spaces["telemetry"]
         
         transposed_img_space = gym.spaces.Box(
             low=0.0, high=1.0, 
@@ -72,12 +73,12 @@ class HPPPDirectBridge(VecEnv):
             dtype=np.float32
         )
         observation_space = gym.spaces.Dict({
-            "vec": single_obs_space.spaces["policy"],
+            "vec": vec_space,
             "image": transposed_img_space
         })
         
         # Override Isaac Lab's unbounded ActionManager space with strict SB3 bounds
-        low = np.array([-1.0, 0.0, 0.0], dtype=np.float32)
+        low = np.array([-1.0, -1.0, -1.0], dtype=np.float32)
         high = np.array([1.0, 1.0, 1.0], dtype=np.float32)
         action_space = gym.spaces.Box(low=low, high=high, dtype=np.float32)
         
@@ -120,11 +121,11 @@ class HPPPDirectBridge(VecEnv):
         return self._process_obs(obs_dict), rewards.cpu().numpy(), dones, infos
 
     def _process_obs(self, obs_dict):
-        img = obs_dict["visual"].cpu().numpy()
+        img = obs_dict["policy"]["tiled_camera"].cpu().numpy()
         # Transpose from (B, H, W, C) to (B, C, H, W)
         img = np.transpose(img, (0, 3, 1, 2))
         return {
-            "vec": obs_dict["policy"].cpu().numpy(),
+            "vec": obs_dict["policy"]["telemetry"].cpu().numpy(),
             "image": img
         }
 

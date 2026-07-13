@@ -69,9 +69,9 @@ class HPPPDirectBridge(VecEnv):
         self.num_envs = env.get_wrapper_attr("num_envs")
         self.device = env.get_wrapper_attr("device")
         
-        # Note: In modern Isaac Lab, groups with single terms are already Boxes
         single_obs_space = env.get_wrapper_attr("single_observation_space")
-        img_space = single_obs_space.spaces["visual"]
+        img_space = single_obs_space.spaces["policy"].spaces["tiled_camera"]
+        vec_space = single_obs_space.spaces["policy"].spaces["telemetry"]
         
         # Mastery: Use uint8 for storage to save 4x VRAM in the rollout buffer
         transposed_img_space = gym.spaces.Box(
@@ -80,12 +80,12 @@ class HPPPDirectBridge(VecEnv):
             dtype=np.uint8
         )
         observation_space = gym.spaces.Dict({
-            "vec": single_obs_space.spaces["policy"],
+            "vec": vec_space,
             "image": transposed_img_space
         })
         
         # Override Isaac Lab's unbounded ActionManager space with strict SB3 bounds
-        low = np.array([-1.0, 0.0, 0.0], dtype=np.float32)
+        low = np.array([-1.0, -1.0, -1.0], dtype=np.float32)
         high = np.array([1.0, 1.0, 1.0], dtype=np.float32)
         action_space = gym.spaces.Box(low=low, high=high, dtype=np.float32)
         
@@ -188,13 +188,13 @@ class HPPPDirectBridge(VecEnv):
     def _process_obs(self, obs_dict):
         # Isaac Lab returns normalized float32 (0-1) if "normalize": True is set in cfg
         # We convert to uint8 (0-255) for storage efficiency
-        img = obs_dict["visual"].cpu().numpy()
+        img = obs_dict["policy"]["tiled_camera"].cpu().numpy()
         img_uint8 = (np.clip(img, 0, 1) * 255).astype(np.uint8)
         
         # Transpose from (B, H, W, C) to (B, C, H, W)
         img_transposed = np.transpose(img_uint8, (0, 3, 1, 2))
         return {
-            "vec": obs_dict["policy"].cpu().numpy(),
+            "vec": obs_dict["policy"]["telemetry"].cpu().numpy(),
             "image": img_transposed
         }
 

@@ -9,41 +9,32 @@ from isaaclab.envs import ManagerBasedRLEnv
 
 def progress_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """
-    Rewards the agent heavily for moving forward efficiently.
-    Subtracts a baseline so creeping (e.g. < 0.5 m/s) yields little to no reward,
-    forcing the agent to discover that real speed pays off.
+    Rewards the agent linearly for forward distance traveled.
+    Because dt is constant, returning forward_speed means Total Reward = Distance.
+    This prevents the agent from farming 'time steps' by driving slowly before a crash.
     """
     asset = env.scene[asset_cfg.name]
-    
-    # The car's forward direction is -X in its local frame.
     local_vel = asset.data.root_lin_vel_b
-    forward_speed = -local_vel[:, 0]
+    forward_speed = local_vel[:, 0]
     
-    # Baseline speed of 0.5 m/s. Anything below this gets 0 bonus.
-    # Anything above scales linearly, capped at 3.0 m/s relative (so 3.5 m/s absolute).
-    speed_bonus = torch.clamp((forward_speed - 0.5) * 5.0, min=0.0, max=15.0)
-    
-    # Keep a small baseline reward just for not being negative, but make the 
-    # bonus the dominant signal.
-    base_speed = torch.clamp(forward_speed, min=-1.0) * 2.0
-    
-    return base_speed + speed_bonus
+    # Simple linear reward: go forward, get points.
+    return forward_speed
 
 def termination_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
-    """Large penalty triggered only when a termination occurs."""
-    return torch.where(env.reset_buf, torch.tensor(-500.0, device=env.device), torch.tensor(0.0, device=env.device))
+    """Penalty triggered only when a termination occurs."""
+    return torch.where(env.reset_terminated, torch.tensor(-50.0, device=env.device), torch.tensor(0.0, device=env.device))
 
 def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
-    Reward based on lateral offset from track centerline.
-    Continuous Gradient: No plateau. Every mm closer to center increases reward.
-    Zero reward at 0.10m, negative beyond.
+    Penalty based on lateral offset from track centerline.
+    0.0 at center, drops to negative values as it drifts.
+    This prevents farming 'centering points' while standing still.
     """
     lat_err = env.extras.get("lat_err", torch.zeros(env.num_envs, device=env.device))
     abs_lat = torch.abs(lat_err)
     
-    # 1.0 at center (0.0m), 0.0 at 0.10m. Linear dropoff.
-    reward = torch.clamp(1.0 - (abs_lat * 10.0), min=-1.0)
+    # Pure penalty
+    reward = - (abs_lat * 10.0)
     return reward
 
 def jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:

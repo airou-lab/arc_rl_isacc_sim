@@ -8,9 +8,15 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
 def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    return _compute_telemetry(env, asset_cfg, masked=True)
+
+def get_critic_state_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    return _compute_telemetry(env, asset_cfg, masked=False)
+
+def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"), masked: bool = True) -> torch.Tensor:
     """
-    Constructs the 12-element telemetry vector for the ARCPro policy.
-    Indices follow the legacy protocol established in Phase 1.
+    Constructs the 22-element telemetry vector for the ARCPro policy.
+    Indices follow the legacy protocol established in Phase 1 with added waypoints.
     """
     asset = env.scene[asset_cfg.name]
 
@@ -26,8 +32,18 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     env_origins = env.scene.env_origins
     local_pos = asset.data.root_pos_w - env_origins
 
-    # Slot 0: turn_token — still PVP-masked to 0 (sim has no Worker).
-    obs[:, 0] = 0.0
+    # Slot 0: turn_token — Provided by vectorized RoadManager (MARL ready)
+    try:
+        from mdp.road_manager import get_road_manager
+        rm = get_road_manager(num_envs=env.num_envs, num_agents=1, device=env.device)
+        if masked:
+            rm.update(env)
+        turn_tokens, _ = rm.get_nav_commands()
+        # Squeeze the agent dimension (B, 1) -> (B,)
+        obs[:, 0] = turn_tokens.squeeze(1)
+    except Exception as e:
+        print(f"[Observations] Failed to get turn tokens: {e}")
+        obs[:, 0] = 0.0
 
     # Slot 1: go_signal — UNMASKED. Driven by GoSignalManager from the camera
     #         feed (T3.2). When go_signal=0 the policy should brake;
@@ -45,8 +61,15 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
         images = None
         if camera is not None and hasattr(camera, "data") and "rgb" in camera.data.output:
             images = camera.data.output["rgb"]  # (N, H, W, 3) uint8
-        go_signal = mgr.update(images)
-        env.extras["go_signal"] = go_signal
+            
+        # FIX: Only step the GoSignalManager ONCE per physics step (during masked policy call)
+        if masked:
+            go_signal = mgr.update(images)
+            env.extras["go_signal"] = go_signal
+        else:
+            # Fetch the cached signal for the critic call
+            go_signal = env.extras.get("go_signal", torch.ones(env.num_envs, device=env.device))
+            
         obs[:, 1] = go_signal
     except Exception:
         # Defensive: detector or camera failure must not crash training.
@@ -85,11 +108,13 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     
     # Reset distance for environments that just reset
     reset_buf = getattr(env, "reset_buf", None)
-    if reset_buf is not None:
+    if reset_buf is not None and masked:
         env.extras["distance"] = torch.where(reset_buf, torch.zeros_like(env.extras["distance"]), env.extras["distance"])
 
-    # Calculate distance moved in this step
-    env.extras["distance"] += asset.data.root_lin_vel_b[:, 0] * 0.05
+    # Calculate distance moved in this step (only update once per step)
+    if masked:
+        # FIX: Use 0.02 for 50Hz clock (was previously 0.05 for 20Hz)
+        env.extras["distance"] += asset.data.root_lin_vel_b[:, 0] * 0.02
     
     # Store raw values in extras for Reward/Termination (Unmasked)
     env.extras["lat_err"] = lat_err
@@ -98,10 +123,9 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     env.extras["dist_y"] = dist_y
     env.extras["dist_w"] = dist_w
     
-    # Vision-only Mandate: Mask ground-truth errors in the policy observation
-    # This forces the ResNet-18 to learn features from the camera
-    obs[:, 8] = 0.0 # MASKED lat_err
-    obs[:, 9] = 0.0 # MASKED head_err
+    if masked:
+        obs[:, 8] = env.extras["lat_err"] # UNMASKED for Phase 1
+        obs[:, 9] = env.extras["head_err"] # UNMASKED for Phase 1
     
     # Index 10: Path Curvature (Kappa)
     obs[:, 10] = kappa

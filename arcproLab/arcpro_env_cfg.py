@@ -79,7 +79,8 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             # Spawn point: right lane heading toward junction_18 intersection.
             # Exactly on the path center (X=-16.197) at safe drop height
             pos=(-16.197, 5.50, 0.12),
-            rot=(0.7071, 0.0, 0.0, 0.7071) # Upright & Face North (WXYZ)
+            rot=(0.7071, 0.0, 0.0, 0.7071), # Upright & Face North (WXYZ)
+            lin_vel=(0.0, 2.0, 0.0) # Kickstart velocity to bypass static friction and demonstrate reward
         ),
 
 
@@ -142,7 +143,7 @@ import mdp.actions as arcpro_actions
 
 @configclass
 class ActionCfg:
-    steering = arcpro_actions.AckermannSteeringActionCfg(
+    a_steering = arcpro_actions.AckermannSteeringActionCfg(
         asset_name="robot",
         joint_names=["Joint_Steer_L", "Joint_Steer_R"], 
         wheelbase=0.33, 
@@ -150,37 +151,53 @@ class ActionCfg:
         max_steering_angle=0.5,
         offset=-0.005
     )
-    drive = arcpro_actions.CombinedDriveActionCfg(
+    b_drive = arcpro_actions.CombinedDriveActionCfg(
         asset_name="robot", 
         joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
-        scale=-40.0,
-        offset=0.0
+        scale=-20.0,
+        offset=-20.0
     )
 
 @configclass
 class RewardCfg:
     # Anti-Suicide: Massive penalty to discourage 'sprint and crash'
-    # Terminal Penalty (Curriculum Phase 1: DISABLED. We want it to learn speed before survival)
-    termination_penalty = RewTerm(func=mdp_rew.termination_penalty, weight=0.0)
+    # DISABLED: The agent was terrified of the wall and chose to "play dead" at the starting line. 
+    # Since we now only reward physical distance, crashing is its own penalty (it ends the episode, 
+    # stopping point accumulation). We don't need an explicit penalty anymore!
+    termination_penalty = RewTerm(func=mdp_rew.termination_penalty, weight=2000.0)
     
     # Performance: Momentum (Rewards actual forward progress, punishes creeping)
-    progress_reward = RewTerm(func=mdp_rew.progress_reward, weight=1.0) # Weight handled inside the function
-    # Precision: Lane centering (Increased pressure to stay in center)
-    # Re-enabled to force the agent to learn to steer straight early on
-    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=1.0)
-    # Force movement: Agent was exploiting lateral_error by sitting still. Penalty forces it to move!
-    stationary = RewTerm(
-        func=lambda env: torch.where(torch.norm(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1) < 0.1, -1.0, 0.0),
-        weight=2.0
+    progress_reward = RewTerm(func=mdp_rew.progress_reward, weight=50.0)
+    
+    # Exploration: Tiny reward for applying any throttle/drive action to break out of stagnation
+    action_drive_reward = RewTerm(
+        func=lambda env: torch.abs(env.action_manager.action[:, 1]),
+        weight=0.5
     )
-    # Disabled per user request
-    heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=0.0)
-    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=0.0) # Curriculum Phase 1: Disabled
-    # Jitter Suppression (Neutralized to allow initial exploration)
-    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.0) # Curriculum Phase 1: Disabled
-    termination = RewTerm(func=mdp_rew.termination_penalty, weight=1.0)
-    # Boundary Penalty: (Neutralized: -100/step was causing suicide bias)
-    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.0) # Curriculum Phase 1: Disabled
+    
+    # Precision: Lane centering (Increased pressure to stay in center)
+    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=0.5)
+    
+    # Force movement: Penalty forces it to move!
+    # Requires min speed of 0.3 m/s, UNLESS the traffic light (go_signal) says to stop!
+    stationary = RewTerm(
+        func=lambda env: torch.where(
+            (env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.3) & 
+            (env.extras.get("go_signal", torch.ones(env.num_envs, device=env.device)).squeeze(-1) > 0.5),
+            -1.0, 0.0
+        ),
+        weight=1.0
+    )
+    
+    # Enabled for Phase 2: Waypoint Tracking
+    heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=0.5)
+    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=0.5)
+    
+    # Jitter Suppression (Enabled for smooth steering in corners)
+    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.1)
+    
+    # Boundary Penalty: (Neutralized: -100/step was causing suicide bias, handled by termination instead)
+    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.0)
 
 
 @configclass

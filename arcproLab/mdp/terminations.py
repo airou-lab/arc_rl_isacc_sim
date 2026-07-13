@@ -20,6 +20,14 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     env_origins = env.scene.env_origins
     local_pos = asset.data.root_pos_w - env_origins
     
+    # FIX: 1-Step Delay. Compute lat_err and head_err here (during terminations) 
+    # so that the Reward Manager has the current step's data, not the previous step's!
+    q = asset.data.root_quat_w
+    yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
+    lat_err, head_err, kappa = tm.compute_errors(local_pos, yaw)
+    env.extras["lat_err"] = lat_err
+    env.extras["head_err"] = head_err
+    
     # Get boundary data
     dist_y, dist_w, dist_g = tm.compute_marker_distances(local_pos)
     
@@ -73,4 +81,10 @@ def stagnation_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = S
     return (vel < 0.1) & (env.episode_length_buf > 1000)
 
 def fov_visibility_termination(env: ManagerBasedRLEnv, horizontal_aperture: float, focal_length: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+    """Terminates if the track centerline heading error exceeds half the camera FOV (driving blind)."""
+    import math
+    head_err = env.extras.get("head_err", torch.zeros(env.num_envs, device=env.device))
+    # FOV = 2 * atan( h_aperture / (2 * f_length) )
+    fov_rad = 2.0 * math.atan(horizontal_aperture / (2.0 * focal_length))
+    # If heading error is greater than half the FOV, the track is out of sight
+    return torch.abs(head_err) > (fov_rad / 2.0)

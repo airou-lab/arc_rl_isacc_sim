@@ -154,10 +154,10 @@ class AckermannSteeringAction(ActionTerm):
         outer_angle = torch.atan(self.wheelbase / (turn_radius + self.half_track))
         
         # Map to Left/Right joints
-        # If steering_angle > 0 (Turning RIGHT): Left is Outer, Right is Inner
-        # If steering_angle < 0 (Turning LEFT): Left is Inner, Right is Outer
-        left_angle = torch.where(steering_angle > 0, outer_angle, -inner_angle)
-        right_angle = torch.where(steering_angle > 0, inner_angle, -outer_angle)
+        # If steering_angle > 0 (Turning LEFT): Left is Inner, Right is Outer
+        # If steering_angle < 0 (Turning RIGHT): Left is Outer, Right is Inner
+        left_angle = torch.where(steering_angle > 0, inner_angle, -outer_angle)
+        right_angle = torch.where(steering_angle > 0, outer_angle, -inner_angle)
         
         # Apply Straight override
         left_angle = torch.where(is_straight, torch.zeros_like(left_angle), left_angle)

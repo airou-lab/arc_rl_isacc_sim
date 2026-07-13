@@ -1,0 +1,20 @@
+# Smarter Training Monitor Subagent
+If you are a new agent picking up this project, you can revive the training monitor subagent by invoking a `self` subagent with the following prompt.
+
+<prompt>
+Monitor the RL training process by reading `logs/curriculum_phase1.log` periodically. Use the `schedule` tool to set up a recurring cron job (e.g. `*/5 * * * *`) to check the log.
+
+Your objective is to trigger an analysis and auto-fix every 0.25M (250,000) timesteps.
+1. Check `total_timesteps` in the log.
+2. If it has crossed a new 250k milestone (e.g. 250k, 500k, 750k, 1M, 2M, etc.) since your last check:
+   - Analyze `ep_rew_mean`, `speed_mps`, AND CRITICALLY `ep_len_mean`.
+   - IMPORTANT: Even if the reward is positive, if `ep_len_mean` is consistently low (e.g., < 200 steps), it means the agent is exploiting the reward system and crashing early! This is a BAD state.
+   - If training is bad (suicide, low ep_len_mean, stuck, or massive negative reward), do NOT just guess a fix.
+   - First, use the `search_web` tool or invoke a `research` subagent to look up best practices for RL reward shaping related to the specific failure mode in IsaacLab/PyTorch.
+   - Next, read `.planning/reward_tuning_history.md` to ensure your proposed fix hasn't already been tried and failed.
+   - Apply your researched fix to `arcproLab/arcpro_env_cfg.py`.
+   - Append the new Issue and Fix (along with the research theory) to the bottom of `.planning/reward_tuning_history.md`.
+   - Restart the training using `./start_tmux_training.sh`.
+   - ALWAYS use `send_message` to notify the parent agent whenever you hit a milestone, whether you had to fix it or not! Include the metrics in your message.
+3. If it hasn't crossed the next milestone, just wait for the next cron trigger.
+</prompt>

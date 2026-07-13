@@ -197,6 +197,10 @@ class TrackManager:
         
         if len(gate_prim_paths) > 0:
             print(f"[TrackManager] Found {len(gate_prim_paths)} gate prims. Example: {gate_prim_paths[0]}")
+            
+        # Add the right-turn intersection manually since it lacks a gate prim
+        gate_fallback_pts.append([-15.95, 6.19, 0.0])
+        print(f"[TrackManager] Added manual right-turn intersection fallback. Total fallbacks: {len(gate_fallback_pts)}")
 
         # 2. Now traverse meshes in env_0 and categorize
         meshes_found_in_gates = 0
@@ -288,14 +292,90 @@ class TrackManager:
             self.raw_yellow_pts = punch_holes(self.raw_yellow_pts, "Yellow")
             self.raw_white_pts = punch_holes(self.raw_white_pts, "White")
 
+    def sample_waypoints_from_usd(self, density=0.1):
+        """Generates track centerline waypoints from USD boundary markers using a KD-Tree."""
+        if self.raw_yellow_pts is None or self.raw_white_pts is None:
+            self.collect_raw_marker_points()
+            
+        y_pts = self.raw_yellow_pts[:, :2]
+        w_pts = self.raw_white_pts[:, :2]
+        
+        # 1. Use KDTree to find the nearest white point for each yellow point
+        from scipy.spatial import KDTree
+        tree = KDTree(w_pts)
+        dists, idxs = tree.query(y_pts)
+        
+        # 2. The midpoint is the centerline
+        midpoints = (y_pts + w_pts[idxs]) / 2.0
+        
+        # 3. Filter valid midpoints (track width usually < 4.0m)
+        valid_mask = dists < 4.0
+        midpoints = midpoints[valid_mask]
+        
+        # 4. Sequence the points using Fast Nearest Neighbor
+        # Start at origin or closest to origin
+        dists_to_origin = np.linalg.norm(midpoints, axis=1)
+        curr = np.argmin(dists_to_origin)
+        
+        tree_nn = KDTree(midpoints)
+        visited = np.zeros(len(midpoints), dtype=bool)
+        visited[curr] = True
+        ordered = [midpoints[curr]]
+        
+        for _ in range(len(midpoints) - 1):
+            curr_pt = ordered[-1]
+            dists, idxs = tree_nn.query(curr_pt, k=50) # Look at 50 nearest to find an unvisited one
+            
+            found = False
+            for idx in np.atleast_1d(idxs):
+                if not visited[idx]:
+                    visited[idx] = True
+                    ordered.append(midpoints[idx])
+                    found = True
+                    break
+            
+            if not found:
+                # Fallback: find closest globally if gap is large
+                unvisited_idxs = np.where(~visited)[0]
+                if len(unvisited_idxs) == 0: break
+                unvisited_pts = midpoints[unvisited_idxs]
+                dists_glob = np.linalg.norm(unvisited_pts - curr_pt, axis=1)
+                best_idx = unvisited_idxs[np.argmin(dists_glob)]
+                visited[best_idx] = True
+                ordered.append(midpoints[best_idx])
+                
+        ordered = np.array(ordered)
+        
+        # 5. Compute Yaw
+        n = len(ordered)
+        yaws = np.zeros(n)
+        for i in range(n):
+            i_next = (i + 1) % n
+            dy = ordered[i_next, 1] - ordered[i, 1]
+            dx = ordered[i_next, 0] - ordered[i, 0]
+            yaws[i] = np.arctan2(dy, dx)
+            
+        final_wps = np.zeros((n, 3))
+        final_wps[:, :2] = ordered
+        final_wps[:, 2] = yaws
+        
+        self.waypoints = torch.tensor(final_wps, device=self.device, dtype=torch.float32)
+        print(f"[TrackManager] Generated {n} sequenced waypoints.")
+
+    def save_waypoints(self, path):
+        if self.waypoints is not None:
+            np.save(path, self.waypoints.cpu().numpy())
+            print(f"[TrackManager] Saved waypoints to {path}")
+
     def compute_marker_distances(self, pos: torch.Tensor):
         self.ensure_synced()
-        dist_y = torch.min(torch.cdist(pos[:, :3], self.yellow_tensor), dim=1)[0]
-        dist_w = torch.min(torch.cdist(pos[:, :3], self.white_tensor), dim=1)[0]
+        # FIX: Use 2D distance for XY plane, ignoring Z height of the robot chassis
+        dist_y = torch.min(torch.cdist(pos[:, :2], self.yellow_tensor[:, :2]), dim=1)[0]
+        dist_w = torch.min(torch.cdist(pos[:, :2], self.white_tensor[:, :2]), dim=1)[0]
         
         # Gates distance (permeable)
         if self.gate_tensor is not None:
-            dist_g = torch.min(torch.cdist(pos[:, :3], self.gate_tensor), dim=1)[0]
+            dist_g = torch.min(torch.cdist(pos[:, :2], self.gate_tensor[:, :2]), dim=1)[0]
         else:
             dist_g = torch.ones_like(dist_y) * 10.0
             
@@ -384,8 +464,18 @@ class TrackManager:
         
         candidate_wps = self.waypoints[search_indices][:, :, :2]
         candidate_dists = torch.norm(pos[:, None, :2] - candidate_wps, dim=2)
-        best_in_window_idx = torch.argmin(candidate_dists, dim=1)
+        min_dists, best_in_window_idx = torch.min(candidate_dists, dim=1)
+        
         closest_idx = torch.gather(search_indices, 1, best_in_window_idx.view(-1, 1)).view(-1)
+        
+        # FIX: Fallback to Global Search for any envs that teleported (e.g. resets)
+        # If the closest waypoint in the window is > 2.0 meters away, the robot teleported.
+        global_search_mask = min_dists > 2.0
+        if global_search_mask.any():
+            global_dists = torch.cdist(pos[global_search_mask, :2], self.waypoints[:, :2])
+            best_global_idx = torch.argmin(global_dists, dim=1)
+            closest_idx[global_search_mask] = best_global_idx
+            
         self.last_indices = closest_idx
 
         # 3. Calculate Errors
@@ -406,6 +496,34 @@ class TrackManager:
         head_err = torch.atan2(torch.sin(head_err), torch.cos(head_err))
         
         return lat_err, head_err, kappa
+
+    def get_forward_waypoints(self, pos: torch.Tensor, yaw: torch.Tensor, offsets=[20, 40, 60, 80, 100]):
+        """
+        Extracts future waypoints relative to the robot's local frame.
+        This provides the RL policy with forward-looking track curvature,
+        bypassing the need for a fully converged CNN vision backbone to anticipate turns.
+        """
+        if self.last_indices is None:
+            return torch.zeros(pos.shape[0], len(offsets) * 2, device=self.device)
+            
+        num_envs = pos.shape[0]
+        num_wps = self.waypoints.shape[0]
+        
+        target_indices = (self.last_indices.view(-1, 1) + torch.tensor(offsets, device=self.device)) % num_wps
+        target_wps = self.waypoints[target_indices][:, :, :2]
+        
+        # Vector from robot to future waypoints
+        rel_pos = target_wps - pos[:, None, :2]
+        
+        # Rotate into robot's local frame
+        cos_y = torch.cos(-yaw)
+        sin_y = torch.sin(-yaw)
+        
+        local_x = rel_pos[:, :, 0] * cos_y.unsqueeze(1) - rel_pos[:, :, 1] * sin_y.unsqueeze(1)
+        local_y = rel_pos[:, :, 0] * sin_y.unsqueeze(1) + rel_pos[:, :, 1] * cos_y.unsqueeze(1)
+        
+        # Flatten: [wp1_x, wp1_y, wp2_x, wp2_y, ...]
+        return torch.stack((local_x, local_y), dim=-1).view(num_envs, -1)
 
 _TRACK_MANAGER = None
 def get_track_manager(device: str = "cuda:0"):

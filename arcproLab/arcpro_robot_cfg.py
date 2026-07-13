@@ -66,7 +66,7 @@ class ArcProRobotCfg(ArticulationCfg):
         ),
         "throttle": ImplicitActuatorCfg(
             joint_names_expr=["Joint_Drive_.*"], 
-            effort_limit_sim=0.5, # Reduced from 10.0 to prevent 20G acceleration (backflips)
+            effort_limit_sim=5.0, # Increased from 0.5 to give the car enough torque to actually move
             velocity_limit_sim=100.0,
             stiffness=0.0,
             damping=1.0, 
