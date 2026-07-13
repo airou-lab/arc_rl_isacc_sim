@@ -43,6 +43,16 @@ No downstream milestones blocked.
   - Files: `arcproLab/arcpro_env_cfg.py`
   - Verify: Test environment shows F1Tenth driving straight without drifting left.
 
+- [ ] **T05: Research SKRL AAC Integration** `est:30m`
+  Research transitioning from SB3 to SKRL to natively support MARL and Asymmetric Actor-Critic (AAC).
+  - Files: `tasks/T05-RESEARCH.md`
+  - Verify: Research document accurately details SKRL integration path.
+
+- [ ] **T06: Plan SKRL AAC Integration** `est:30m`
+  Plan the refactor to migrate the training loop to SKRL and define the Actor/Critic models.
+  - Files: `tasks/T05-PLAN.md`
+  - Verify: Plan provides clear, actionable steps for Phase 16 execution.
+
 ## Files Likely Touched
 
 - arcproLab/mdp/road_manager.py
