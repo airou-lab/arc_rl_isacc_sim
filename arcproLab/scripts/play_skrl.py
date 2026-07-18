@@ -2,7 +2,8 @@ import argparse
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Play SKRL ARCPro Policy")
-parser.add_argument("--checkpoint", type=str, default="logs/ppo_skrl/20260701-192503/26-07-01_19-25-03-529362_PPO/checkpoints/best_agent.pt", help="Path to SKRL checkpoint .pt file")
+parser.add_argument("--checkpoint", type=str, default=None,
+                    help="Path to SKRL checkpoint .pt file. Auto-detects latest best_agent.pt if omitted.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of parallel environments")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -17,6 +18,27 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
+
+# Auto-detect latest checkpoint when --checkpoint is not provided
+if args_cli.checkpoint is None:
+    log_dir = os.path.join(ROOT_DIR, "logs", "ppo_skrl")
+    candidates = []
+    for root, dirs, files in os.walk(log_dir):
+        for f in files:
+            if f == "best_agent.pt":
+                candidates.append(os.path.join(root, f))
+    if not candidates:
+        # Fallback: any numbered agent checkpoint
+        for root, dirs, files in os.walk(log_dir):
+            for f in files:
+                if f.endswith(".pt"):
+                    candidates.append(os.path.join(root, f))
+    if candidates:
+        # Pick the most recently modified checkpoint
+        args_cli.checkpoint = max(candidates, key=os.path.getmtime)
+        print(f"[debug.sh] Auto-detected checkpoint: {args_cli.checkpoint}")
+    else:
+        print("[debug.sh] WARNING: No checkpoint found. Running with random weights.")
 
 print("Importing torch...")
 sys.stdout.flush()
@@ -118,7 +140,14 @@ try:
                 device="cuda:0")
 
     print(f"Loading checkpoint: {args_cli.checkpoint}")
-    agent.load(args_cli.checkpoint)
+    if args_cli.checkpoint is not None and os.path.exists(args_cli.checkpoint):
+        agent.load(args_cli.checkpoint)
+        print("Checkpoint loaded successfully.")
+    elif args_cli.checkpoint is not None:
+        print(f"ERROR: Checkpoint not found: {args_cli.checkpoint}")
+        print("Proceeding with random weights for visual debug.")
+    else:
+        print("No checkpoint. Proceeding with random weights for visual debug.")
 
     agent.set_mode("eval")
 

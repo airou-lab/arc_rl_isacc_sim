@@ -160,14 +160,17 @@ class ActionCfg:
 
 @configclass
 class RewardCfg:
-    # Anti-Suicide: Massive penalty to discourage 'sprint and crash'
-    # DISABLED: The agent was terrified of the wall and chose to "play dead" at the starting line. 
-    # Since we now only reward physical distance, crashing is its own penalty (it ends the episode, 
-    # stopping point accumulation). We don't need an explicit penalty anymore!
-    termination_penalty = RewTerm(func=mdp_rew.termination_penalty, weight=2000.0)
+    # Survival Bonus: Reduced to 1.0. We rely mostly on bounded progress reward now.
+    survival_bonus = RewTerm(func=lambda env: torch.ones(env.num_envs, device=env.device), weight=1.0)
+
+    # Anti-Suicide: Reduced from extreme 100.0 (-5000) to 20.0 (-1000) to allow value function to learn smoothly.
+    termination_penalty = RewTerm(func=mdp_rew.termination_penalty, weight=20.0)
     
-    # Performance: Momentum (Rewards actual forward progress, punishes creeping)
-    progress_reward = RewTerm(func=mdp_rew.progress_reward, weight=50.0)
+    # Performance: Waypoint-based progress. Rewards the agent ONLY for advancing
+    # along the track's centerline waypoints. Cannot be gamed by circling near spawn.
+    # Fix D: Boosted weight 5.0 → 20.0. At 0.5 m/s (~1.7 WPs/step), agent earns
+    # ~34/step, making navigation clearly more profitable than survival farming.
+    progress_reward = RewTerm(func=mdp_rew.waypoint_progress_reward, weight=20.0)
     
     # Exploration: Tiny reward for applying any throttle/drive action to break out of stagnation
     action_drive_reward = RewTerm(
@@ -175,29 +178,31 @@ class RewardCfg:
         weight=0.5
     )
     
-    # Precision: Lane centering (Increased pressure to stay in center)
-    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=0.5)
+    # Precision: Lane centering (Phase 2 constraint - currently disabled for Phase 1 curriculum)
+    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=0.0)
     
     # Force movement: Penalty forces it to move!
-    # Requires min speed of 0.3 m/s, UNLESS the traffic light (go_signal) says to stop!
+    # Fix Bug 5: Use torch.abs() so reverse driving doesn't spuriously trigger penalty.
+    # Requires min speed of 0.5 m/s, UNLESS the traffic light (go_signal) says to stop!
     stationary = RewTerm(
         func=lambda env: torch.where(
-            (env.scene["robot"].data.root_lin_vel_b[:, 0] < 0.3) & 
+            (torch.abs(env.scene["robot"].data.root_lin_vel_b[:, 0]) < 0.5) &
             (env.extras.get("go_signal", torch.ones(env.num_envs, device=env.device)).squeeze(-1) > 0.5),
             -1.0, 0.0
         ),
-        weight=1.0
+        weight=5.0
     )
     
-    # Enabled for Phase 2: Waypoint Tracking
-    heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=0.5)
-    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=0.5)
+    # Phase 2: Waypoint Tracking (Disabled for Phase 1)
+    heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=0.0)
+    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=0.0)
     
-    # Jitter Suppression (Enabled for smooth steering in corners)
-    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.1)
+    # Jitter Suppression (Disabled for Phase 1)
+    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.0)
     
-    # Boundary Penalty: (Neutralized: -100/step was causing suicide bias, handled by termination instead)
-    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.0)
+    # Boundary Penalty: (Enabled: Risk-aware shaping to smoothly steer away from walls)
+    # Note: Native func returns -100.0, so weight=0.1 yields -10.0 penalty.
+    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.1)
 
 
 @configclass

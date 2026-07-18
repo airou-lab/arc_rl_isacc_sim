@@ -1,0 +1,46 @@
+<section class="module" id="module-4">
+  <div class="module-header">
+    <div class="module-number">Part 2: State Space & Vision</div>
+    <h2 class="module-title">The Vision Pipeline (Code)</h2>
+    <p class="module-subtitle">Implementing the State Space in Python.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>Let's look at how the Quaternion math theory is implemented in <code>observations.py</code>, and how it is joined with visual data in <code>train_skrl.py</code>.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">OBSERVATIONS.PY (Quaternions to Yaw)</span>
+        <pre><code><span class="code-line"><span class="code-comment"># Calculate yaw from quaternion q = [w, x, y, z]</span></span>
+<span class="code-line">q = asset.data.root_quat_w</span>
+<span class="code-line"></span>
+<span class="code-line">yaw = torch.atan2(</span>
+<span class="code-line">    <span class="code-number">2.0</span> * (q[:, <span class="code-number">0</span>] * q[:, <span class="code-number">3</span>] + q[:, <span class="code-number">1</span>] * q[:, <span class="code-number">2</span>]),</span>
+<span class="code-line">    <span class="code-number">1.0</span> - <span class="code-number">2.0</span> * (q[:, <span class="code-number">2</span>]**<span class="code-number">2</span> + q[:, <span class="code-number">3</span>]**<span class="code-number">2</span>)</span>
+<span class="code-line">)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl">Retrieve the orientation tensor in $\mathbb{R}^4$.</p>
+          <p class="tl">To extract the 2D planar heading $\psi$ (yaw), we map the quaternion components to Euler space. The $\arctan2(y, x)$ function is used to preserve the correct quadrant $[-\pi, \pi]$.</p>
+          <p class="tl">Numerator: represents the sine component $\sin(\psi)$.</p>
+          <p class="tl">Denominator: represents the cosine component $\cos(\psi)$.</p>
+        </div>
+      </div>
+    </div>
+    
+    <h3>Fusing Vision and Telemetry</h3>
+    <p>The yaw is combined with speed and position to form a 12-number telemetry array. But the real robot drives using a camera. Inside <code>train_skrl.py</code>, the <code>SKRLFlattenWrapper</code> uses a ResNet-18 neural network to crush a massive $256 \times 256 \times 3$ image into a dense 512-number array, and then glues it to the 12 telemetry numbers.</p>
+    
+    <div class="callout callout-info">
+      <div class="callout-icon">🧮</div>
+      <div class="callout-content">
+        <strong class="callout-title">The Final State Vector</strong>
+        <p>The final state $S$ passed to the Actor is exactly 524 numbers long: <code>512 (Vision) + 12 (Telemetry) = 524</code>.</p>
+      </div>
+    </div>
+
+  </div>
+</section>

@@ -1,0 +1,46 @@
+<section class="module" id="module-11">
+  <div class="module-header">
+    <div class="module-number">Part 4: Optimization & Reward Math</div>
+    <h2 class="module-title">Finding the Line (Code)</h2>
+    <p class="module-subtitle">Optimizing tracking using Windowed Searches.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>To calculate the <code>lateral_error</code>, the simulator has to answer a basic question 50 times a second: <em>"Out of the 10,000 waypoints that make up the track, which one is closest to the car right now?"</em></p>
+
+    <p>A Global Search across all points is $O(N)$ and would melt the CPU. In <code>track_manager.py</code>, the developers wrote a highly optimized $O(K)$ search algorithm. Instead of checking the whole track, the math relies on the fact that cars don't teleport. If the car was closest to Waypoint #400 a millisecond ago, it must be somewhere near #400 now.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">TRACK_MANAGER.PY</span>
+        <pre><code><span class="code-line"><span class="code-comment"># Windowed Search: Look +/- 50 waypoints around last known index</span></span>
+<span class="code-line">window_size = <span class="code-number">50</span></span>
+<span class="code-line">offsets = torch.arange(-window_size, window_size + <span class="code-number">1</span>)</span>
+<span class="code-line">search_indices = (<span class="code-keyword">self</span>.last_indices.view(-<span class="code-number">1</span>, <span class="code-number">1</span>) + offsets) % num_wps</span>
+<span class="code-line"></span>
+<span class="code-line">candidate_wps = <span class="code-keyword">self</span>.waypoints[search_indices][:, :, :<span class="code-number">2</span>]</span>
+<span class="code-line">candidate_dists = torch.norm(pos[:, <span class="code-keyword">None</span>, :<span class="code-number">2</span>] - candidate_wps, dim=<span class="code-number">2</span>)</span>
+<span class="code-line">min_dists, best_in_window = torch.min(candidate_dists, dim=<span class="code-number">1</span>)</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-comment"># Fallback to Global Search for any envs that teleported (e.g. resets)</span></span>
+<span class="code-line">global_search_mask = min_dists > <span class="code-number">2.0</span></span>
+<span class="code-line"><span class="code-keyword">if</span> global_search_mask.any():</span>
+<span class="code-line">    global_dists = torch.cdist(pos[global_search_mask, :<span class="code-number">2</span>], <span class="code-keyword">self</span>.waypoints[:, :<span class="code-number">2</span>])</span>
+<span class="code-line">    best_global_idx = torch.argmin(global_dists, dim=<span class="code-number">1</span>)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl">Create a small search "window" of just 100 points (50 behind, 50 ahead).</p>
+          <p class="tl">Center this window on whatever waypoint the car was closest to during the previous physics frame.</p>
+          <p class="tl">Gather the exact X,Y coordinates of just those 100 candidate waypoints.</p>
+          <p class="tl">Calculate the distance to those 100 points, and find the absolute closest one.</p>
+          <p class="tl">Wait — did the car crash and respawn at the start of the track? We check if the "closest" point is more than 2 meters away. If so, the car must have teleported!</p>
+          <p class="tl">Only for cars that teleported, run the slow, expensive Global Search to find them again.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>

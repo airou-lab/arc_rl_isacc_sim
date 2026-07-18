@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ARCPro: Theory to Implementation</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400;1,9..40,500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+
+  <style>
+    :root {
+      /* Indigo Palette: Academic but modern */
+      --color-accent:       #4f46e5;
+      --color-accent-hover: #4338ca;
+      --color-accent-light: #e0e7ff;
+      --color-accent-muted: #818cf8;
+    }
+    
+    .academic-citation {
+      border-left: 4px solid var(--color-accent);
+      background: var(--color-bg-alt);
+      padding: 1rem 1.5rem;
+      margin: 1.5rem 0;
+      border-radius: 0 4px 4px 0;
+      font-size: 0.95rem;
+    }
+    .academic-citation .title {
+      font-weight: bold;
+      color: var(--color-accent);
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+    .academic-citation .authors {
+      font-style: italic;
+      color: var(--color-text-muted);
+    }
+  </style>
+
+  <script src="main.js" defer></script>
+</head>
+<body>
+
+  <nav class="nav" id="nav">
+    <div class="progress-bar" id="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+    <div class="nav-inner">
+      <span class="nav-title">ARCPro: Theory to Implementation</span>
+      <div class="nav-dots" id="nav-dots" role="tablist">
+        <!-- Part 1 -->
+        <button class="nav-dot" data-target="module-1" data-tooltip="1. GPU Physics (Theory)" role="tab" aria-label="Module 1"></button>
+        <button class="nav-dot" data-target="module-2" data-tooltip="2. Scene Setup (Code)" role="tab" aria-label="Module 2"></button>
+        <!-- Part 2 -->
+        <button class="nav-dot" data-target="module-3" data-tooltip="3. MDP & Quaternions (Theory)" role="tab" aria-label="Module 3"></button>
+        <button class="nav-dot" data-target="module-4" data-tooltip="4. The Vision Pipeline (Code)" role="tab" aria-label="Module 4"></button>
+        <button class="nav-dot" data-target="module-5" data-tooltip="5. Freezing ResNet (Code)" role="tab" aria-label="Module 5"></button>
+        <!-- Part 3 -->
+        <button class="nav-dot" data-target="module-6" data-tooltip="6. Asymmetric Actor-Critic (Theory)" role="tab" aria-label="Module 6"></button>
+        <button class="nav-dot" data-target="module-7" data-tooltip="7. Actor-Critic in PyTorch (Code)" role="tab" aria-label="Module 7"></button>
+        <!-- Part 4 -->
+        <button class="nav-dot" data-target="module-8" data-tooltip="8. PPO Objectives (Theory)" role="tab" aria-label="Module 8"></button>
+        <button class="nav-dot" data-target="module-9" data-tooltip="9. Differential Geometry (Theory)" role="tab" aria-label="Module 9"></button>
+        <button class="nav-dot" data-target="module-10" data-tooltip="10. The Code of Driving Smoothly (Code)" role="tab" aria-label="Module 10"></button>
+        <button class="nav-dot" data-target="module-11" data-tooltip="11. Finding the Line (Code)" role="tab" aria-label="Module 11"></button>
+        <!-- Part 5 -->
+        <button class="nav-dot" data-target="module-12" data-tooltip="12. Kinematic Bicycle Model (Theory)" role="tab" aria-label="Module 12"></button>
+        <button class="nav-dot" data-target="module-13" data-tooltip="13. Ackermann Steering Math (Code)" role="tab" aria-label="Module 13"></button>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main">
+    <!-- modules/*.html content is assembled here by build.sh -->

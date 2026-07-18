@@ -1,0 +1,21 @@
+<section class="module" id="module-6">
+  <div class="module-header">
+    <div class="module-number">Part 3: Policy Architecture</div>
+    <h2 class="module-title">Asymmetric Actor-Critic (Theory)</h2>
+    <p class="module-subtitle">Leveraging privileged simulator state to guide learning.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <div class="academic-citation">
+      <span class="title">Asymmetric Actor Critic for Image-Based Robot Learning (arXiv:1710.06542)</span>
+      <span class="authors">Pinto et al., 2017 (OpenAI / UC Berkeley)</span>
+      <p>This paper introduced a novel training regimen: during simulation, the value function (Critic) is granted access to the exact underlying ground-truth state of the environment, while the policy (Actor) is restricted to the partial, noisy observations (e.g., RGB images) that will be available during real-world deployment.</p>
+    </div>
+
+    <p>Training an end-to-end driving policy purely from pixels is notoriously sample-inefficient. ARCPro solves this by implementing Pinto's Asymmetric Architecture.</p>
+    
+    <p>The Actor has to look at the confusing camera image to drive, but the Critic is allowed to "cheat." The Critic only looks at the precise 12 numbers representing the physics of the car (speed, lane error, heading) pulled directly from the physics engine. The Critic uses its perfect knowledge to grade the Actor. When training is over, we delete the Critic and put the Actor in the real physical robot!</p>
+
+  </div>
+</section>

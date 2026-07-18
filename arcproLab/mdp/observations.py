@@ -106,10 +106,31 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     if "distance" not in env.extras:
         env.extras["distance"] = torch.zeros(env.num_envs, device=env.device)
     
-    # Reset distance for environments that just reset
+    # === TRACK PROGRESS TRACKING ===
+    # Uses the waypoint index from TrackManager to measure how far the agent
+    # has actually traveled along the track (not just forward velocity).
+    if masked and tm.last_indices is not None and tm.waypoints is not None:
+        num_wps = tm.waypoints.shape[0]
+        current_wp_idx = tm.last_indices  # (num_envs,) int
+        
+        # Track the spawn waypoint index (set on first call or on reset)
+        if "spawn_wp_idx" not in env.extras:
+            env.extras["spawn_wp_idx"] = current_wp_idx.clone()
+        
+        # Compute net waypoints traveled from spawn (handles wrap-around)
+        delta_wp = (current_wp_idx - env.extras["spawn_wp_idx"]) % num_wps
+        # Clamp: if delta > half the track, agent moved backward — treat as 0
+        delta_wp = torch.where(delta_wp > num_wps // 2, torch.zeros_like(delta_wp), delta_wp)
+        track_progress_pct = (delta_wp.float() / num_wps) * 100.0  # 0-100%
+        env.extras["track_progress_pct"] = track_progress_pct
+        env.extras["track_wp_delta"] = delta_wp  # raw waypoints traversed
+    
+    # Reset distance and spawn_wp for environments that just reset
     reset_buf = getattr(env, "reset_buf", None)
     if reset_buf is not None and masked:
         env.extras["distance"] = torch.where(reset_buf, torch.zeros_like(env.extras["distance"]), env.extras["distance"])
+        if "spawn_wp_idx" in env.extras and tm.last_indices is not None:
+            env.extras["spawn_wp_idx"] = torch.where(reset_buf, tm.last_indices, env.extras["spawn_wp_idx"])
 
     # Calculate distance moved in this step (only update once per step)
     if masked:

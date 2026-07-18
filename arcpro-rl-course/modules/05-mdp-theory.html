@@ -1,0 +1,21 @@
+<section class="module" id="module-3">
+  <div class="module-header">
+    <div class="module-number">Part 2: State Space & Vision</div>
+    <h2 class="module-title">MDP & Quaternions (Theory)</h2>
+    <p class="module-subtitle">Formulating the State Space mathematically.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>Reinforcement Learning relies on the formalism of the <strong>Markov Decision Process (MDP)</strong>, defined by the tuple \( (S, A, P, R, \gamma) \). In this lecture, we focus on \( S \), the State Space. A core assumption of the MDP is the <em>Markov Property</em>: the current state contains all necessary information to make an optimal decision.</p>
+    
+    <div class="academic-citation">
+      <span class="title">Topology and Gimbal Lock</span>
+      <p>Why use quaternions instead of Euler angles (pitch, roll, yaw)? Euler angles suffer from singularities (Gimbal Lock) where the Jacobian matrix loses rank, dropping a degree of freedom when pointing straight up or down. The physics engine utilizes Quaternions (4D hypercomplex numbers) to guarantee continuous, singularity-free integration over time. We extract Euler yaw only at the final boundary before network inference.</p>
+    </div>
+
+    <h3>Mathematical Formulation</h3>
+    <p>A quaternion represents rotation using four numbers: <code>W, X, Y, Z</code>. It is mathematically immune to Gimbal Lock, but it's difficult for an AI to parse into a planar driving direction. Therefore, we mathematically convert the 4D quaternion back into a simple 2D "Yaw" angle using the Atan2 function.</p>
+
+  </div>
+</section>

@@ -1,0 +1,48 @@
+<section class="module" id="module-9">
+  <div class="module-header">
+    <div class="module-number">Part 4: Optimization & Reward Math</div>
+    <h2 class="module-title">Differential Geometry (Theory)</h2>
+    <p class="module-subtitle">Formulating the geometry of the road.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>To incentivize the policy $\pi$ to navigate a complex track, we must mathematically encode the geometry of the track into the Markov Decision Process reward function $R$. One critical feature is providing the agent with the <em>curvature</em> of the upcoming path.</p>
+
+    <h3>Discrete Calculus for Curvature ($\kappa$)</h3>
+    
+    <p>In differential geometry, the curvature $\kappa$ of a planar curve is defined as the rate of change of the tangent vector's angle with respect to arc length: $\kappa = \frac{d\theta}{ds}$.</p>
+
+    <p>Because our track is parameterized by discrete waypoints $w_i \in \mathbb{R}^2$, we approximate this continuous derivative using forward finite differences.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">TRACK_MANAGER.PY (Pre-computation)</span>
+        <pre><code><span class="code-line"><span class="code-comment"># wp_np: [N, 3] -> [X, Y, Yaw]</span></span>
+<span class="code-line"><span class="code-keyword">for</span> i <span class="code-keyword">in</span> <span class="code-keyword">range</span>(n_wps):</span>
+<span class="code-line">    i1 = (i + <span class="code-number">1</span>) % n_wps</span>
+<span class="code-line">    </span>
+<span class="code-line">    <span class="code-comment"># Discrete dTheta</span></span>
+<span class="code-line">    dyaw = wp_np[i1, <span class="code-number">2</span>] - wp_np[i, <span class="code-number">2</span>]</span>
+<span class="code-line">    <span class="code-keyword">while</span> dyaw > np.pi: dyaw -= <span class="code-number">2</span> * np.pi</span>
+<span class="code-line">    <span class="code-keyword">while</span> dyaw < -np.pi: dyaw += <span class="code-number">2</span> * np.pi</span>
+<span class="code-line">    </span>
+<span class="code-line">    <span class="code-comment"># Discrete ds (Euclidean distance)</span></span>
+<span class="code-line">    ds = np.linalg.norm(wp_np[i1, :<span class="code-number">2</span>] - wp_np[i, :<span class="code-number">2</span>])</span>
+<span class="code-line">    </span>
+<span class="code-line">    <span class="code-keyword">if</span> ds > <span class="code-number">0</span>:</span>
+<span class="code-line">        kappa[i] = dyaw / ds</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">MATHEMATICS</span>
+        <div class="translation-lines">
+          <p class="tl">We iterate over every discretized waypoint on the manifold.</p>
+          <p class="tl">Compute $\Delta \theta$ (the change in yaw). The while loops ensure the angle difference is mapped to the principal branch $[-\pi, \pi]$ to avoid artificial $2\pi$ discontinuities at the boundaries.</p>
+          <p class="tl">Compute $\Delta s$, the $L_2$ norm (Euclidean distance) between the points.</p>
+          <p class="tl">Approximate the derivative: $\kappa \approx \frac{\Delta \theta}{\Delta s}$. This scalar $\kappa$ is injected directly into the agent's state vector $S$.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>

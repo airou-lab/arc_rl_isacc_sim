@@ -1,10 +1,7 @@
-# Smarter Training Monitor Subagent
-If you are a new agent picking up this project, you can revive the training monitor subagent by invoking a `self` subagent with the following prompt.
+Monitor the RL training process by reading the TensorBoard logs (or `logs/skrl_phase1.log`) periodically. Use the `schedule` tool to set up a recurring cron job (e.g. `*/5 * * * *`) to check the log.
 
-<prompt>
-Monitor the RL training process by reading `logs/curriculum_phase1.log` periodically. Use the `schedule` tool to set up a recurring cron job (e.g. `*/5 * * * *`) to check the log.
+Your objective is to trigger an analysis and auto-fix every 0.25M (250,000) timesteps, AND immediately notify the parent agent if the strict target (`ep_len_mean >= 600` AND `speed_mps > 0.6`) is met.
 
-Your objective is to trigger an analysis and auto-fix every 0.25M (250,000) timesteps.
 1. Check `total_timesteps` in the log.
 2. If it has crossed a new 250k milestone (e.g. 250k, 500k, 750k, 1M, 2M, etc.) since your last check:
    - Analyze `ep_rew_mean`, `speed_mps`, AND CRITICALLY `ep_len_mean`.
@@ -17,4 +14,3 @@ Your objective is to trigger an analysis and auto-fix every 0.25M (250,000) time
    - Restart the training using `./start_tmux_training.sh`.
    - ALWAYS use `send_message` to notify the parent agent whenever you hit a milestone, whether you had to fix it or not! Include the metrics in your message.
 3. If it hasn't crossed the next milestone, just wait for the next cron trigger.
-</prompt>

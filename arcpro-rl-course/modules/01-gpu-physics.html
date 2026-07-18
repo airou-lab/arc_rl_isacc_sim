@@ -1,0 +1,22 @@
+<section class="module" id="module-1">
+  <div class="module-header">
+    <div class="module-number">Part 1: The Simulation Environment</div>
+    <h2 class="module-title">GPU Physics Simulation (Theory)</h2>
+    <p class="module-subtitle">Breaking the CPU bottleneck in Reinforcement Learning.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <div class="academic-citation">
+      <span class="title">Isaac Gym: High Performance GPU-Based Physics Simulation For Robot Learning (arXiv:2108.10470)</span>
+      <span class="authors">Makoviychuk et al., 2021 (NVIDIA)</span>
+      <p>This foundational paper introduced the paradigm shift of keeping the entire RL pipeline—both the physics simulation and the neural network inference—on the GPU, bypassing the PCIe bus transfer bottleneck that crippled previous CPU-based physics engines like MuJoCo.</p>
+    </div>
+
+    <p>In ARCPro, the environment runs atop <strong>Isaac Lab</strong> (the successor to Isaac Gym). By representing physical states (position, velocity, collisions) as flattened PyTorch tensors living natively in VRAM, the system achieves simulation speeds orders of magnitude faster than real-time.</p>
+
+    <h3>The Simulation Loop Matrix</h3>
+    <p>Unlike single-agent CPU simulations, ARCPro vectorizes the simulation. The <code>num_envs</code> parameter (e.g., 16 or 4096) instantiates parallel universes. The physics engine computes the rigid body dynamics for all universes simultaneously via massively parallel matrix multiplication.</p>
+
+  </div>
+</section>

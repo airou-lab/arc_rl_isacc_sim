@@ -9,26 +9,18 @@ class ARCProActor(GaussianMixin, Model):
         Model.__init__(self, observation_space, action_space, device)
         GaussianMixin.__init__(self, clip_actions, clip_log_std, min_log_std, max_log_std, reduction)
         
-        # 1. Vision Backbone (Frozen)
-        # We freeze the entire backbone to eliminate PPO KL spikes.
-        self.resnet = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
-        for param in self.resnet.parameters():
-            param.requires_grad = False
-        self.resnet.fc = nn.Identity()
-        
-        self.register_buffer("mean", torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
-        self.register_buffer("std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
-        
-        # 2. Actor Head (Vision 512 + Telemetry 12)
+        # Actor Head (Vision 512 + Telemetry 12)
+        # The input is already pre-computed by the Environment Wrapper using ResNet!
         self.actor_head = nn.Sequential(
-            nn.Linear(512 + 12, 256),
+            nn.Linear(self.num_observations, 256),
             nn.ReLU(),
             nn.LayerNorm(256),
             nn.Linear(256, 128),
             nn.ReLU(),
             nn.Linear(128, self.num_actions)
         )
-        # Tightly bound initial standard deviation to prevent immediate crashes
+        
+        # Tightly bound initial standard deviation
         self.log_std_parameter = nn.Parameter(torch.zeros(self.num_actions) - 0.5)
 
         for m in self.actor_head:
@@ -38,42 +30,10 @@ class ARCProActor(GaussianMixin, Model):
                     nn.init.constant_(m.bias, 0)
 
     def compute(self, inputs, role=""):
+        # The SKRLFlattenWrapper has already run the frozen ResNet
+        # so `inputs["states"]` is perfectly sized at (N, 524)
         obs = inputs["states"]
-        
-        # Unflatten the 1D tensor from SKRLFlattenWrapper
-        if obs.dim() == 2 and obs.shape[1] == 150540:
-            vec = obs[:, :12]
-            img = obs[:, 12:].view(-1, 224, 224, 3)
-            use_vision = True
-        elif obs.dim() == 2 and obs.shape[1] == 12:
-            vec = obs
-            use_vision = False
-        else:
-            raise ValueError(f"ARCProActor expects flattened obs of shape (N, 150540) or (N, 12), got {obs.shape}")
-            
-        if use_vision:
-            img = img.float()
-            
-            # IsaacLab tiled_camera is usually (B, H, W, C) -> (B, C, H, W)
-            if img.dim() == 4 and img.shape[-1] == 3:
-                img = img.permute(0, 3, 1, 2)
-                
-            # FIX: ImageNet-trained layers REQUIRE (img - mean) / std. 
-            # The environment passes img in [0, 1]. We MUST apply the ImageNet stats, 
-            # otherwise the frozen layers will output garbage.
-            if img.max() > 1.0:
-                img = img / 255.0
-                
-            img = (img - self.mean) / self.std
-            
-            visual_feats = self.resnet(img)
-        else:
-            visual_feats = torch.zeros((vec.shape[0], 512), device=vec.device)
-            
-        # Concatenate Vision and Telemetry
-        combined = torch.cat([visual_feats, vec], dim=1)
-        
-        return self.actor_head(combined), self.log_std_parameter, {}
+        return self.actor_head(obs), self.log_std_parameter, {}
 
 
 class ARCProCritic(DeterministicMixin, Model):

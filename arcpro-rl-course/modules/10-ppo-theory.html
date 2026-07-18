@@ -1,0 +1,40 @@
+<section class="module" id="module-8">
+  <div class="module-header">
+    <div class="module-number">Part 4: Optimization & Reward Math</div>
+    <h2 class="module-title">PPO Objectives (Theory)</h2>
+    <p class="module-subtitle">Formulating the surrogate objective function.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <div class="academic-citation">
+      <span class="title">Proximal Policy Optimization Algorithms (arXiv:1707.06347)</span>
+      <span class="authors">Schulman et al., 2017 (OpenAI)</span>
+      <p>PPO revolutionized reinforcement learning by introducing a clipped surrogate objective function that prevents destructively large policy updates, striking a balance between sample efficiency and mathematical stability compared to older Trust Region methods (TRPO).</p>
+    </div>
+
+    <h3>The Clipped Surrogate Objective</h3>
+    
+    <p>In standard policy gradient methods, we maximize the expected advantage $A$. However, taking too large of a gradient step can collapse the policy. PPO solves this by defining the probability ratio $r_t(\theta) = \frac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{old}}(a_t|s_t)}$ and clipping it.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">PPO MATHEMATICS</span>
+        <pre><code><span class="code-line">L_CLIP(θ) = E [ min( r(θ)A, clip(r(θ), 1-ε, 1+ε)A ) ]</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">EXPLANATION</span>
+        <div class="translation-lines">
+          <p class="tl">$r(\theta)$ is the ratio of the new policy's probability of taking an action compared to the old policy.</p>
+          <p class="tl">$A$ is the Advantage (calculated by our Privileged Critic). Positive $A$ means the action was better than expected.</p>
+          <p class="tl">If the action was good ($A > 0$), we want to increase $r(\theta)$. But the `clip` function cuts it off at $1+\epsilon$ (usually 1.2).</p>
+          <p class="tl">This mathematical clipping prevents the neural network weights from changing too aggressively in a single optimization step, ensuring monotonic learning.</p>
+        </div>
+      </div>
+    </div>
+    
+    <h3>Why is PPO Necessary for Autonomous Driving?</h3>
+    <p>In autonomous control, a single bad gradient update can completely destroy the policy, turning a car that almost stays in the lane into a car that instantly drives into the wall. PPO's "trust region" clipping ensures that the AI cannot unlearn its driving ability in a single bad batch of data.</p>
+
+  </div>
+</section>

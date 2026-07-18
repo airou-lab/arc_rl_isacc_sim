@@ -22,12 +22,16 @@
   - **Progress Weight:** Increased `progress_reward` weight to 5.0x so driving forward into the wall is mathematically more profitable than standing still, bootstrapping movement.
 - **D015:** Fixed "Playing Dead Trap". After the distance reward fix, the agent became so terrified of the `-200` crash penalty that it refused to move, choosing to take a `-50` stagnation penalty over a `-200` wall collision. Disabled `termination_penalty` entirely. Since the reward is now strictly physical distance traveled, crashing naturally stops point accumulation, making the crash penalty redundant and actively harmful to exploration.
 - **D016:** Restored environment testing GUI (`debug.sh`) and patched `verify_policy.py` to support the new nested `"policy"` observation structure. Hardened `watchdog.py` self-healing sequence to launch autonomous repair agents asynchronously, preventing self-termination. Replaced memory-heavy subagents with lightweight daemon-based Antigravity summons for 250k milestone reporting.
+- **D017:** Migrated to SKRL and replaced the internal architecture with a frozen `ResNet-18` backbone caching visual features (524 dims). Restarted training from Step 0.
+- **D018:** The new ResNet brain was crashing instantly due to Phase 2 penalties. Re-implemented Phase 1 Curriculum (disabling `lateral_error`, `stationary`, `heading`, `smoothness`, `jerk`) so the fresh visual brain can learn basic forward momentum first.
+- **D019-D021:** Subagent attempted to fix the Endless Runner exploit and conservative agent traps by adjusting `termination_penalty` and introducing bounded `tanh` progress rewards.
+- **D022 (ROOT CAUSE FIX):** Discovered via track progress telemetry (`Trk%`, `WPΔ`) that the agent was NEVER navigating the track. Even 1000-step episodes showed `WPΔ: 0`. The `progress_reward` based on local body velocity was fundamentally exploitable. Replaced with `waypoint_progress_reward` using TrackManager waypoint index deltas.
 
 ## Blockers
 - None
 
 ## Next Action
-- A new SB3 training session is currently running in `tmux` (Phase 1 Curriculum).
-- The `watchdog.py` daemon is monitoring for crashes and will autonomously summon an Antigravity agent to repair the environment if divergence/stagnation occurs.
-- The `watchdog.py` daemon will also autonomously ping the user whenever the agent crosses a 250k timestep milestone.
-- **Incoming Agent:** Simply wait for milestone reports from the watchdog, or step in if a repair agent flags an issue it cannot resolve.
+- A new **SKRL** training session is running in `tmux` with the **waypoint-based progress reward** (weight 5.0).
+- The `Trk%` and `WPΔ` telemetry is active in `logs/skrl_phase1.log` to verify real track navigation.
+- **Debugging Target:** `ep_len_mean >= 600` AND `speed > 0.5 m/s` AND `WPΔ > 0` (must show actual track progress).
+- **Incoming Agent:** Monitor `WPΔ` closely. If it stays at 0, investigate whether `waypoint_progress_reward` is being called correctly and whether the TrackManager indices are updating. If the agent makes real track progress, proceed to re-enable Phase 2 precision penalties.

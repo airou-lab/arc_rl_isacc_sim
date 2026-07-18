@@ -4,7 +4,7 @@ import os
 import subprocess
 import re
 
-LOG_FILE = "logs/curriculum_phase1.log"
+LOG_FILE = "logs/skrl_phase1.log"
 DIAGNOSIS_FILE = "logs/WATCHDOG_DIAGNOSIS.md"
 
 def get_latest_metrics():
