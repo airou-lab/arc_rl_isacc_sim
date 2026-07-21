@@ -1,0 +1,39 @@
+<section class="module" id="module-7">
+  <div class="module-header">
+    <div class="module-number">Part 3: Policy Architecture</div>
+    <h2 class="module-title">Actor-Critic in PyTorch (Code)</h2>
+    <p class="module-subtitle">Implementing the Asymmetric split in skrl_models.py.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>Let's examine the network topology in <code>skrl_models.py</code>. Notice the stark difference in the dimensionality of the input layers between the Actor and the Critic.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">SKRL_MODELS.PY (The Critic)</span>
+        <pre><code><span class="code-line"><span class="code-keyword">class</span> ARCProCritic(DeterministicMixin, Model):</span>
+<span class="code-line">    <span class="code-keyword">def</span> __init__(<span class="code-keyword">self</span>, observation_space, action_space, device):</span>
+<span class="code-line">        <span class="code-comment"># Privileged Critic Head (MLP only, no vision)</span></span>
+<span class="code-line">        <span class="code-keyword">self</span>.critic_head = nn.Sequential(</span>
+<span class="code-line">            nn.Linear(<span class="code-number">12</span>, <span class="code-number">256</span>),</span>
+<span class="code-line">            nn.ReLU(),</span>
+<span class="code-line">            nn.Linear(<span class="code-number">256</span>, <span class="code-number">256</span>),</span>
+<span class="code-line">            nn.ReLU(),</span>
+<span class="code-line">            nn.Linear(<span class="code-number">256</span>, <span class="code-number">1</span>)</span>
+<span class="code-line">        )</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">MATHEMATICS</span>
+        <div class="translation-lines">
+          <p class="tl">The Critic network approximates the Value Function $V(s)$.</p>
+          <p class="tl">Input dimensionality is strictly $S \in \mathbb{R}^{12}$. It completely bypasses the 512-dimensional ResNet image embeddings. It only observes exact coordinates, velocities, and tracking errors.</p>
+          <p class="tl">The output is $V \in \mathbb{R}^{1}$, representing the expected discounted return from the current state.</p>
+        </div>
+      </div>
+    </div>
+    
+    <p>By contrast, the <code>ARCProActor</code> ingests $S \in \mathbb{R}^{524}$ (512 vision features + 12 telemetry features) to predict action distributions $\pi(a|s)$.</p>
+
+  </div>
+</section>

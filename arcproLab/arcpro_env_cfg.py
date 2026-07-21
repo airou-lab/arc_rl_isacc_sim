@@ -76,9 +76,12 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             scale=(1.0, 1.0, 1.0), # Revert to 1.0x
         ),
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
+            # Spawn point: right lane heading toward junction_18 intersection.
             # Exactly on the path center (X=-16.197) at safe drop height
             pos=(-16.197, 5.50, 0.12),
-            rot=(0.7071, 0.0, 0.0, 0.7071) # Upright & Face North (WXYZ)
+            rot=(0.7071, 0.0, 0.0, 0.7071), # Upright & Face North (WXYZ)
+            # No kickstart — proper tire friction + drive torque is sufficient.
+            # Kickstart was masking physics issues (bouncing, height terminations).
         ),
 
 
@@ -93,8 +96,8 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             horizontal_aperture=3.86, # 90-degree HFOV (2 * atan(3.86 / (2 * 1.93)))
             focal_length=1.93,
         ),
-        # Raised to 0.35m and tilted 30 degrees down to see the road
-        offset=TiledCameraCfg.OffsetCfg(pos=(-0.3, 0.0, 0.35), rot=(0.0, -0.258, 0.0, 0.966), convention="parent"),
+        # Raised to 0.35m with no tilt to see further down the track
+        offset=TiledCameraCfg.OffsetCfg(pos=(-0.3, 0.0, 0.35), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
         data_types=["rgb"], width=224, height=224,
     )
 
@@ -127,79 +130,101 @@ class ARCProSceneCfg(InteractiveSceneCfg):
 class ObservationCfg:
     @configclass
     class PolicyCfg(ObservationGroupCfg):
+        concatenate_terms = False
         telemetry = ObsTerm(func=mdp_obs.get_telemetry_vector)
-    policy: PolicyCfg = PolicyCfg()
-    
-    @configclass
-    class VisualCfg(ObservationGroupCfg):
         tiled_camera = ObsTerm(func=mdp.image, params={"sensor_cfg": SceneEntityCfg("tiled_camera"), "normalize": True})
-    
-    visual: VisualCfg | None = VisualCfg()
+    policy: PolicyCfg = PolicyCfg()
+
+    @configclass
+    class CriticCfg(ObservationGroupCfg):
+        telemetry = ObsTerm(func=mdp_obs.get_critic_state_vector)
+    critic: CriticCfg = CriticCfg()
 
 import mdp.actions as arcpro_actions
 
 @configclass
 class ActionCfg:
-    steering = arcpro_actions.AckermannSteeringActionCfg(
+    a_steering = arcpro_actions.AckermannSteeringActionCfg(
         asset_name="robot",
         joint_names=["Joint_Steer_L", "Joint_Steer_R"], 
         wheelbase=0.33, 
         track_width=0.28, 
-        max_steering_angle=0.5
+        max_steering_angle=0.5,
+        offset=-0.005
     )
-    drive = arcpro_actions.CombinedDriveActionCfg(
+    b_drive = arcpro_actions.CombinedDriveActionCfg(
         asset_name="robot", 
         joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
-        scale=-40.0,
-        offset=0.0
+        scale=-20.0,
+        offset=-20.0
     )
 
 @configclass
 class RewardCfg:
-    # Anti-Suicide: Massive penalty to discourage 'sprint and crash'
-    # Penalty function returns -500.0. Weight 2.0 = -1000 per death.
-    terminating = RewTerm(func=mdp_rew.termination_penalty, weight=2.0)
+    # Survival Bonus: Reduced to 1.0. We rely mostly on bounded progress reward now.
+    survival_bonus = RewTerm(func=lambda env: torch.ones(env.num_envs, device=env.device), weight=1.0)
+
+    # Anti-Suicide: Reduced from extreme 100.0 (-5000) to 20.0 (-1000) to allow value function to learn smoothly.
+    termination_penalty = RewTerm(func=mdp_rew.termination_penalty, weight=20.0)
     
-    # Performance: Momentum (Rewards actual forward progress)
-    speed = RewTerm(func=mdp_rew.speed_reward, weight=20.0)
-    # Precision: Lane centering (Increased pressure to stay in center)
-    # Disabled per user request for pure boundary-based lane following
+    # Performance: Waypoint-based progress. Rewards the agent ONLY for advancing
+    # along the track's centerline waypoints. Cannot be gamed by circling near spawn.
+    # Fix D: Boosted weight 5.0 → 20.0. At 0.5 m/s (~1.7 WPs/step), agent earns
+    # ~34/step, making navigation clearly more profitable than survival farming.
+    progress_reward = RewTerm(func=mdp_rew.waypoint_progress_reward, weight=20.0)
+    
+    # Exploration: Tiny reward for applying any throttle/drive action to break out of stagnation
+    action_drive_reward = RewTerm(
+        func=lambda env: torch.abs(env.action_manager.action[:, 1]),
+        weight=0.5
+    )
+    
+    # Precision: Lane centering (Phase 2 constraint - currently disabled for Phase 1 curriculum)
     lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=0.0)
-    # Force movement: Lowered to 5.0. If too high, agent commits suicide to escape penalty.
+    
+    # Force movement: Penalty forces it to move!
+    # Fix Bug 5: Use torch.abs() so reverse driving doesn't spuriously trigger penalty.
+    # Requires min speed of 0.5 m/s, UNLESS the traffic light (go_signal) says to stop!
     stationary = RewTerm(
-        func=lambda env: torch.where(torch.norm(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1) < 0.1, -1.0, 0.0),
+        func=lambda env: torch.where(
+            (torch.abs(env.scene["robot"].data.root_lin_vel_b[:, 0]) < 0.2) &
+            (env.extras.get("go_signal", torch.ones(env.num_envs, device=env.device)).squeeze(-1) > 0.5),
+            -1.0, 0.0
+        ),
         weight=5.0
     )
-    # Disabled per user request
+    
+    # Phase 2: Waypoint Tracking (Disabled for Phase 1)
     heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=0.0)
-    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=5.0)
-    # Jitter Suppression (Neutralized to allow initial exploration)
-    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.01)
-    # Boundary Penalty: (Neutralized: -100/step was causing suicide bias)
-    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.01)
+    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=0.0)
+    
+    # Jitter Suppression (Disabled for Phase 1)
+    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.0)
+    
+    # Boundary Penalty: (Enabled: Risk-aware shaping to smoothly steer away from walls)
+    # Note: Native func returns -100.0, so weight=0.1 yields -10.0 penalty.
+    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.1)
 
 
 @configclass
 class TerminationCfg:
-    # Snap Reset: Touching the paint kills the robot
-    # 0.12m is the exact threshold where tires touch the paint
     roadmark_contact = DoneTerm(func=mdp_done.white_line_contact, params={"threshold": 0.12})
     # height termination: Catch flying robots (falling into void)
     # Lowered to 0.02m to give suspension room to breathe upon impact
-    height = DoneTerm(func=mdp_done.height_termination, params={"threshold": 0.02})
+    height = DoneTerm(func=mdp_done.height_termination, params={"threshold": 0.005})
     # Stagnation: Reset if stuck against a wall
     stagnation = DoneTerm(func=mdp_done.stagnation_termination)
     # FOV Driving: Reset if driving into areas not visible to the camera
-    driving_blind = DoneTerm(
-        func=mdp_done.fov_visibility_termination,
-        params={"horizontal_aperture": 2.65, "focal_length": 1.93}
-    )
+    # driving_blind = DoneTerm(
+    #     func=mdp_done.fov_visibility_termination,
+    #     params={"horizontal_aperture": 3.86, "focal_length": 1.93}
+    # )
 
 @configclass
 class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     # Adjust viewer to see the robot at its new world position
     # 8x eye: (-120.0, 55.0, 10.0) -> 1x eye: (-15.0, 6.875, 1.25)
-    viewer: ViewerCfg = ViewerCfg(eye=(-15.0, 6.875, 1.25), lookat=(-16.25, 5.56, 0.0))
+    viewer: ViewerCfg = ViewerCfg(eye=(-15.0, 6.25, 1.25), lookat=(-16.25, 4.92, 0.0))
     
     enable_cameras: bool = True
     scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=32, env_spacing=30.0)
@@ -231,7 +256,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
         self.decimation = 10 # 500Hz / 10 = 50Hz control (Nyquist stability for 6cm clearance)
         self.episode_length_s = 300.0 
         self.viewer.camera_follow_prim_path = None
-        
+        # Enable cameras conditionally
         if not self.enable_cameras:
-            self.observations.visual = None
             self.scene.tiled_camera = None
+            self.observations.policy.tiled_camera = None

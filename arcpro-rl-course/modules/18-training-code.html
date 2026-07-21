@@ -1,0 +1,812 @@
+<section class="module" id="module-18">
+  <div class="module-header">
+    <div class="module-number">Part 7: The Training Pipeline</div>
+    <h2 class="module-title">Launching Training (Code)</h2>
+    <p class="module-subtitle">A line-by-line dissection of <code>train_skrl.py</code> — the script that wires everything together and starts the learning loop</p>
+  </div>
+  <div class="module-content">
+
+    <!-- ============================================================ -->
+    <!--  INTRO                                                        -->
+    <!-- ============================================================ -->
+
+    <p>
+      Everything we've built so far — the environment, the reward function, the actor and critic networks — has been
+      a collection of individual pieces sitting on a workbench. <strong>This file is the assembly manual.</strong>
+      <code>train_skrl.py</code> takes every component, wires them into a single executable pipeline, and launches
+      the reinforcement learning loop. It's deceptively short (~80 lines of meaningful code), but every line carries
+      architectural significance. Let's walk through every class, every method, every constant.
+    </p>
+
+    <!-- ============================================================ -->
+    <!--  SECTION 1: THE PROBLEM SKRLFlattenWrapper SOLVES             -->
+    <!-- ============================================================ -->
+
+    <h3>1 &mdash; The Compatibility Problem</h3>
+
+    <p>
+      Our environment outputs observations as a <strong>Python dictionary</strong> with keys like
+      <code>"telemetry"</code> and <code>"tiled_camera"</code>. This is a perfectly natural representation —
+      different sensor modalities live in different arrays. But SKRL's <code>RandomMemory</code> (the experience
+      replay buffer) doesn't support <code>gym.spaces.Dict</code> observation spaces. It expects a single flat
+      tensor it can store row-by-row. This is a common friction point when combining Isaac Lab environments with
+      external RL libraries.
+    </p>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">🔌</div>
+      <div class="callout-content">
+        <strong class="callout-title">The Wrapper Pattern in RL</strong>
+        <p>
+          Rather than modifying the environment or the library, we insert a <strong>wrapper</strong> — a thin
+          adapter class that sits between the environment and the agent. The environment still outputs dicts
+          internally; the wrapper intercepts those dicts, processes them, and presents a flat tensor to the agent.
+          This is the classic <em>Adapter Pattern</em> from software engineering, and it's everywhere in RL
+          codebases. Isaac Lab itself uses this pattern (the <code>IsaacLabWrapper</code> we saw earlier), and
+          now we add our own on top.
+        </p>
+      </div>
+    </div>
+
+    <p>
+      <code>SKRLFlattenWrapper</code> does two things: (1) it runs camera images through a frozen ResNet-18 to
+      produce a 512-dimensional feature vector, and (2) it concatenates that vector with the 12-dimensional
+      telemetry to produce a single flat observation of shape <code>(524,)</code>. If cameras are disabled, it
+      simply passes through the 12-dimensional telemetry unchanged.
+    </p>
+
+    <!-- ============================================================ -->
+    <!--  SECTION 2: CONSTRUCTOR — LOADING RESNET                      -->
+    <!-- ============================================================ -->
+
+    <h3>2 &mdash; SKRLFlattenWrapper: Constructor</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">TRAIN_SKRL.PY — SKRLFlattenWrapper.__init__</span>
+        <pre><code><span class="code-line"><span class="code-keyword">class</span> SKRLFlattenWrapper(Wrapper):</span>
+<span class="code-line">    <span class="code-keyword">def</span> __init__(<span class="code-keyword">self</span>, env):</span>
+<span class="code-line">        <span class="code-keyword">super</span>().__init__(env)</span>
+<span class="code-line">        <span class="code-keyword">if</span> <span class="code-keyword">self</span>._env.cfg.enable_cameras:</span>
+<span class="code-line">            <span class="code-keyword">self</span>.resnet = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1).to(<span class="code-string">"cuda:0"</span>)</span>
+<span class="code-line">            <span class="code-keyword">self</span>.resnet.eval()</span>
+<span class="code-line">            <span class="code-keyword">for</span> param <span class="code-keyword">in</span> <span class="code-keyword">self</span>.resnet.parameters():</span>
+<span class="code-line">                param.requires_grad = <span class="code-keyword">False</span></span>
+<span class="code-line">            <span class="code-keyword">self</span>.resnet.fc = nn.Identity()</span>
+<span class="code-line">            <span class="code-keyword">self</span>.mean = torch.tensor([<span class="code-number">0.485</span>, <span class="code-number">0.456</span>, <span class="code-number">0.406</span>]).view(<span class="code-number">1</span>, <span class="code-number">3</span>, <span class="code-number">1</span>, <span class="code-number">1</span>).to(<span class="code-string">"cuda:0"</span>)</span>
+<span class="code-line">            <span class="code-keyword">self</span>.std = torch.tensor([<span class="code-number">0.229</span>, <span class="code-number">0.224</span>, <span class="code-number">0.225</span>]).view(<span class="code-number">1</span>, <span class="code-number">3</span>, <span class="code-number">1</span>, <span class="code-number">1</span>).to(<span class="code-string">"cuda:0"</span>)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong>Line 1:</strong> We inherit from SKRL's <code>Wrapper</code> base class, which handles method delegation — any method we don't override gets forwarded to the wrapped environment.</p>
+          <p class="tl"><strong>Line 3:</strong> Call the parent constructor, which stores the wrapped environment as <code>self._env</code>.</p>
+          <p class="tl"><strong>Line 4:</strong> Check the environment config. If cameras aren't enabled, we skip all the vision machinery entirely — no ResNet, no normalization tensors, no GPU memory wasted.</p>
+          <p class="tl"><strong>Line 5:</strong> Load a <strong>ResNet-18</strong> pretrained on ImageNet (1.28M images, 1000 classes). The <code>IMAGENET1K_V1</code> weights give us a network that already understands edges, textures, shapes, and objects. We move it to GPU immediately.</p>
+          <p class="tl"><strong>Line 6:</strong> Set the network to <strong>evaluation mode</strong>. This disables dropout and switches BatchNorm layers to use running statistics instead of batch statistics. Critical — without this, the feature extraction would be noisy and non-deterministic.</p>
+          <p class="tl"><strong>Lines 7-8:</strong> <strong>Freeze every parameter.</strong> We iterate through all ~11.7M parameters and set <code>requires_grad = False</code>. This means PyTorch won't compute gradients for ResNet during backpropagation — it's a fixed feature extractor, not a learnable component. This saves enormous amounts of GPU memory and compute.</p>
+          <p class="tl"><strong>Line 9:</strong> <strong>Replace the final classification layer with Identity.</strong> The original ResNet-18 ends with a fully-connected layer that maps 512 features → 1000 class logits. We don't want classification — we want the raw 512-dimensional feature vector that <em>precedes</em> that layer. Replacing <code>fc</code> with <code>nn.Identity()</code> means the network now outputs a 512-dim vector instead of 1000 class probabilities.</p>
+          <p class="tl"><strong>Lines 10-11:</strong> Store the <strong>ImageNet normalization constants</strong> as tensors shaped <code>(1, 3, 1, 1)</code> for broadcasting across batch and spatial dimensions. These are the per-channel means and standard deviations computed across the entire ImageNet dataset.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">🧠</div>
+      <div class="callout-content">
+        <strong class="callout-title">Why ResNet-18 Specifically?</strong>
+        <p>
+          ResNet-18 is the <em>smallest</em> member of the ResNet family — just 11.7M parameters compared to
+          ResNet-50's 25.6M or ResNet-152's 60.2M. For a frozen feature extractor running inside a tight RL loop,
+          this matters enormously. The forward pass must execute for every single environment step across all
+          parallel environments. ResNet-18 provides a good balance: the 512-dimensional feature vector is rich
+          enough to encode lane markings, road boundaries, and obstacles, while being fast enough to not
+          bottleneck the simulation.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">🏗️</div>
+      <div class="callout-content">
+        <strong class="callout-title">The nn.Identity() Trick — Decapitating a Classifier</strong>
+        <p>
+          This is a widely-used pattern in transfer learning. A standard image classifier has the structure:
+          <code>backbone → avgpool → fc(512→1000)</code>. The backbone extracts features, average pooling
+          reduces spatial dimensions, and the final FC layer maps to class probabilities. By replacing
+          <code>fc</code> with <code>nn.Identity()</code>, we "decapitate" the classifier. The network now
+          outputs the 512-dimensional vector that <em>was</em> the input to the classification head — a compact,
+          semantically rich representation of the image content. This is sometimes called a "feature backbone"
+          or "encoder."
+        </p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  SECTION 3: IMAGENET NORMALIZATION DEEP-DIVE                  -->
+    <!-- ============================================================ -->
+
+    <h3>3 &mdash; ImageNet Normalization: The Sacred Constants</h3>
+
+    <p>
+      The normalization constants deserve special attention because getting them wrong silently destroys your
+      feature extraction — the network will produce garbage features without any error message.
+    </p>
+
+    <div class="pattern-cards">
+      <div class="pattern-card">
+        <div class="pattern-icon">🔴</div>
+        <h4 class="pattern-title">Red Channel</h4>
+        <p class="pattern-desc">
+          mean = <strong>0.485</strong>, std = <strong>0.229</strong><br>
+          ImageNet images tend to have moderate red content. The relatively small std means red values
+          are fairly consistent across the dataset.
+        </p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">🟢</div>
+        <h4 class="pattern-title">Green Channel</h4>
+        <p class="pattern-desc">
+          mean = <strong>0.456</strong>, std = <strong>0.224</strong><br>
+          Slightly lower mean than red. Natural images (grass, trees, foliage) contribute heavily to ImageNet,
+          but green values are balanced by indoor and urban scenes.
+        </p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">🔵</div>
+        <h4 class="pattern-title">Blue Channel</h4>
+        <p class="pattern-desc">
+          mean = <strong>0.406</strong>, std = <strong>0.225</strong><br>
+          The lowest mean — blue is the least dominant channel in typical photographs. Sky regions contribute
+          blue, but they're often a small portion of each image.
+        </p>
+      </div>
+    </div>
+
+    <p>
+      The normalization formula applied per-pixel is:
+    </p>
+    <p style="text-align: center; font-size: 1.1em;">
+      $x_{\text{normalized}} = \frac{x - \mu_c}{\sigma_c}$
+    </p>
+    <p>
+      where $c \in \{R, G, B\}$. This transforms pixel values from the range $[0, 1]$ to approximately
+      $[-2.1, 2.6]$, centering each channel around zero with unit-ish variance. The pretrained ResNet's
+      BatchNorm layers and learned weights <em>expect</em> inputs in this distribution — they were trained
+      on data normalized this way. Feed in raw $[0, 255]$ pixel values and the network's internal activations
+      will be completely off-scale.
+    </p>
+
+    <p>
+      The tensors are shaped <code>(1, 3, 1, 1)</code> — that's <code>(batch=1, channels=3, height=1, width=1)</code>.
+      PyTorch's broadcasting rules mean this will automatically expand across any batch size and any spatial
+      resolution. A batch of 64 images at 240×320 resolution gets normalized in a single vectorized operation
+      with no loops.
+    </p>
+
+    <!-- ============================================================ -->
+    <!--  SECTION 4: _flatten_obs METHOD                               -->
+    <!-- ============================================================ -->
+
+    <h3>4 &mdash; The _flatten_obs Method: From Dict to Flat Tensor</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">TRAIN_SKRL.PY — _flatten_obs</span>
+        <pre><code><span class="code-line"><span class="code-keyword">def</span> _flatten_obs(<span class="code-keyword">self</span>, obs):</span>
+<span class="code-line">    vec = obs[<span class="code-string">"telemetry"</span>]</span>
+<span class="code-line">    <span class="code-keyword">if</span> <span class="code-string">"tiled_camera"</span> <span class="code-keyword">in</span> obs:</span>
+<span class="code-line">        img = obs[<span class="code-string">"tiled_camera"</span>].float()</span>
+<span class="code-line">        <span class="code-keyword">if</span> img.dim() == <span class="code-number">4</span> <span class="code-keyword">and</span> img.shape[<span class="code-number">-1</span>] == <span class="code-number">3</span>:</span>
+<span class="code-line">            img = img.permute(<span class="code-number">0</span>, <span class="code-number">3</span>, <span class="code-number">1</span>, <span class="code-number">2</span>)</span>
+<span class="code-line">        <span class="code-keyword">if</span> img.max() > <span class="code-number">1.0</span>:</span>
+<span class="code-line">            img = img / <span class="code-number">255.0</span></span>
+<span class="code-line">        img = (img - <span class="code-keyword">self</span>.mean) / <span class="code-keyword">self</span>.std</span>
+<span class="code-line">        <span class="code-keyword">with</span> torch.no_grad():</span>
+<span class="code-line">            visual_feats = <span class="code-keyword">self</span>.resnet(img)</span>
+<span class="code-line">        <span class="code-keyword">return</span> torch.cat([visual_feats, vec], dim=<span class="code-number">1</span>)</span>
+<span class="code-line">    <span class="code-keyword">return</span> vec</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong>Line 2:</strong> Extract the telemetry vector — always present regardless of camera mode. This is a tensor of shape <code>(num_envs, 12)</code> containing speed, heading error, lateral offset, distances to lane boundaries, etc.</p>
+          <p class="tl"><strong>Line 3:</strong> Check if camera data exists in the observation dict. If cameras are disabled, this key won't be present and we skip straight to returning raw telemetry.</p>
+          <p class="tl"><strong>Line 4:</strong> Cast image data to float32. Isaac Lab's tiled camera may return uint8 (0-255) or float16. We need float32 for the normalization math and for ResNet's BatchNorm layers.</p>
+          <p class="tl"><strong>Lines 5-6: The NHWC → NCHW permutation.</strong> Isaac Lab outputs images in <strong>NHWC</strong> format (Batch, Height, Width, Channels) — this is the format used by most rendering engines and image libraries. But PyTorch's convolutional layers expect <strong>NCHW</strong> (Batch, Channels, Height, Width). The <code>permute(0, 3, 1, 2)</code> rearranges axes: batch stays at 0, channels move from position 3 to position 1, and spatial dims shift right. A <code>(64, 240, 320, 3)</code> tensor becomes <code>(64, 3, 240, 320)</code>.</p>
+          <p class="tl"><strong>Lines 7-8:</strong> Defensive normalization to [0, 1]. If pixel values are in the 0-255 range (uint8 style), divide by 255. If they're already in [0, 1], this is a no-op. This handles both cases gracefully.</p>
+          <p class="tl"><strong>Line 9:</strong> Apply ImageNet normalization. Each channel is centered and scaled: $x_c' = (x_c - \mu_c) / \sigma_c$. After this, pixel values are roughly in the range $[-2.1, +2.6]$ — exactly what the pretrained ResNet expects.</p>
+          <p class="tl"><strong>Lines 10-11:</strong> Run the frozen ResNet in a <code>no_grad</code> context. Even though we froze the parameters, <code>torch.no_grad()</code> provides an additional optimization: it tells PyTorch not to build a computation graph for this forward pass at all, saving memory for intermediate activations. The output is a tensor of shape <code>(num_envs, 512)</code> — 512 features per image.</p>
+          <p class="tl"><strong>Line 12:</strong> <strong>Concatenate vision features with telemetry.</strong> <code>torch.cat([visual_feats, vec], dim=1)</code> joins <code>(N, 512)</code> and <code>(N, 12)</code> along the feature dimension to produce <code>(N, 524)</code>. This single flat vector is what the policy and value networks receive.</p>
+          <p class="tl"><strong>Line 13:</strong> Fallback path — if no camera data exists, just return the raw 12-dim telemetry vector. This makes the wrapper work seamlessly in both camera-on and camera-off modes.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">📐</div>
+      <div class="callout-content">
+        <strong class="callout-title">The 524-Dimensional Observation Vector</strong>
+        <p>
+          When cameras are enabled, the final observation is a 524-dimensional vector:
+        </p>
+        <ul>
+          <li><strong>Dimensions 0–511</strong> (512 values): Visual features from ResNet-18. These encode high-level
+            image semantics — lane markings, road curvature, obstacle positions, horizon line, etc. — compressed
+            from a 240×320×3 = 230,400 pixel image down to just 512 numbers.</li>
+          <li><strong>Dimensions 512–523</strong> (12 values): Telemetry — speed, heading, lateral offset, lane
+            distances, and other vehicle state measurements.</li>
+        </ul>
+        <p>
+          This fusion strategy is called <strong>early fusion</strong> (or "feature-level fusion"): we combine
+          modalities <em>before</em> they enter the policy network, letting the policy's MLP learn cross-modal
+          correlations. The alternative would be <em>late fusion</em>, where each modality has its own processing
+          branch and outputs are combined at the decision layer. Early fusion is simpler and works well when
+          one modality (vision) has already been processed into a compact representation.
+        </p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  SECTION 5: observation_space PROPERTY                        -->
+    <!-- ============================================================ -->
+
+    <h3>5 &mdash; The observation_space Property</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">TRAIN_SKRL.PY — observation_space</span>
+        <pre><code><span class="code-line">@property</span>
+<span class="code-line"><span class="code-keyword">def</span> observation_space(<span class="code-keyword">self</span>):</span>
+<span class="code-line">    shape_dim = <span class="code-number">524</span> <span class="code-keyword">if</span> <span class="code-keyword">self</span>._env.cfg.enable_cameras <span class="code-keyword">else</span> <span class="code-number">12</span></span>
+<span class="code-line">    <span class="code-keyword">return</span> gym.spaces.Box(low=-np.inf, high=np.inf, shape=(shape_dim,))</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong>Lines 1-2:</strong> This is a <strong>property</strong>, not a regular method — it's accessed as <code>env.observation_space</code> without parentheses. It overrides whatever the wrapped environment reports as its observation space.</p>
+          <p class="tl"><strong>Line 3:</strong> Choose the dimensionality based on camera mode. With cameras: 512 (ResNet) + 12 (telemetry) = 524. Without cameras: just 12 (telemetry only).</p>
+          <p class="tl"><strong>Line 4:</strong> Return a continuous <code>Box</code> space with infinite bounds. The <code>(-inf, inf)</code> range is standard for RL — it tells SKRL "these are unbounded real numbers" which is correct since ImageNet-normalized features and telemetry values can be any float. The shape <code>(shape_dim,)</code> is a 1D tuple, making this a flat vector space — exactly what SKRL's <code>RandomMemory</code> needs.</p>
+        </div>
+      </div>
+    </div>
+
+    <p>
+      This property is <em>critical</em> for the downstream pipeline. When SKRL's memory buffer allocates storage,
+      it reads <code>env.observation_space.shape</code> to determine how many columns each row needs. When the
+      actor and critic networks are constructed, they read this space to determine their input layer size. If
+      this property returned the original <code>Dict</code> space (or the wrong dimensionality), everything
+      downstream would break.
+    </p>
+
+    <!-- ============================================================ -->
+    <!--  SECTION 6: DATA FLOW DIAGRAM                                 -->
+    <!-- ============================================================ -->
+
+    <h3>6 &mdash; Data Flow Through the Wrapper</h3>
+
+    <p>
+      Let's trace exactly what happens when the environment produces one observation:
+    </p>
+
+    <div class="pattern-cards">
+      <div class="pattern-card">
+        <div class="pattern-icon">1️⃣</div>
+        <h4 class="pattern-title">Environment Output</h4>
+        <p class="pattern-desc">
+          <code>{"telemetry": (N, 12), "tiled_camera": (N, 240, 320, 3)}</code><br>
+          A dict with a float32 telemetry tensor and a uint8 image tensor in NHWC layout.
+        </p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">2️⃣</div>
+        <h4 class="pattern-title">Cast & Permute</h4>
+        <p class="pattern-desc">
+          Image → float32 → permute to <code>(N, 3, 240, 320)</code> NCHW layout → divide by 255 → values now in $[0, 1]$.
+        </p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">3️⃣</div>
+        <h4 class="pattern-title">ImageNet Normalize</h4>
+        <p class="pattern-desc">
+          $(x - \mu) / \sigma$ per channel → values now in $[\approx\!\!-2.1, \approx\!\!+2.6]$. ResNet's BatchNorm
+          layers expect this distribution.
+        </p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">4️⃣</div>
+        <h4 class="pattern-title">ResNet Forward</h4>
+        <p class="pattern-desc">
+          Frozen ResNet-18 (no grad): <code>(N, 3, 240, 320)</code> → conv layers → avgpool → Identity (was fc) → <code>(N, 512)</code>.
+          230,400 pixels compressed to 512 features.
+        </p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">5️⃣</div>
+        <h4 class="pattern-title">Concatenate</h4>
+        <p class="pattern-desc">
+          <code>torch.cat([visual_feats, telemetry], dim=1)</code> → <code>(N, 524)</code>.
+          A single flat tensor ready for the policy network.
+        </p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  SECTION 7: TelemetryPPO CLASS                                -->
+    <!-- ============================================================ -->
+
+    <h3>7 &mdash; TelemetryPPO: Custom Telemetry Logging</h3>
+
+    <p>
+      SKRL's built-in PPO class tracks standard RL metrics — rewards, episode lengths, policy loss, value loss.
+      But for autonomous driving, we care about <em>domain-specific</em> metrics: How fast is the car going?
+      How far is it from the lane boundaries? The <code>TelemetryPPO</code> class extends PPO with custom
+      logging for these driving-specific signals.
+    </p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">TRAIN_SKRL.PY — TelemetryPPO</span>
+        <pre><code><span class="code-line"><span class="code-keyword">class</span> TelemetryPPO(PPO):</span>
+<span class="code-line">    <span class="code-keyword">def</span> record_transition(<span class="code-keyword">self</span>, states, actions, rewards,</span>
+<span class="code-line">                          next_states, terminated, truncated,</span>
+<span class="code-line">                          infos, timestep, timesteps):</span>
+<span class="code-line">        <span class="code-keyword">super</span>().record_transition(states, actions, rewards,</span>
+<span class="code-line">                                  next_states, terminated, truncated,</span>
+<span class="code-line">                                  infos, timestep, timesteps)</span>
+<span class="code-line">        speed = <span class="code-number">0.0</span></span>
+<span class="code-line">        <span class="code-keyword">if</span> <span class="code-string">"speed_mps"</span> <span class="code-keyword">in</span> infos:</span>
+<span class="code-line">            speed = infos[<span class="code-string">"speed_mps"</span>].mean().item()</span>
+<span class="code-line">            <span class="code-keyword">self</span>.track_data(<span class="code-string">"Telemetry / Speed_MPS"</span>, speed)</span>
+<span class="code-line">        <span class="code-keyword">self</span>._print_counter += states.shape[<span class="code-number">0</span>] <span class="code-keyword">if</span> states <span class="code-keyword">is not</span> <span class="code-keyword">None</span> <span class="code-keyword">else</span> <span class="code-number">1</span></span>
+<span class="code-line">        <span class="code-keyword">if</span> <span class="code-keyword">self</span>._print_counter >= <span class="code-number">10000</span>:</span>
+<span class="code-line">            print(<span class="code-string">f"Step {timestep} | Rew: {self._last_ep_rew:.1f} | Len: {self._last_ep_len:.0f} | Spd: {speed:.2f}"</span>)</span>
+<span class="code-line">            <span class="code-keyword">self</span>._print_counter = <span class="code-number">0</span></span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong>Line 1:</strong> <code>TelemetryPPO</code> inherits from SKRL's <code>PPO</code> class. We only override one method — <code>record_transition</code> — keeping all the actual PPO algorithm logic (advantage estimation, policy updates, clipping) untouched.</p>
+          <p class="tl"><strong>Lines 2-7:</strong> Override <code>record_transition</code>, which SKRL calls after every environment step to store the $(s, a, r, s', \text{done})$ tuple. The first thing we do is call <code>super().record_transition()</code> so all of SKRL's internal bookkeeping still happens — storing data in the memory buffer, updating episode counters, etc.</p>
+          <p class="tl"><strong>Line 8:</strong> Initialize speed to 0.0 as a safe default in case the info dict doesn't contain speed data.</p>
+          <p class="tl"><strong>Lines 9-11:</strong> If the environment's <code>infos</code> dict contains <code>"speed_mps"</code> (speed in meters per second), extract the <strong>mean across all parallel environments</strong> using <code>.mean().item()</code>. The <code>.item()</code> converts a single-element tensor to a Python float. Then log it to SKRL's tracking system via <code>track_data()</code>, which feeds into TensorBoard / Weights & Biases.</p>
+          <p class="tl"><strong>Line 12:</strong> Increment the print counter by the <strong>batch size</strong> (number of parallel environments). With 64 envs, each call to <code>record_transition</code> adds 64 to the counter. This means the counter tracks total <em>environment interactions</em>, not training steps.</p>
+          <p class="tl"><strong>Lines 13-15:</strong> Every 10,000 environment interactions, print a human-readable status line to the console. This gives a quick "pulse check" without needing TensorBoard: current timestep, last episode reward, last episode length, and current mean speed. Then reset the counter to 0.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">📊</div>
+      <div class="callout-content">
+        <strong class="callout-title">Why 10,000 Steps Between Prints?</strong>
+        <p>
+          With 64 parallel environments, 10,000 interactions happen every ~156 calls to <code>record_transition</code>.
+          At ~500 FPS simulation speed, that's about every 20 seconds of wall-clock time. Frequent enough to
+          monitor progress, sparse enough to not flood the terminal. The counter uses <code>states.shape[0]</code>
+          (the batch dimension) to correctly account for the number of parallel environments — if you run with
+          128 envs instead of 64, you get prints at the same real-time frequency because more interactions happen
+          per step.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">🔗</div>
+      <div class="callout-content">
+        <strong class="callout-title">The record_transition Hook Point</strong>
+        <p>
+          <code>record_transition</code> is the ideal place for custom logging because it's called <em>at every
+          single environment step</em> with the complete transition data. It has access to <code>states</code>,
+          <code>actions</code>, <code>rewards</code>, <code>next_states</code>, termination flags, and
+          importantly the <code>infos</code> dict — which is where the environment passes auxiliary data like
+          speed and lane distances. Other override points (like <code>_update</code>) only fire during training
+          updates, which happen less frequently.
+        </p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  SECTION 8: THE MAIN FUNCTION — ENVIRONMENT SETUP             -->
+    <!-- ============================================================ -->
+
+    <h3>8 &mdash; main() — Environment Construction</h3>
+
+    <p>
+      The <code>main()</code> function is where the entire training pipeline is assembled. Let's walk through it
+      in three parts: environment setup, model creation, and training launch.
+    </p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">TRAIN_SKRL.PY — main() Part 1: Environment</span>
+        <pre><code><span class="code-line"><span class="code-keyword">def</span> main():</span>
+<span class="code-line">    env_cfg = ARCProEnvCfg()</span>
+<span class="code-line">    env_cfg.scene.num_envs = args_cli.num_envs</span>
+<span class="code-line">    env_cfg.enable_cameras = args_cli.enable_cameras</span>
+<span class="code-line">    env_cfg.__post_init__()</span>
+<span class="code-line">    env = ManagerBasedRLEnv(cfg=env_cfg)</span>
+<span class="code-line">    env = IsaacLabWrapper(env)</span>
+<span class="code-line">    env = SKRLFlattenWrapper(env)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong>Line 2:</strong> Create the environment configuration object. <code>ARCProEnvCfg</code> contains all the defaults — reward weights, track geometry, physics timestep, sensor configurations. This is the giant config class we studied in earlier modules.</p>
+          <p class="tl"><strong>Line 3:</strong> Override the number of parallel environments from the command line. The default might be 64, but you might pass <code>--num_envs 128</code> for faster data collection or <code>--num_envs 4</code> for debugging. This directly controls how many copies of the car + track are simulated simultaneously.</p>
+          <p class="tl"><strong>Line 4:</strong> Set the camera flag from the command line. When <code>True</code>, the environment will include a tiled camera sensor and the wrapper will load ResNet-18. When <code>False</code>, the agent trains on telemetry only — much faster but vision-blind.</p>
+          <p class="tl"><strong>Line 5:</strong> <strong>Manually call <code>__post_init__()</code>.</strong> In a normal dataclass flow, <code>__post_init__</code> runs automatically after <code>__init__</code>. But since we modified fields <em>after</em> construction (lines 3-4), we need to re-run it so dependent calculations (like observation space dimensions) are recomputed with the updated values.</p>
+          <p class="tl"><strong>Line 6:</strong> <strong>Create the actual Isaac Lab environment.</strong> <code>ManagerBasedRLEnv</code> is Isaac Lab's main environment class. It takes our config and spins up the full simulation: USD scene loading, physics engine (PhysX), sensor pipelines, reward/termination managers — everything. After this line, the simulation is live.</p>
+          <p class="tl"><strong>Line 7:</strong> <strong>Wrap with IsaacLabWrapper.</strong> This is SKRL's official adapter for Isaac Lab environments. It translates between Isaac Lab's API (which uses <code>.step()</code> with dictionaries of observation groups) and SKRL's expected Gym-like API. Crucially, it also extracts the <strong>critic observation group</strong> — if the config defines separate observation groups for actor and critic (Asymmetric Actor-Critic), this wrapper makes the critic's observations available via <code>env.state_space</code>.</p>
+          <p class="tl"><strong>Line 8:</strong> <strong>Wrap with our SKRLFlattenWrapper.</strong> This is the wrapper we just studied — it flattens the dict observations into a single tensor, optionally running images through frozen ResNet-18. After this line, the environment presents a standard <code>Box(524,)</code> or <code>Box(12,)</code> observation space to the agent.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">🪆</div>
+      <div class="callout-content">
+        <strong class="callout-title">The Wrapper Stack: Three Layers Deep</strong>
+        <p>
+          The environment is now wrapped three layers deep, like Russian nesting dolls:
+        </p>
+        <ol>
+          <li><strong>Innermost:</strong> <code>ManagerBasedRLEnv</code> — the raw Isaac Lab simulation with dict observations and manager-based architecture.</li>
+          <li><strong>Middle:</strong> <code>IsaacLabWrapper</code> — SKRL's adapter that translates the API and extracts critic observations for AAC.</li>
+          <li><strong>Outermost:</strong> <code>SKRLFlattenWrapper</code> — our custom adapter that flattens dicts into tensors and runs vision encoding.</li>
+        </ol>
+        <p>
+          When the agent calls <code>env.step(action)</code>, the call propagates inward through all three layers.
+          When observations come back, they propagate outward — being transformed at each layer. This is
+          <em>entirely standard</em> in modern RL. OpenAI Gym's entire design is built around wrapper composition.
+        </p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  SECTION 9: MEMORY BUFFER                                     -->
+    <!-- ============================================================ -->
+
+    <h3>9 &mdash; main() — Memory Buffer</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">TRAIN_SKRL.PY — main() Part 2: Memory</span>
+        <pre><code><span class="code-line">    memory = RandomMemory(memory_size=<span class="code-number">128</span>, num_envs=env.num_envs, device=<span class="code-string">"cuda:0"</span>)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong>Create a rollout buffer with 128 steps of storage per environment.</strong> In on-policy algorithms like PPO, the "memory" isn't really a replay buffer — it's a <strong>rollout buffer</strong>. It stores the last 128 steps of experience from each parallel environment. After 128 steps, PPO uses all this data for a training update, then discards it and starts collecting fresh data.</p>
+          <p class="tl">The total number of transitions stored is <code>128 × num_envs</code>. With 64 environments, that's 8,192 transitions per training update. With 128 environments, it's 16,384. This is the "<code>rollouts</code>" parameter — we'll see it again in the PPO config.</p>
+          <p class="tl">The <code>device="cuda:0"</code> means the buffer lives on GPU. Since both the environment and the networks are on GPU, keeping the buffer there too avoids any CPU↔GPU data transfers during training.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">📦</div>
+      <div class="callout-content">
+        <strong class="callout-title">Why memory_size=128?</strong>
+        <p>
+          The <code>memory_size</code> must match the <code>rollouts</code> parameter in the PPO config (which
+          we'll see is also 128). This value determines how many steps of experience PPO collects before
+          performing a training update. 128 steps is a moderate rollout length — long enough to capture
+          multi-step dynamics (the car needs several steps to complete a turn) but short enough to keep
+          training updates frequent. With 64 parallel environments × 128 steps = 8,192 total transitions
+          per update batch, which is a healthy batch size for PPO.
+        </p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  SECTION 10: MODEL CREATION                                   -->
+    <!-- ============================================================ -->
+
+    <h3>10 &mdash; main() — Model Creation</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">TRAIN_SKRL.PY — main() Part 3: Models</span>
+        <pre><code><span class="code-line">    models = {}</span>
+<span class="code-line">    models[<span class="code-string">"policy"</span>] = ARCProActor(env.observation_space, env.action_space, <span class="code-string">"cuda:0"</span>)</span>
+<span class="code-line">    state_space = getattr(env, <span class="code-string">"state_space"</span>, env.observation_space)</span>
+<span class="code-line">    models[<span class="code-string">"value"</span>] = ARCProCritic(state_space, env.action_space, <span class="code-string">"cuda:0"</span>)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong>Line 1:</strong> Create an empty dictionary to hold the models. SKRL expects a dict with specific keys: <code>"policy"</code> for the actor (action-producing network) and <code>"value"</code> for the critic (value-estimating network).</p>
+          <p class="tl"><strong>Line 2:</strong> Create the <strong>actor (policy) network</strong>. <code>ARCProActor</code> is the custom Gaussian MLP we built in earlier modules. It receives <code>env.observation_space</code> — which, thanks to our wrapper, is <code>Box(524,)</code> with cameras or <code>Box(12,)</code> without. It receives <code>env.action_space</code> — which is <code>Box(2,)</code> for [throttle/brake, steering]. The network is placed on <code>"cuda:0"</code>.</p>
+          <p class="tl"><strong>Line 3:</strong> <strong>Attempt to get the critic's state space for Asymmetric Actor-Critic (AAC).</strong> <code>getattr(env, "state_space", env.observation_space)</code> tries to access <code>env.state_space</code>. If the <code>IsaacLabWrapper</code> detected a separate "critic" observation group in the environment config, it will have set <code>state_space</code> to the critic's (potentially richer) observation space. If no separate critic group exists, <code>getattr</code> falls back to <code>env.observation_space</code> — meaning actor and critic see the same observations.</p>
+          <p class="tl"><strong>Line 4:</strong> Create the <strong>critic (value) network</strong>. <code>ARCProCritic</code> receives <code>state_space</code> — which may be different from the actor's observation space if AAC is enabled. The critic might see privileged information (like exact centerline distance or perfect lane positions) that the actor doesn't have access to. This is the essence of Asymmetric Actor-Critic: train the critic with rich data, but the actor only gets what a real car would have.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">🎭</div>
+      <div class="callout-content">
+        <strong class="callout-title">The getattr Trick for AAC</strong>
+        <p>
+          The line <code>getattr(env, "state_space", env.observation_space)</code> is a clean pattern for
+          optional AAC support. Here's how it works in practice:
+        </p>
+        <ul>
+          <li><strong>If AAC is configured:</strong> The environment config defines two observation groups —
+            <code>"policy"</code> (actor sees cameras + limited telemetry) and <code>"critic"</code>
+            (critic sees full privileged state). <code>IsaacLabWrapper</code> exposes the critic group via
+            <code>env.state_space</code>. The critic gets richer input than the actor.</li>
+          <li><strong>If AAC is not configured:</strong> Only one observation group exists.
+            <code>state_space</code> attribute doesn't exist on the wrapper. <code>getattr</code> falls back to
+            <code>env.observation_space</code>. Actor and critic receive identical observations. Standard PPO.</li>
+        </ul>
+        <p>
+          This single line of code makes the entire script compatible with <em>both</em> standard PPO and
+          asymmetric PPO, with zero conditional logic.
+        </p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  SECTION 11: PPO CONFIGURATION                                -->
+    <!-- ============================================================ -->
+
+    <h3>11 &mdash; main() — PPO Configuration</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">TRAIN_SKRL.PY — main() Part 4: PPO Config</span>
+        <pre><code><span class="code-line">    cfg_ppo = PPO_DEFAULT_CONFIG.copy()</span>
+<span class="code-line">    cfg_ppo[<span class="code-string">"rollouts"</span>] = <span class="code-number">128</span></span>
+<span class="code-line">    cfg_ppo[<span class="code-string">"mini_batches"</span>] = <span class="code-number">16</span></span>
+<span class="code-line">    cfg_ppo[<span class="code-string">"learning_rate"</span>] = <span class="code-number">1e-4</span></span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong>Line 1:</strong> Start from SKRL's default PPO configuration and make a copy. The defaults include sensible values for clip ratio (0.2), entropy coefficient, discount factor (0.99), GAE lambda (0.95), number of PPO epochs, and many other hyperparameters. We only override the three parameters that are most task-specific.</p>
+          <p class="tl"><strong>Line 2: <code>rollouts = 128</code></strong> — Collect 128 environment steps before performing a training update. This must match the <code>memory_size</code> we set earlier. With 64 parallel environments, each training update uses 128 × 64 = 8,192 transitions. Longer rollouts capture more temporal context (good for driving where maneuvers span many steps) but delay learning updates.</p>
+          <p class="tl"><strong>Line 3: <code>mini_batches = 16</code></strong> — Split the rollout data into 16 mini-batches for each PPO epoch. With 8,192 total transitions, each mini-batch contains 8,192 ÷ 16 = 512 transitions. Smaller mini-batches mean more gradient updates per epoch (more learning) but noisier gradients. 16 is a moderate choice.</p>
+          <p class="tl"><strong>Line 4: <code>learning_rate = 1e-4</code></strong> — Set the Adam optimizer's learning rate to 0.0001. This is on the conservative side for PPO (typical range is 1e-4 to 3e-4). A lower learning rate means slower but more stable learning — appropriate for a complex continuous control task where aggressive updates could cause the policy to suddenly forget how to drive.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">🧮</div>
+      <div class="callout-content">
+        <strong class="callout-title">The Math of Rollouts, Mini-Batches, and Epochs</strong>
+        <p>
+          Let's trace the exact data flow for one PPO training cycle (assuming 64 envs):
+        </p>
+        <ol>
+          <li><strong>Collection phase:</strong> Run the environment for 128 steps across 64 envs → 8,192 transitions stored in the rollout buffer.</li>
+          <li><strong>For each PPO epoch</strong> (default is ~8 epochs per update):
+            <ul>
+              <li>Shuffle the 8,192 transitions randomly.</li>
+              <li>Split into 16 mini-batches of 512 transitions each.</li>
+              <li>For each mini-batch: compute advantages, policy ratio, clipped loss, value loss → one gradient update.</li>
+            </ul>
+          </li>
+          <li>That's 16 gradient updates per epoch × ~8 epochs = <strong>~128 gradient updates per collection cycle</strong>.</li>
+          <li>Clear the buffer, go back to step 1.</li>
+        </ol>
+        <p>
+          This is why PPO is "on-policy but sample-efficient" — it reuses each batch of experience across
+          multiple epochs, unlike vanilla policy gradient which uses each transition exactly once.
+        </p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  SECTION 12: AGENT + TRAINER LAUNCH                           -->
+    <!-- ============================================================ -->
+
+    <h3>12 &mdash; main() — Agent Creation & Training Launch</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">TRAIN_SKRL.PY — main() Part 5: Launch</span>
+        <pre><code><span class="code-line">    agent = TelemetryPPO(</span>
+<span class="code-line">        models=models,</span>
+<span class="code-line">        memory=memory,</span>
+<span class="code-line">        cfg=cfg_ppo,</span>
+<span class="code-line">        observation_space=env.observation_space,</span>
+<span class="code-line">        action_space=env.action_space,</span>
+<span class="code-line">        device=<span class="code-string">"cuda:0"</span></span>
+<span class="code-line">    )</span>
+<span class="code-line">    trainer = SequentialTrainer(</span>
+<span class="code-line">        cfg={<span class="code-string">"timesteps"</span>: args_cli.total_timesteps},</span>
+<span class="code-line">        env=env,</span>
+<span class="code-line">        agents=agent</span>
+<span class="code-line">    )</span>
+<span class="code-line">    trainer.train()</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong>Lines 1-8: Create the PPO agent.</strong> <code>TelemetryPPO</code> (our custom subclass) receives everything it needs:</p>
+          <p class="tl" style="padding-left: 1em;">• <code>models</code>: The dict containing <code>"policy"</code> (ARCProActor) and <code>"value"</code> (ARCProCritic). SKRL will use the policy to sample actions and the value function to compute advantages.</p>
+          <p class="tl" style="padding-left: 1em;">• <code>memory</code>: The 128-step rollout buffer where transitions are stored before training updates.</p>
+          <p class="tl" style="padding-left: 1em;">• <code>cfg</code>: The PPO hyperparameters — rollout length, mini-batch count, learning rate, plus all the defaults we didn't override (clip ratio, GAE lambda, entropy coeff, etc.).</p>
+          <p class="tl" style="padding-left: 1em;">• <code>observation_space</code> and <code>action_space</code>: These tell SKRL the shapes of inputs and outputs. SKRL uses these internally for initialization and validation.</p>
+          <p class="tl" style="padding-left: 1em;">• <code>device="cuda:0"</code>: Everything runs on the first GPU.</p>
+          <p class="tl"><strong>Lines 9-13: Create the trainer.</strong> SKRL's <code>SequentialTrainer</code> orchestrates the training loop. Its only config is <code>timesteps</code> — the total number of environment interactions before training ends. This comes from the command line (e.g., <code>--total_timesteps 1000000</code>). The trainer also receives the wrapped environment and the agent.</p>
+          <p class="tl"><strong>Line 14: <code>trainer.train()</code></strong> — <strong>This is where the magic happens.</strong> This single call enters a loop that runs for the specified number of timesteps. Each iteration: (1) the agent queries the policy for actions, (2) the environment steps forward, (3) transitions are stored in memory, (4) every 128 steps, PPO runs its training update. This call blocks until training is complete — it could run for hours or days depending on the timestep budget.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  SECTION 13: THE COMPLETE PIPELINE                            -->
+    <!-- ============================================================ -->
+
+    <h3>13 &mdash; The Complete Pipeline at a Glance</h3>
+
+    <p>
+      Let's zoom out and see how every component we've studied across this entire course connects in this one file:
+    </p>
+
+    <div class="pattern-cards">
+      <div class="pattern-card">
+        <div class="pattern-icon">⚙️</div>
+        <h4 class="pattern-title">ARCProEnvCfg</h4>
+        <p class="pattern-desc">
+          The configuration dataclass (Modules 3-6). Defines the scene, observations, actions, rewards,
+          terminations, and curriculum. Created and customized with CLI arguments.
+        </p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">🌍</div>
+        <h4 class="pattern-title">ManagerBasedRLEnv</h4>
+        <p class="pattern-desc">
+          Isaac Lab's core environment (Modules 7-12). Takes the config and runs the full simulation —
+          physics, sensors, reward computation, episode resets.
+        </p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">🔌</div>
+        <h4 class="pattern-title">IsaacLabWrapper</h4>
+        <p class="pattern-desc">
+          SKRL's bridge layer. Translates Isaac Lab's API → Gym API. Extracts critic observation groups
+          for Asymmetric Actor-Critic.
+        </p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">📷</div>
+        <h4 class="pattern-title">SKRLFlattenWrapper</h4>
+        <p class="pattern-desc">
+          Our custom adapter. Dict → flat tensor. Runs frozen ResNet-18 on camera images.
+          Produces a 524-dim (or 12-dim) observation vector.
+        </p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">🎯</div>
+        <h4 class="pattern-title">ARCProActor</h4>
+        <p class="pattern-desc">
+          The policy network (Module 15). Takes 524/12-dim observations, outputs Gaussian distribution
+          over 2D actions (throttle, steering).
+        </p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">📈</div>
+        <h4 class="pattern-title">ARCProCritic</h4>
+        <p class="pattern-desc">
+          The value network (Module 16). Takes state observations (possibly privileged), outputs scalar
+          value estimate $V(s)$ for advantage computation.
+        </p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">🧠</div>
+        <h4 class="pattern-title">TelemetryPPO</h4>
+        <p class="pattern-desc">
+          PPO algorithm + custom logging. Runs the clipped surrogate objective, GAE advantage estimation,
+          and logs driving-specific metrics.
+        </p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">🏃</div>
+        <h4 class="pattern-title">SequentialTrainer</h4>
+        <p class="pattern-desc">
+          SKRL's training orchestrator. Runs the collect → update loop for the specified number of timesteps.
+          Handles checkpointing, logging, and evaluation.
+        </p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  SECTION 14: KEY DESIGN DECISIONS                             -->
+    <!-- ============================================================ -->
+
+    <h3>14 &mdash; Key Design Decisions in This File</h3>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">1️⃣</div>
+      <div class="callout-content">
+        <strong class="callout-title">Frozen ResNet vs. Trainable CNN</strong>
+        <p>
+          A frozen pretrained ResNet-18 is used instead of training a CNN from scratch. This is a deliberate
+          tradeoff: we sacrifice the ability to learn task-specific visual features (like "what a lane marking
+          looks like in our specific simulation") in exchange for <strong>massive computational savings</strong>
+          and <strong>stable gradients</strong>. Training a CNN end-to-end through RL is notoriously difficult —
+          the reward signal is sparse and delayed, making it hard for gradients to propagate back through dozens
+          of convolutional layers. A frozen ResNet provides a "good enough" visual representation from day one,
+          letting the MLP policy focus on learning the <em>driving behavior</em> rather than simultaneously
+          learning to see and drive.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">2️⃣</div>
+      <div class="callout-content">
+        <strong class="callout-title">Wrapper Composition Over Monolithic Design</strong>
+        <p>
+          The file stacks three wrappers rather than building a single "mega-environment" that handles everything.
+          This modularity means you can swap components independently: use a different RL library (just replace the
+          outer wrapper), use a different visual encoder (just replace the ResNet code in <code>SKRLFlattenWrapper</code>),
+          or use a different simulation (just replace the inner environment). Each layer has exactly one job.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">3️⃣</div>
+      <div class="callout-content">
+        <strong class="callout-title">Camera-Optional Architecture</strong>
+        <p>
+          The entire vision pipeline is gated behind <code>enable_cameras</code>. This isn't just a convenience
+          feature — it fundamentally changes the training workflow. Camera-free training (telemetry only) runs
+          3-5× faster because it skips rendering, image transfer, and ResNet forward passes. The recommended
+          workflow is: first train a competent telemetry-only policy (fast iteration, quick experiments), then
+          enable cameras and fine-tune (or retrain) with visual input. The observation space automatically adapts
+          (12 vs. 524 dimensions), and all downstream code works unchanged.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">4️⃣</div>
+      <div class="callout-content">
+        <strong class="callout-title">Everything on GPU</strong>
+        <p>
+          Notice that every component is explicitly placed on <code>"cuda:0"</code> — the ResNet, the normalization
+          tensors, the memory buffer, the actor, the critic, and the agent. Isaac Lab's simulation also runs on
+          GPU via PhysX. This means the entire pipeline — from physics simulation to observation processing to
+          neural network inference to gradient updates — runs entirely on the GPU without <em>any</em> CPU↔GPU
+          data transfers. This is critical for performance: a single GPU-to-CPU transfer per step would halve
+          the throughput.
+        </p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  ACADEMIC CITATION                                            -->
+    <!-- ============================================================ -->
+
+    <div class="academic-citation">
+      <span class="title">"Deep Residual Learning for Image Recognition"</span>
+      <span class="authors">Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun (2015)</span>
+      <p>
+        The paper that introduced ResNet. The core insight — skip connections that allow gradients to flow
+        through identity mappings — enabled training networks with 100+ layers. ResNet-18, the smallest
+        variant used here as a frozen feature extractor, has 8 residual blocks with 2 convolutional layers
+        each, producing a 512-dimensional feature vector after global average pooling.
+      </p>
+    </div>
+
+    <div class="academic-citation">
+      <span class="title">"Proximal Policy Optimization Algorithms"</span>
+      <span class="authors">John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, Oleg Klimov (2017)</span>
+      <p>
+        The PPO algorithm implemented by SKRL and configured in this file. The key hyperparameters we set —
+        rollout length (128), mini-batch count (16), and learning rate (1e-4) — directly interact with PPO's
+        clipped surrogate objective. The clip ratio (default 0.2) limits how far the new policy can deviate
+        from the old policy in a single update, and mini-batch SGD over multiple epochs extracts maximum
+        learning from each batch of experience.
+      </p>
+    </div>
+
+  </div>
+</section>

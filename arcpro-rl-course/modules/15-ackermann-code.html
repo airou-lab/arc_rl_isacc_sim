@@ -1,0 +1,59 @@
+<section class="module" id="module-13">
+  <div class="module-header">
+    <div class="module-number">Part 5: Action Kinematics</div>
+    <h2 class="module-title">Ackermann Steering Math (Code)</h2>
+    <p class="module-subtitle">Implementing Kinematics in actions.py.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>Let's look at how the bicycle model is implemented in PyTorch tensors inside <code>actions.py</code> to control the F1Tenth rover.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">ACTIONS.PY (Ackermann Mapping)</span>
+        <pre><code><span class="code-line"><span class="code-comment"># Calculate the turning radius (R) from steering angle (delta)</span></span>
+<span class="code-line">turn_radius = <span class="code-keyword">self</span>.wheelbase / torch.tan(torch.abs(steering) + <span class="code-number">1e-6</span>)</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-comment"># Calculate specific inner/outer wheel angles</span></span>
+<span class="code-line">inner_angle = torch.atan(<span class="code-keyword">self</span>.wheelbase / (turn_radius - <span class="code-keyword">self</span>.half_track))</span>
+<span class="code-line">outer_angle = torch.atan(<span class="code-keyword">self</span>.wheelbase / (turn_radius + <span class="code-keyword">self</span>.half_track))</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-comment"># Map to left and right joints based on turn direction</span></span>
+<span class="code-line">left_angle = torch.where(steering > <span class="code-number">0</span>, inner_angle, -outer_angle)</span>
+<span class="code-line">right_angle = torch.where(steering > <span class="code-number">0</span>, outer_angle, -inner_angle)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl">Calculate the imaginary circle the car is turning around (using the length of the car). Add $10^{-6}$ to prevent dividing by zero when going straight.</p>
+          <p class="tl">Calculate the sharper angle for the inner wheel.</p>
+          <p class="tl">Calculate the wider angle for the outer wheel.</p>
+          <p class="tl">If turning left, the left wheel is the inner wheel. If right, it's the outer wheel.</p>
+        </div>
+      </div>
+    </div>
+    
+    <h3>Action Fusing (Velocity Control)</h3>
+    <p>Similarly, the policy outputs separate throttle and brake commands, but the rigid body joints require a singular angular velocity target $\omega$. We fuse them mathematically in <code>CombinedDriveAction</code>.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">ACTIONS.PY (Fusing)</span>
+        <pre><code><span class="code-line">throttle = torch.clamp(actions[:, <span class="code-number">0</span>:<span class="code-number">1</span>], <span class="code-number">0.0</span>, <span class="code-number">1.0</span>)</span>
+<span class="code-line">brake    = torch.clamp(actions[:, <span class="code-number">1</span>:<span class="code-number">2</span>], <span class="code-number">0.0</span>, <span class="code-number">1.0</span>)</span>
+<span class="code-line"></span>
+<span class="code-line">drive = throttle * (<span class="code-number">1.0</span> - brake)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl">Clamp the AI throttle to exactly 0 to 1.</p>
+          <p class="tl">Clamp the AI brake to exactly 0 to 1.</p>
+          <p class="tl">Fuse them using multiplication! If brake is 1.0, the inverse is 0.0, so the drive is immediately cut to 0 regardless of throttle. This guarantees the AI can never drive backwards if it panics and mashes both pedals.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>

@@ -1,0 +1,54 @@
+<section class="module" id="module-2">
+  <div class="module-header">
+    <div class="module-number">Part 1: The Simulation Environment</div>
+    <h2 class="module-title">Scene Setup (Code)</h2>
+    <p class="module-subtitle">Implementing the theory in arcpro_env_cfg.py.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>Now let's look at how the GPU Physics Theory is practically implemented in the ARCPro codebase. Inside <code>arcpro_env_cfg.py</code>, we configure the exact timing and physical bounds of the GPU simulation.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">ARCPRO_ENV_CFG.PY</span>
+        <pre><code><span class="code-line"><span class="code-keyword">class</span> ARCProEnvCfg(ManagerBasedRLEnvCfg):</span>
+<span class="code-line">    <span class="code-comment"># Simulation physics step: 500 Hz</span></span>
+<span class="code-line">    sim_dt: <span class="code-keyword">float</span> = <span class="code-number">1.0</span> / <span class="code-number">500.0</span></span>
+<span class="code-line">    </span>
+<span class="code-line">    <span class="code-comment"># Control policy step: 50 Hz</span></span>
+<span class="code-line">    decimation: <span class="code-keyword">int</span> = <span class="code-number">10</span></span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl">Define the environment class inheriting from the RL Manager.</p>
+          <p class="tl">Physics Resolution: The integrator resolves rigid body collisions 500 times per simulated second (dt = 0.002s) to prevent object tunneling at high speeds.</p>
+          <p class="tl">Control Resolution: The neural network only infers actions every 10 physics steps (50 Hz). This mimics the real-world latency of the hardware controllers on the physical F1Tenth rover.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Spawning the World</h3>
+    <p>Instead of spawning one car, we spawn hundreds of them. The GPU can handle it.</p>
+
+    <div class="pattern-cards">
+      <div class="pattern-card">
+        <div class="pattern-icon">🌎</div>
+        <h4 class="pattern-title">The Track</h4>
+        <p class="pattern-desc">Loaded from an Asset file (USD), acting as the collision mesh for all environments.</p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">🏎️</div>
+        <h4 class="pattern-title">The F1Tenth Robot</h4>
+        <p class="pattern-desc">The chassis, 4 wheels, and Ackermann steering joints.</p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">📷</div>
+        <h4 class="pattern-title">The Tiled Camera</h4>
+        <p class="pattern-desc">A specialized GPU camera that renders 16 viewports at once into a single giant image tensor, bypassing CPU rendering.</p>
+      </div>
+    </div>
+
+  </div>
+</section>

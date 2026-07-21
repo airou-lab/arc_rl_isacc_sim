@@ -1,0 +1,459 @@
+<section class="module" id="module-16">
+  <div class="module-header">
+    <div class="module-number">Part 6: Episode Lifecycle</div>
+    <h2 class="module-title">Spawn &amp; Reset Logic (Code)</h2>
+    <p class="module-subtitle">How <code>reset_robot_to_fixed_spawn</code> teleports the car back to the starting line — with raycasting, quaternion math, and domain randomization hooks ready for the future.</p>
+  </div>
+  <div class="module-content">
+
+    <!-- ====== OVERVIEW ====== -->
+    <h3>What Happens When an Episode Resets?</h3>
+
+    <p>Every time the car crashes, stalls, or crosses a boundary line, Isaac Lab calls the <strong>reset event</strong> for that environment. The function <code>reset_robot_to_fixed_spawn</code> is the single reset handler for the entire ARCPro RL system. It must:</p>
+
+    <div class="pattern-cards">
+      <div class="pattern-card">
+        <div class="pattern-icon">📍</div>
+        <h4 class="pattern-title">1. Pick a Spawn Point</h4>
+        <p class="pattern-desc">Choose an (x, y) position on the track — currently a fixed location, but with domain randomization slots ready.</p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">📡</div>
+        <h4 class="pattern-title">2. Raycast for Ground Height</h4>
+        <p class="pattern-desc">Fire a PhysX ray downward to find the actual road surface height at that (x, y), then place the car slightly above it.</p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">🧭</div>
+        <h4 class="pattern-title">3. Set Orientation &amp; Velocity</h4>
+        <p class="pattern-desc">Compose a quaternion for the spawn heading, optionally give the car an initial forward velocity.</p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">🔄</div>
+        <h4 class="pattern-title">4. Zero Everything &amp; Reset FSMs</h4>
+        <p class="pattern-desc">Write joint states to defaults, zero the distance accumulator, and reset the GoSignalManager FSM for the affected environments.</p>
+      </div>
+    </div>
+
+    <p>Let's walk through every single line.</p>
+
+    <!-- ====== FUNCTION SIGNATURE ====== -->
+    <h3>Function Signature</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">EVENTS.PY</span>
+        <pre><code><span class="code-line"><span class="code-keyword">def</span> reset_robot_to_fixed_spawn(env, env_ids, asset_cfg=SceneEntityCfg(<span class="code-string">"robot"</span>)):</span>
+<span class="code-line">    asset = env.scene[asset_cfg.name]</span>
+<span class="code-line">    num_resets = len(env_ids)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong><code>env</code></strong> — the full Isaac Lab environment object, which owns the scene, device, extras dict, etc.</p>
+          <p class="tl"><strong><code>env_ids</code></strong> — a 1-D tensor of <em>which</em> parallel environments need to be reset this step. If environments 3, 7, and 12 just died, this tensor is <code>[3, 7, 12]</code>.</p>
+          <p class="tl"><strong><code>asset_cfg</code></strong> — tells the function which scene entity to reset. Defaults to <code>"robot"</code>, which resolves to the Ackermann car asset registered in the scene config.</p>
+          <p class="tl"><strong><code>asset</code></strong> — the actual articulation object (rigid body + joints). We'll write poses, velocities, and joint states to this object.</p>
+          <p class="tl"><strong><code>num_resets</code></strong> — how many environments we're resetting. Every tensor we build below has this as its batch dimension.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">⚡</div>
+      <div class="callout-content">
+        <strong class="callout-title">Why <code>env_ids</code> and Not All Envs?</strong>
+        <p>Isaac Lab runs thousands of environments in parallel. On any given step, only <em>some</em> of them might terminate. Resetting only the terminated environments (identified by <code>env_ids</code>) avoids disturbing the others mid-episode. This is the standard Isaac Lab reset pattern — every reset function receives the subset of environment indices that need work.</p>
+      </div>
+    </div>
+
+    <!-- ====== DOMAIN RANDOMIZATION SLOTS ====== -->
+    <h3>Domain Randomization Slots (Currently Disabled)</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">EVENTS.PY</span>
+        <pre><code><span class="code-line">    base_spawn_x, base_spawn_y = <span class="code-number">-16.197</span>, <span class="code-number">5.50</span></span>
+<span class="code-line">    base_spawn_yaw = <span class="code-number">1.5708</span></span>
+<span class="code-line"></span>
+<span class="code-line">    rand_offset_x = torch.zeros(num_resets, device=env.device)</span>
+<span class="code-line">    rand_yaw = torch.zeros(num_resets, device=env.device)</span>
+<span class="code-line">    rand_vel_x = torch.zeros(num_resets, device=env.device)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong><code>base_spawn_x = -16.197</code>, <code>base_spawn_y = 5.50</code></strong> — the fixed spawn coordinates in the track's <em>local</em> frame. These place the car at a specific point on the road (near the start line).</p>
+          <p class="tl"><strong><code>base_spawn_yaw = 1.5708</code></strong> — that's $\frac{\pi}{2}$ radians, meaning the car faces in the +Y direction at spawn. The track is oriented so that the initial straight runs along the Y axis.</p>
+          <p class="tl"><strong><code>rand_offset_x = zeros</code></strong> — a placeholder for lateral randomization. If you wanted to randomly shift the spawn position left or right across the lane, you'd replace this with something like <code>torch.uniform(-0.3, 0.3)</code>.</p>
+          <p class="tl"><strong><code>rand_yaw = zeros</code></strong> — a placeholder for heading randomization. You could add ±5° of random yaw perturbation to make the policy more robust to initial misalignment.</p>
+          <p class="tl"><strong><code>rand_vel_x = zeros</code></strong> — a placeholder for initial velocity randomization. In a domain-randomized curriculum, you might spawn the car already moving at 0.5–2.0 m/s to train the policy to handle rolling starts.</p>
+          <p class="tl">All three are <strong>zeroed out</strong> right now — the car always spawns at exactly the same position, heading, and velocity. But the infrastructure is in place to turn on randomization with a single line change each.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">🎲</div>
+      <div class="callout-content">
+        <strong class="callout-title">Domain Randomization — Why Bother?</strong>
+        <p>In sim-to-real transfer, you want the policy to be robust to things it can't perfectly predict — its exact starting position, its initial heading, whether it's already moving. By randomizing these during training, the policy learns to handle a <em>distribution</em> of initial conditions rather than memorizing a single scenario. The current code has the <strong>scaffolding</strong> ready; you just need to swap the zeros for distributions when you're ready to increase training difficulty.</p>
+      </div>
+    </div>
+
+    <!-- ====== POSITION COMPUTATION ====== -->
+    <h3>Computing the Spawn Position</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">EVENTS.PY</span>
+        <pre><code><span class="code-line">    env_origins = env.scene.env_origins[env_ids]</span>
+<span class="code-line"></span>
+<span class="code-line">    final_pos = torch.zeros((num_resets, <span class="code-number">3</span>), device=env.device)</span>
+<span class="code-line">    final_pos[:, <span class="code-number">0</span>] = env_origins[:, <span class="code-number">0</span>] + base_spawn_x + rand_offset_x</span>
+<span class="code-line">    final_pos[:, <span class="code-number">1</span>] = env_origins[:, <span class="code-number">1</span>] + base_spawn_y</span>
+<span class="code-line">    final_pos[:, <span class="code-number">2</span>] = env_origins[:, <span class="code-number">2</span>] + <span class="code-number">0.12</span></span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong><code>env_origins</code></strong> — Isaac Lab tiles parallel environments across the simulation world. Environment 0 might be at (0, 0, 0), environment 1 at (100, 0, 0), etc. The <code>env_origins</code> tensor holds the world-space offset of each environment's origin.</p>
+          <p class="tl">We index with <code>[env_ids]</code> to get only the origins for the environments we're resetting.</p>
+          <p class="tl"><strong><code>final_pos[:, 0]</code></strong> — X position = environment origin X + base spawn X + random lateral offset (currently 0).</p>
+          <p class="tl"><strong><code>final_pos[:, 1]</code></strong> — Y position = environment origin Y + base spawn Y. No randomization on Y (the "forward" direction at spawn).</p>
+          <p class="tl"><strong><code>final_pos[:, 2]</code></strong> — Z position = environment origin Z + <strong>0.12 meters</strong>. This is the <em>safe drop height</em> — we start 12 cm above the origin as a fallback, in case the raycast (below) fails to find the ground.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">📐</div>
+      <div class="callout-content">
+        <strong class="callout-title">Why 0.12 m?</strong>
+        <p>The car's chassis sits roughly 5–8 cm above the ground when resting on its wheels. Setting the initial Z to 12 cm means the car will "drop" a few centimeters onto the surface — close enough that it lands gently within a few physics steps, but high enough that it doesn't clip through the road mesh. If the raycast below succeeds, this fallback value gets overwritten with a more precise height.</p>
+      </div>
+    </div>
+
+    <!-- ====== PHYSX RAYCASTING ====== -->
+    <h3>PhysX Raycasting — Finding the Road Surface</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">EVENTS.PY</span>
+        <pre><code><span class="code-line">    quats = torch.zeros((num_resets, <span class="code-number">4</span>), device=env.device)</span>
+<span class="code-line">    query = omni.physx.get_physx_scene_query_interface()</span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-keyword">for</span> i, env_id <span class="code-keyword">in</span> enumerate(env_ids):</span>
+<span class="code-line">        world_x, world_y = final_pos[i, <span class="code-number">0</span>].item(), final_pos[i, <span class="code-number">1</span>].item()</span>
+<span class="code-line">        hit = query.raycast_closest(</span>
+<span class="code-line">            (world_x, world_y, <span class="code-number">100.0</span>),  <span class="code-comment"># origin: high above the track</span></span>
+<span class="code-line">            (<span class="code-number">0.0</span>, <span class="code-number">0.0</span>, <span class="code-number">-1.0</span>),              <span class="code-comment"># direction: straight down</span></span>
+<span class="code-line">            <span class="code-number">200.0</span>                           <span class="code-comment"># max distance: 200 meters</span></span>
+<span class="code-line">        )</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong><code>quats</code></strong> — pre-allocate a (num_resets × 4) tensor for the spawn orientations. We'll fill these inside the loop.</p>
+          <p class="tl"><strong><code>query</code></strong> — the PhysX Scene Query Interface. This is NVIDIA's low-level physics engine API exposed through Omniverse. It lets us cast rays against the collision geometry of the entire scene.</p>
+          <p class="tl"><strong>The loop</strong> iterates over each environment being reset. We need to loop because <code>raycast_closest</code> is a CPU-side, single-ray API — it doesn't support batched GPU raycasts.</p>
+          <p class="tl"><strong><code>world_x, world_y</code></strong> — we extract the world-space X and Y coordinates (as Python floats via <code>.item()</code>) for this environment's spawn point.</p>
+          <p class="tl"><strong><code>raycast_closest</code></strong> fires a single ray from <code>(world_x, world_y, 100.0)</code> — that's 100 meters up in the air — straight downward <code>(0, 0, -1)</code>, with a maximum travel distance of 200 meters. It returns the <em>closest</em> collision mesh hit along that ray.</p>
+          <p class="tl">This is how we find the actual elevation of the road surface at the spawn point, even if the track has elevation changes, banked curves, or is on uneven terrain.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">📡</div>
+      <div class="callout-content">
+        <strong class="callout-title">Why Not Use a Flat Z?</strong>
+        <p>If the track were perfectly flat, you could hardcode <code>z = 0.12</code> and be done. But real race tracks have elevation changes — hills, dips, banked corners. The raycast dynamically finds the road surface height at each spawn point, making the reset function work on <strong>any track geometry</strong> without manual tuning. The 0.12 m fallback only kicks in if the raycast misses (e.g., if the spawn point is off the road mesh).</p>
+      </div>
+    </div>
+
+    <!-- ====== QUATERNION COMPOSITION ====== -->
+    <h3>Quaternion Composition for Spawn Orientation</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">EVENTS.PY</span>
+        <pre><code><span class="code-line">        yaw_offset = rand_yaw[i].item()</span>
+<span class="code-line">        half_yaw = (base_spawn_yaw + yaw_offset) / <span class="code-number">2.0</span></span>
+<span class="code-line"></span>
+<span class="code-line">        quats[i, <span class="code-number">0</span>] = math.cos(half_yaw)  <span class="code-comment"># w</span></span>
+<span class="code-line">        quats[i, <span class="code-number">1</span>] = <span class="code-number">0.0</span>                <span class="code-comment"># x</span></span>
+<span class="code-line">        quats[i, <span class="code-number">2</span>] = <span class="code-number">0.0</span>                <span class="code-comment"># y</span></span>
+<span class="code-line">        quats[i, <span class="code-number">3</span>] = math.sin(half_yaw)  <span class="code-comment"># z</span></span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong><code>yaw_offset</code></strong> — the random heading perturbation for this environment (currently always 0.0).</p>
+          <p class="tl"><strong><code>half_yaw</code></strong> — quaternions use <em>half-angle</em> encoding. To represent a rotation of angle $\theta$ around an axis, the quaternion uses $\cos(\theta/2)$ and $\sin(\theta/2)$.</p>
+          <p class="tl">For a pure yaw rotation (around the Z axis), the quaternion is:</p>
+          <p class="tl" style="text-align: center;">$q = (\cos\frac{\theta}{2},\ 0,\ 0,\ \sin\frac{\theta}{2})$</p>
+          <p class="tl">where the format is $(w, x, y, z)$. The X and Y components are zero because we're only rotating around Z (no roll, no pitch).</p>
+          <p class="tl">With <code>base_spawn_yaw = 1.5708</code> ($\frac{\pi}{2}$) and zero offset, we get: <code>half_yaw = π/4</code>, so $w = \cos(\pi/4) \approx 0.707$ and $z = \sin(\pi/4) \approx 0.707$. This is the quaternion for a 90° turn — facing the +Y direction.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">🧮</div>
+      <div class="callout-content">
+        <strong class="callout-title">Quaternion Half-Angle Formula</strong>
+        <p>A rotation of angle $\theta$ around the unit axis $\hat{n} = (n_x, n_y, n_z)$ is represented by the quaternion:</p>
+        <p style="text-align: center;">$q = \left(\cos\frac{\theta}{2},\; n_x \sin\frac{\theta}{2},\; n_y \sin\frac{\theta}{2},\; n_z \sin\frac{\theta}{2}\right)$</p>
+        <p>For a yaw-only rotation, $\hat{n} = (0, 0, 1)$ (the Z axis), so $q_x = 0$, $q_y = 0$, and only $q_w$ and $q_z$ are nonzero. This is the simplest possible quaternion — just the half-angle cosine and sine.</p>
+      </div>
+    </div>
+
+    <!-- ====== RAYCAST HIT HANDLING ====== -->
+    <h3>Snapping Z to the Road Surface</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">EVENTS.PY</span>
+        <pre><code><span class="code-line">        <span class="code-keyword">if</span> hit[<span class="code-string">"hit"</span>]:</span>
+<span class="code-line">            spawn_z = hit[<span class="code-string">"position"</span>][<span class="code-number">2</span>] + <span class="code-number">0.12</span></span>
+<span class="code-line">            final_pos[i, <span class="code-number">2</span>] = spawn_z</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong><code>hit["hit"]</code></strong> — a boolean. <code>True</code> if the ray hit any collision geometry (the road surface), <code>False</code> if it sailed through empty space.</p>
+          <p class="tl"><strong><code>hit["position"][2]</code></strong> — the Z coordinate of the point where the ray hit the road surface. This is the <em>exact ground elevation</em> at this (x, y) point.</p>
+          <p class="tl"><strong><code>+ 0.12</code></strong> — add the safe drop height (12 cm) above the ground surface. This ensures the car spawns slightly above the road and settles onto it in the first few physics steps, rather than spawning inside the mesh.</p>
+          <p class="tl">If the raycast <em>misses</em> (no road geometry at this point), the fallback Z from earlier (<code>env_origins[:, 2] + 0.12</code>) is kept. This is a defensive coding pattern — the function works even if the track mesh is missing or the spawn point is slightly off the road.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== INITIAL VELOCITY ====== -->
+    <h3>Initial Velocity in the World Frame</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">EVENTS.PY</span>
+        <pre><code><span class="code-line">    velocities = torch.zeros((num_resets, <span class="code-number">6</span>), device=env.device)</span>
+<span class="code-line">    velocities[:, <span class="code-number">0</span>] = rand_vel_x * torch.cos(base_spawn_yaw + rand_yaw)</span>
+<span class="code-line">    velocities[:, <span class="code-number">1</span>] = rand_vel_x * torch.sin(base_spawn_yaw + rand_yaw)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong><code>velocities</code></strong> — a (num_resets × 6) tensor. The first 3 columns are linear velocity $(v_x, v_y, v_z)$ in the <em>world frame</em>, and the last 3 are angular velocity $(\omega_x, \omega_y, \omega_z)$. All start at zero.</p>
+          <p class="tl"><strong><code>velocities[:, 0]</code></strong> — world-frame $V_x = V \cdot \cos(\text{yaw})$. This projects the forward speed into the world X direction based on the spawn heading.</p>
+          <p class="tl"><strong><code>velocities[:, 1]</code></strong> — world-frame $V_y = V \cdot \sin(\text{yaw})$. Same projection into the world Y direction.</p>
+          <p class="tl">Since <code>rand_vel_x</code> is currently all zeros, <strong>the car always spawns stationary</strong>. But if you set <code>rand_vel_x</code> to, say, <code>torch.uniform(0.5, 2.0)</code>, the car would spawn already moving forward at 0.5–2.0 m/s, correctly decomposed into world-frame X and Y components based on its heading.</p>
+          <p class="tl">The Z velocity, and all angular velocities, remain zero — no vertical launch, no spinning.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">🧭</div>
+      <div class="callout-content">
+        <strong class="callout-title">Body Frame vs. World Frame</strong>
+        <p><code>rand_vel_x</code> is conceptually the car's forward speed (body frame). But <code>write_root_velocity_to_sim</code> expects <strong>world-frame</strong> velocities. The $\cos/\sin$ projection converts:</p>
+        <p style="text-align: center;">$V_x^{\text{world}} = V_{\text{forward}} \cdot \cos(\psi), \quad V_y^{\text{world}} = V_{\text{forward}} \cdot \sin(\psi)$</p>
+        <p>where $\psi$ is the spawn yaw angle. This is the standard 2D rotation from body to world frame.</p>
+      </div>
+    </div>
+
+    <!-- ====== TELEPORTING ====== -->
+    <h3>Teleporting — Writing the New State to the Simulator</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">EVENTS.PY</span>
+        <pre><code><span class="code-line">    asset.write_root_pose_to_sim(</span>
+<span class="code-line">        torch.cat([final_pos, quats], dim=<span class="code-number">-1</span>),</span>
+<span class="code-line">        env_ids=env_ids</span>
+<span class="code-line">    )</span>
+<span class="code-line">    asset.write_root_velocity_to_sim(velocities, env_ids=env_ids)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong><code>torch.cat([final_pos, quats], dim=-1)</code></strong> — concatenates the position (3 values) and quaternion (4 values) into a single (num_resets × 7) tensor. Isaac Lab's <code>write_root_pose_to_sim</code> expects this exact format: $[x, y, z, q_w, q_x, q_y, q_z]$.</p>
+          <p class="tl"><strong><code>write_root_pose_to_sim</code></strong> — this is a <em>teleport</em>. It doesn't smoothly move the car; it instantly sets the root link's position and orientation in the physics engine. The <code>env_ids</code> argument ensures we only modify the specified environments.</p>
+          <p class="tl"><strong><code>write_root_velocity_to_sim</code></strong> — similarly teleports the velocity. Sets both linear and angular velocity of the root body. Currently everything is zero (dead stop), but the infrastructure supports rolling starts.</p>
+          <p class="tl">Together, these two calls fully define the car's rigid-body state at spawn: where it is, which way it faces, and how fast it's moving.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== ZEROING JOINT STATES ====== -->
+    <h3>Zeroing Joint States on Reset</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">EVENTS.PY</span>
+        <pre><code><span class="code-line">    joint_pos = asset.data.default_joint_pos[env_ids]</span>
+<span class="code-line">    joint_vel = torch.zeros_like(asset.data.joint_vel[env_ids])</span>
+<span class="code-line">    asset.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong><code>default_joint_pos</code></strong> — the default joint positions from the URDF/USD asset definition. For the Ackermann car, this means: wheels at neutral rotation, steering at zero angle. We reset the joints to their "factory default" configuration.</p>
+          <p class="tl"><strong><code>joint_vel = zeros_like</code></strong> — zero out all joint velocities. No wheel spin, no steering rate. The car is completely still internally.</p>
+          <p class="tl"><strong><code>write_joint_state_to_sim</code></strong> — writes both joint positions and velocities to the physics engine in one call. Like the root pose teleport, this is an instant state override — it doesn't go through the physics solver.</p>
+          <p class="tl">This is important because the car might have been spinning its wheels wildly or had its steering cranked to the limit when it died. Without zeroing the joints, those residual states would carry over into the new episode.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">🔧</div>
+      <div class="callout-content">
+        <strong class="callout-title">The Three Levels of Reset</strong>
+        <p>A complete reset touches <strong>three independent state groups</strong>:</p>
+        <p>1. <strong>Root pose</strong> — where the chassis is in the world (position + orientation)</p>
+        <p>2. <strong>Root velocity</strong> — how fast the chassis is moving (linear + angular)</p>
+        <p>3. <strong>Joint states</strong> — the internal configuration of wheels and steering (positions + velocities)</p>
+        <p>Missing any of these would leave "ghost state" from the previous episode — a common source of subtle bugs in RL environments.</p>
+      </div>
+    </div>
+
+    <!-- ====== DISTANCE ACCUMULATOR RESET ====== -->
+    <h3>Resetting the Distance Accumulator</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">EVENTS.PY</span>
+        <pre><code><span class="code-line">    <span class="code-keyword">if</span> <span class="code-string">"distance"</span> <span class="code-keyword">in</span> env.extras:</span>
+<span class="code-line">        env.extras[<span class="code-string">"distance"</span>][env_ids] = <span class="code-number">0.0</span></span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong><code>env.extras["distance"]</code></strong> — the running odometer that tracks how far each car has traveled along the centerline during the current episode. This is used by the reward function (distance progress reward) and for logging.</p>
+          <p class="tl"><strong><code>[env_ids] = 0.0</code></strong> — zero out the distance for every environment being reset. The new episode starts with zero distance traveled.</p>
+          <p class="tl">The <code>if</code> guard handles the edge case where the distance key hasn't been created yet (e.g., during the very first simulation step before any reward computation has run).</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== GO SIGNAL MANAGER RESET ====== -->
+    <h3>Resetting the GoSignalManager FSM</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">EVENTS.PY</span>
+        <pre><code><span class="code-line">    <span class="code-keyword">try</span>:</span>
+<span class="code-line">        <span class="code-keyword">from</span> mdp.go_signal_manager <span class="code-keyword">import</span> get_go_signal_manager</span>
+<span class="code-line">        mgr = get_go_signal_manager(num_envs=env.num_envs, device=env.device)</span>
+<span class="code-line">        mgr.reset(env_ids)</span>
+<span class="code-line">    <span class="code-keyword">except</span> Exception:</span>
+<span class="code-line">        <span class="code-keyword">pass</span></span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl"><strong><code>get_go_signal_manager</code></strong> — retrieves the singleton GoSignalManager instance. This is the FSM (Finite State Machine) that controls the traffic-light countdown: RED → YELLOW → GREEN → GO.</p>
+          <p class="tl"><strong><code>mgr.reset(env_ids)</code></strong> — resets the FSM for the specified environments back to its initial state (RED, timer = 0). This ensures the new episode starts with a fresh countdown sequence.</p>
+          <p class="tl"><strong><code>try/except</code></strong> — a defensive pattern. If the GoSignalManager module doesn't exist or hasn't been configured, the reset silently continues without it. This makes the spawn function work even in simplified training setups that don't use the go-signal system.</p>
+          <p class="tl">Without this reset, the FSM would carry over its state from the dead episode — the new episode might start in GREEN or mid-countdown, which would be incorrect.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== FULL FUNCTION SUMMARY ====== -->
+    <h3>Complete Function — All Together</h3>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">EVENTS.PY — FULL FUNCTION</span>
+        <pre><code><span class="code-line"><span class="code-keyword">def</span> reset_robot_to_fixed_spawn(env, env_ids, asset_cfg=SceneEntityCfg(<span class="code-string">"robot"</span>)):</span>
+<span class="code-line">    asset = env.scene[asset_cfg.name]</span>
+<span class="code-line">    num_resets = len(env_ids)</span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-comment"># ── Fixed spawn coordinates (track-local frame) ──</span></span>
+<span class="code-line">    base_spawn_x, base_spawn_y = <span class="code-number">-16.197</span>, <span class="code-number">5.50</span></span>
+<span class="code-line">    base_spawn_yaw = <span class="code-number">1.5708</span>  <span class="code-comment"># π/2 — facing +Y</span></span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-comment"># ── Domain randomization slots (all disabled) ──</span></span>
+<span class="code-line">    rand_offset_x = torch.zeros(num_resets, device=env.device)</span>
+<span class="code-line">    rand_yaw      = torch.zeros(num_resets, device=env.device)</span>
+<span class="code-line">    rand_vel_x    = torch.zeros(num_resets, device=env.device)</span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-comment"># ── Build world-space spawn positions ──</span></span>
+<span class="code-line">    env_origins = env.scene.env_origins[env_ids]</span>
+<span class="code-line">    final_pos = torch.zeros((num_resets, <span class="code-number">3</span>), device=env.device)</span>
+<span class="code-line">    final_pos[:, <span class="code-number">0</span>] = env_origins[:, <span class="code-number">0</span>] + base_spawn_x + rand_offset_x</span>
+<span class="code-line">    final_pos[:, <span class="code-number">1</span>] = env_origins[:, <span class="code-number">1</span>] + base_spawn_y</span>
+<span class="code-line">    final_pos[:, <span class="code-number">2</span>] = env_origins[:, <span class="code-number">2</span>] + <span class="code-number">0.12</span>  <span class="code-comment"># safe drop height</span></span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-comment"># ── Raycast + quaternion per environment ──</span></span>
+<span class="code-line">    quats = torch.zeros((num_resets, <span class="code-number">4</span>), device=env.device)</span>
+<span class="code-line">    query = omni.physx.get_physx_scene_query_interface()</span>
+<span class="code-line">    <span class="code-keyword">for</span> i, env_id <span class="code-keyword">in</span> enumerate(env_ids):</span>
+<span class="code-line">        world_x, world_y = final_pos[i, <span class="code-number">0</span>].item(), final_pos[i, <span class="code-number">1</span>].item()</span>
+<span class="code-line">        hit = query.raycast_closest((world_x, world_y, <span class="code-number">100.0</span>), (<span class="code-number">0.0</span>, <span class="code-number">0.0</span>, <span class="code-number">-1.0</span>), <span class="code-number">200.0</span>)</span>
+<span class="code-line">        yaw_offset = rand_yaw[i].item()</span>
+<span class="code-line">        half_yaw = (base_spawn_yaw + yaw_offset) / <span class="code-number">2.0</span></span>
+<span class="code-line">        quats[i, <span class="code-number">0</span>] = math.cos(half_yaw)  <span class="code-comment"># w</span></span>
+<span class="code-line">        quats[i, <span class="code-number">1</span>] = <span class="code-number">0.0</span>                <span class="code-comment"># x</span></span>
+<span class="code-line">        quats[i, <span class="code-number">2</span>] = <span class="code-number">0.0</span>                <span class="code-comment"># y</span></span>
+<span class="code-line">        quats[i, <span class="code-number">3</span>] = math.sin(half_yaw)  <span class="code-comment"># z</span></span>
+<span class="code-line">        <span class="code-keyword">if</span> hit[<span class="code-string">"hit"</span>]:</span>
+<span class="code-line">            final_pos[i, <span class="code-number">2</span>] = hit[<span class="code-string">"position"</span>][<span class="code-number">2</span>] + <span class="code-number">0.12</span></span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-comment"># ── Initial velocity (world frame) ──</span></span>
+<span class="code-line">    velocities = torch.zeros((num_resets, <span class="code-number">6</span>), device=env.device)</span>
+<span class="code-line">    velocities[:, <span class="code-number">0</span>] = rand_vel_x * torch.cos(base_spawn_yaw + rand_yaw)</span>
+<span class="code-line">    velocities[:, <span class="code-number">1</span>] = rand_vel_x * torch.sin(base_spawn_yaw + rand_yaw)</span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-comment"># ── Teleport ──</span></span>
+<span class="code-line">    asset.write_root_pose_to_sim(torch.cat([final_pos, quats], dim=<span class="code-number">-1</span>), env_ids=env_ids)</span>
+<span class="code-line">    asset.write_root_velocity_to_sim(velocities, env_ids=env_ids)</span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-comment"># ── Zero joints ──</span></span>
+<span class="code-line">    joint_pos = asset.data.default_joint_pos[env_ids]</span>
+<span class="code-line">    joint_vel = torch.zeros_like(asset.data.joint_vel[env_ids])</span>
+<span class="code-line">    asset.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)</span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-comment"># ── Reset distance odometer ──</span></span>
+<span class="code-line">    <span class="code-keyword">if</span> <span class="code-string">"distance"</span> <span class="code-keyword">in</span> env.extras:</span>
+<span class="code-line">        env.extras[<span class="code-string">"distance"</span>][env_ids] = <span class="code-number">0.0</span></span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-comment"># ── Reset GoSignalManager FSM ──</span></span>
+<span class="code-line">    <span class="code-keyword">try</span>:</span>
+<span class="code-line">        <span class="code-keyword">from</span> mdp.go_signal_manager <span class="code-keyword">import</span> get_go_signal_manager</span>
+<span class="code-line">        mgr = get_go_signal_manager(num_envs=env.num_envs, device=env.device)</span>
+<span class="code-line">        mgr.reset(env_ids)</span>
+<span class="code-line">    <span class="code-keyword">except</span> Exception:</span>
+<span class="code-line">        <span class="code-keyword">pass</span></span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH — EXECUTION FLOW</span>
+        <div class="translation-lines">
+          <p class="tl"><strong>Step 1:</strong> Pick the fixed spawn point (-16.197, 5.50) with heading π/2 (facing +Y). Domain randomization slots exist but are all zeroed.</p>
+          <p class="tl"><strong>Step 2:</strong> Convert to world coordinates by adding the per-environment origin offsets. Set Z to a safe 12cm above origin as a fallback.</p>
+          <p class="tl"><strong>Step 3:</strong> For each environment, fire a PhysX ray straight down to find the actual road height, and build a yaw quaternion using the half-angle formula.</p>
+          <p class="tl"><strong>Step 4:</strong> Compute world-frame velocity from the forward speed and heading (currently zero).</p>
+          <p class="tl"><strong>Step 5:</strong> Teleport the car — write the new pose and velocity to the simulator.</p>
+          <p class="tl"><strong>Step 6:</strong> Reset joints to factory defaults with zero velocity.</p>
+          <p class="tl"><strong>Step 7:</strong> Zero the distance odometer so the new episode starts fresh.</p>
+          <p class="tl"><strong>Step 8:</strong> Reset the GoSignalManager FSM back to RED so the traffic light countdown restarts.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">🏗️</div>
+      <div class="callout-content">
+        <strong class="callout-title">Design Philosophy: Ready for Curriculum Learning</strong>
+        <p>This function is deliberately over-engineered for what it currently does (spawn at a single fixed point). The three randomization slots — position, heading, velocity — are the exact levers you'd pull in a <strong>curriculum learning</strong> setup:</p>
+        <p><strong>Level 1 (current):</strong> Fixed spawn, no randomization. The policy learns the basic task.</p>
+        <p><strong>Level 2:</strong> Add small position offsets (±30 cm). The policy learns to handle starting slightly off-center.</p>
+        <p><strong>Level 3:</strong> Add heading noise (±5°). The policy learns to correct initial misalignment.</p>
+        <p><strong>Level 4:</strong> Add initial velocity (0.5–2.0 m/s). The policy learns to handle rolling starts.</p>
+        <p>Each level increases difficulty gradually, preventing catastrophic forgetting while building robustness.</p>
+      </div>
+    </div>
+
+  </div>
+</section>

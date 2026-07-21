@@ -8,9 +8,15 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
 def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    return _compute_telemetry(env, asset_cfg, masked=True)
+
+def get_critic_state_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    return _compute_telemetry(env, asset_cfg, masked=False)
+
+def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"), masked: bool = True) -> torch.Tensor:
     """
-    Constructs the 12-element telemetry vector for the ARCPro policy.
-    Indices follow the legacy protocol established in Phase 1.
+    Constructs the 22-element telemetry vector for the ARCPro policy.
+    Indices follow the legacy protocol established in Phase 1 with added waypoints.
     """
     asset = env.scene[asset_cfg.name]
 
@@ -26,20 +32,52 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     env_origins = env.scene.env_origins
     local_pos = asset.data.root_pos_w - env_origins
 
-    # Indices 0-2: Navigation intent (Vectorized RoadManager)
-    from mdp.road_manager import get_road_manager
-    # Note: Milestone 4 uses 2 agents, but for now we assume 1 agent per env in single-agent mode.
-    num_agents = 1
-    rm = get_road_manager(num_envs=env.num_envs, num_agents=num_agents, device=env.device)
-    rm.update(env)
-    
-    turn_tokens, go_signals = rm.get_nav_commands()
+    # Slot 0: turn_token — Provided by vectorized RoadManager (MARL ready)
+    try:
+        from mdp.road_manager import get_road_manager
+        rm = get_road_manager(num_envs=env.num_envs, num_agents=1, device=env.device)
+        if masked:
+            rm.update(env)
+        turn_tokens, _ = rm.get_nav_commands()
+        # Squeeze the agent dimension (B, 1) -> (B,)
+        obs[:, 0] = turn_tokens.squeeze(1)
+    except Exception as e:
+        print(f"[Observations] Failed to get turn tokens: {e}")
+        obs[:, 0] = 0.0
 
-    # Map (B, N) to obs (B, 12) - Current assumption: N=1
-    # We use .view(-1) to ensure it fits into the (B,) slice of obs
-    obs[:, 0] = turn_tokens.view(-1)
-    obs[:, 1] = go_signals.view(-1)
-    obs[:, 2] = 0.0  # IDX_GOAL_DIST
+    # Slot 1: go_signal — UNMASKED. Driven by GoSignalManager from the camera
+    #         feed (T3.2). When go_signal=0 the policy should brake;
+    #         T3.3 also enforces this in the action term as a safety gate.
+    try:
+        from mdp.go_signal_manager import get_go_signal_manager
+        mgr = get_go_signal_manager(num_envs=env.num_envs, device=env.device)
+        camera = env.scene.get("tiled_camera") if hasattr(env.scene, "get") else None
+        if camera is None:
+            # Fallback for non-Dict scenes (older IsaacLab).
+            try:
+                camera = env.scene["tiled_camera"]
+            except KeyError:
+                camera = None
+        images = None
+        if camera is not None and hasattr(camera, "data") and "rgb" in camera.data.output:
+            images = camera.data.output["rgb"]  # (N, H, W, 3) uint8
+            
+        # FIX: Only step the GoSignalManager ONCE per physics step (during masked policy call)
+        if masked:
+            go_signal = mgr.update(images)
+            env.extras["go_signal"] = go_signal
+        else:
+            # Fetch the cached signal for the critic call
+            go_signal = env.extras.get("go_signal", torch.ones(env.num_envs, device=env.device))
+            
+        obs[:, 1] = go_signal
+    except Exception:
+        # Defensive: detector or camera failure must not crash training.
+        # Falls back to "always go" (slot 1 stays 0 — telemetry obs init).
+        obs[:, 1] = 1.0
+
+    # Slot 2: goal_dist — PVP-masked to 0.
+    obs[:, 2] = 0.0
 
     # Index 3: Forward Speed (m/s) - Absolute Magnitude for Control Flip support
     obs[:, 3] = torch.norm(asset.data.root_lin_vel_b[:, :2], dim=1)
@@ -68,13 +106,36 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     if "distance" not in env.extras:
         env.extras["distance"] = torch.zeros(env.num_envs, device=env.device)
     
-    # Reset distance for environments that just reset
+    # === TRACK PROGRESS TRACKING ===
+    # Uses the waypoint index from TrackManager to measure how far the agent
+    # has actually traveled along the track (not just forward velocity).
+    if masked and tm.last_indices is not None and tm.waypoints is not None:
+        num_wps = tm.waypoints.shape[0]
+        current_wp_idx = tm.last_indices  # (num_envs,) int
+        
+        # Track the spawn waypoint index (set on first call or on reset)
+        if "spawn_wp_idx" not in env.extras:
+            env.extras["spawn_wp_idx"] = current_wp_idx.clone()
+        
+        # Compute net waypoints traveled from spawn (handles wrap-around)
+        delta_wp = (current_wp_idx - env.extras["spawn_wp_idx"]) % num_wps
+        # Clamp: if delta > half the track, agent moved backward — treat as 0
+        delta_wp = torch.where(delta_wp > num_wps // 2, torch.zeros_like(delta_wp), delta_wp)
+        track_progress_pct = (delta_wp.float() / num_wps) * 100.0  # 0-100%
+        env.extras["track_progress_pct"] = track_progress_pct
+        env.extras["track_wp_delta"] = delta_wp  # raw waypoints traversed
+    
+    # Reset distance and spawn_wp for environments that just reset
     reset_buf = getattr(env, "reset_buf", None)
-    if reset_buf is not None:
+    if reset_buf is not None and masked:
         env.extras["distance"] = torch.where(reset_buf, torch.zeros_like(env.extras["distance"]), env.extras["distance"])
+        if "spawn_wp_idx" in env.extras and tm.last_indices is not None:
+            env.extras["spawn_wp_idx"] = torch.where(reset_buf, tm.last_indices, env.extras["spawn_wp_idx"])
 
-    # Calculate distance moved in this step
-    env.extras["distance"] += asset.data.root_lin_vel_b[:, 0] * 0.05
+    # Calculate distance moved in this step (only update once per step)
+    if masked:
+        # FIX: Use 0.02 for 50Hz clock (was previously 0.05 for 20Hz)
+        env.extras["distance"] += asset.data.root_lin_vel_b[:, 0] * 0.02
     
     # Store raw values in extras for Reward/Termination (Unmasked)
     env.extras["lat_err"] = lat_err
@@ -83,10 +144,9 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     env.extras["dist_y"] = dist_y
     env.extras["dist_w"] = dist_w
     
-    # Vision-only Mandate: Mask ground-truth errors in the policy observation
-    # This forces the ResNet-18 to learn features from the camera
-    obs[:, 8] = 0.0 # MASKED lat_err
-    obs[:, 9] = 0.0 # MASKED head_err
+    if masked:
+        obs[:, 8] = env.extras["lat_err"] # UNMASKED for Phase 1
+        obs[:, 9] = env.extras["head_err"] # UNMASKED for Phase 1
     
     # Index 10: Path Curvature (Kappa)
     obs[:, 10] = kappa

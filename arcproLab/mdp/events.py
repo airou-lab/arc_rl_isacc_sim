@@ -19,8 +19,8 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     asset = env.scene[asset_cfg.name]
     num_resets = len(env_ids)
     
-    # Base Target: Lane Center (Sync with -16.2 centerline)
-    base_spawn_x, base_spawn_y = -16.18, 5.30
+    # Exactly on the path center (X=-16.197) at safe drop height
+    base_spawn_x, base_spawn_y = -16.197, 5.50
     base_spawn_yaw = 1.5708 # Face North
     
     # 1. Domain Randomization (Hardening)
@@ -37,7 +37,7 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     final_pos = torch.zeros((num_resets, 3), device=env.device)
     final_pos[:, 0] = env_origins[:, 0] + base_spawn_x + rand_offset_x
     final_pos[:, 1] = env_origins[:, 1] + base_spawn_y
-    final_pos[:, 2] = env_origins[:, 2] + 0.20 # Safe drop height
+    final_pos[:, 2] = env_origins[:, 2] + 0.12 # Safe drop height
 
     # 3. Compute final rotations (WXYZ)
     quats = torch.zeros((num_resets, 4), device=env.device)
@@ -74,8 +74,8 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
         quats[i, 3] = math.sin(half_yaw)
 
         if hit["hit"]:
-            # Snap Z to road (20cm offset)
-            spawn_z = hit["position"][2] + 0.20
+            # Snap Z to road
+            spawn_z = hit["position"][2] + 0.12
             final_pos[i, 2] = spawn_z
     
     # 4. Apply Initial Velocity (World Frame)
@@ -94,3 +94,22 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     joint_pos = asset.data.default_joint_pos[env_ids]
     joint_vel = torch.zeros_like(asset.data.joint_vel[env_ids])
     asset.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
+    # Reset the cumulative distance obs accumulator for these envs (F2).
+    # observations.py slot 11 (`distance`) integrates root_lin_vel_b[:,0]*0.05
+    # every step and was previously never zeroed across resets — it drifted
+    # unbounded and VecNormalize's running stats never stabilized. Zero it
+    # only for the env_ids being reset (preserves accumulators for others
+    # in the same vec batch).
+    if "distance" in env.extras:
+        env.extras["distance"][env_ids] = 0.0
+
+    # Reset the go_signal FSM for these envs (T3.2). On reset the robot is
+    # placed behind the same stop bar it had been past; without a reset,
+    # the FSM would still be in DEPART or STOP state from the prior episode
+    # and the policy would inherit a stale go_signal.
+    try:
+        from mdp.go_signal_manager import get_go_signal_manager
+        mgr = get_go_signal_manager(num_envs=env.num_envs, device=env.device)
+        mgr.reset(env_ids)
+    except Exception:
+        pass

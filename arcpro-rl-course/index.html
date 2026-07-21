@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ARCPro: Theory to Implementation</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400;1,9..40,500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+
+  <style>
+    :root {
+      /* Indigo Palette: Academic but modern */
+      --color-accent:       #4f46e5;
+      --color-accent-hover: #4338ca;
+      --color-accent-light: #e0e7ff;
+      --color-accent-muted: #818cf8;
+    }
+    
+    .academic-citation {
+      border-left: 4px solid var(--color-accent);
+      background: var(--color-bg-alt);
+      padding: 1rem 1.5rem;
+      margin: 1.5rem 0;
+      border-radius: 0 4px 4px 0;
+      font-size: 0.95rem;
+    }
+    .academic-citation .title {
+      font-weight: bold;
+      color: var(--color-accent);
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+    .academic-citation .authors {
+      font-style: italic;
+      color: var(--color-text-muted);
+    }
+  </style>
+
+  <script src="main.js" defer></script>
+</head>
+<body>
+
+  <nav class="nav" id="nav">
+    <div class="progress-bar" id="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+    <div class="nav-inner">
+      <span class="nav-title">ARCPro: Theory to Implementation</span>
+      <div class="nav-dots" id="nav-dots" role="tablist">
+        <!-- Part 1 -->
+        <button class="nav-dot" data-target="module-1" data-tooltip="1. GPU Physics (Theory)" role="tab" aria-label="Module 1"></button>
+        <button class="nav-dot" data-target="module-2" data-tooltip="2. Scene Setup (Code)" role="tab" aria-label="Module 2"></button>
+        <!-- Part 2 -->
+        <button class="nav-dot" data-target="module-3" data-tooltip="3. MDP & Quaternions (Theory)" role="tab" aria-label="Module 3"></button>
+        <button class="nav-dot" data-target="module-4" data-tooltip="4. The Vision Pipeline (Code)" role="tab" aria-label="Module 4"></button>
+        <button class="nav-dot" data-target="module-5" data-tooltip="5. Freezing ResNet (Code)" role="tab" aria-label="Module 5"></button>
+        <!-- Part 3 -->
+        <button class="nav-dot" data-target="module-6" data-tooltip="6. Asymmetric Actor-Critic (Theory)" role="tab" aria-label="Module 6"></button>
+        <button class="nav-dot" data-target="module-7" data-tooltip="7. Actor-Critic in PyTorch (Code)" role="tab" aria-label="Module 7"></button>
+        <!-- Part 4 -->
+        <button class="nav-dot" data-target="module-8" data-tooltip="8. PPO Objectives (Theory)" role="tab" aria-label="Module 8"></button>
+        <button class="nav-dot" data-target="module-9" data-tooltip="9. Differential Geometry (Theory)" role="tab" aria-label="Module 9"></button>
+        <button class="nav-dot" data-target="module-10" data-tooltip="10. The Code of Driving Smoothly (Code)" role="tab" aria-label="Module 10"></button>
+        <button class="nav-dot" data-target="module-11" data-tooltip="11. Finding the Line (Code)" role="tab" aria-label="Module 11"></button>
+        <!-- Part 5 -->
+        <button class="nav-dot" data-target="module-12" data-tooltip="12. Kinematic Bicycle Model (Theory)" role="tab" aria-label="Module 12"></button>
+        <button class="nav-dot" data-target="module-13" data-tooltip="13. Ackermann Steering Math (Code)" role="tab" aria-label="Module 13"></button>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main">
+    <!-- modules/*.html content is assembled here by build.sh -->
+<section class="module" id="module-1">
+  <div class="module-header">
+    <div class="module-number">Part 1: The Simulation Environment</div>
+    <h2 class="module-title">GPU Physics Simulation (Theory)</h2>
+    <p class="module-subtitle">Breaking the CPU bottleneck in Reinforcement Learning.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <div class="academic-citation">
+      <span class="title">Isaac Gym: High Performance GPU-Based Physics Simulation For Robot Learning (arXiv:2108.10470)</span>
+      <span class="authors">Makoviychuk et al., 2021 (NVIDIA)</span>
+      <p>This foundational paper introduced the paradigm shift of keeping the entire RL pipeline—both the physics simulation and the neural network inference—on the GPU, bypassing the PCIe bus transfer bottleneck that crippled previous CPU-based physics engines like MuJoCo.</p>
+    </div>
+
+    <p>In ARCPro, the environment runs atop <strong>Isaac Lab</strong> (the successor to Isaac Gym). By representing physical states (position, velocity, collisions) as flattened PyTorch tensors living natively in VRAM, the system achieves simulation speeds orders of magnitude faster than real-time.</p>
+
+    <h3>The Simulation Loop Matrix</h3>
+    <p>Unlike single-agent CPU simulations, ARCPro vectorizes the simulation. The <code>num_envs</code> parameter (e.g., 16 or 4096) instantiates parallel universes. The physics engine computes the rigid body dynamics for all universes simultaneously via massively parallel matrix multiplication.</p>
+
+  </div>
+</section>
+<section class="module" id="module-2">
+  <div class="module-header">
+    <div class="module-number">Part 1: The Simulation Environment</div>
+    <h2 class="module-title">Scene Setup (Code)</h2>
+    <p class="module-subtitle">Implementing the theory in arcpro_env_cfg.py.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>Now let's look at how the GPU Physics Theory is practically implemented in the ARCPro codebase. Inside <code>arcpro_env_cfg.py</code>, we configure the exact timing and physical bounds of the GPU simulation.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">ARCPRO_ENV_CFG.PY</span>
+        <pre><code><span class="code-line"><span class="code-keyword">class</span> ARCProEnvCfg(ManagerBasedRLEnvCfg):</span>
+<span class="code-line">    <span class="code-comment"># Simulation physics step: 500 Hz</span></span>
+<span class="code-line">    sim_dt: <span class="code-keyword">float</span> = <span class="code-number">1.0</span> / <span class="code-number">500.0</span></span>
+<span class="code-line">    </span>
+<span class="code-line">    <span class="code-comment"># Control policy step: 50 Hz</span></span>
+<span class="code-line">    decimation: <span class="code-keyword">int</span> = <span class="code-number">10</span></span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl">Define the environment class inheriting from the RL Manager.</p>
+          <p class="tl">Physics Resolution: The integrator resolves rigid body collisions 500 times per simulated second (dt = 0.002s) to prevent object tunneling at high speeds.</p>
+          <p class="tl">Control Resolution: The neural network only infers actions every 10 physics steps (50 Hz). This mimics the real-world latency of the hardware controllers on the physical F1Tenth rover.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Spawning the World</h3>
+    <p>Instead of spawning one car, we spawn hundreds of them. The GPU can handle it.</p>
+
+    <div class="pattern-cards">
+      <div class="pattern-card">
+        <div class="pattern-icon">🌎</div>
+        <h4 class="pattern-title">The Track</h4>
+        <p class="pattern-desc">Loaded from an Asset file (USD), acting as the collision mesh for all environments.</p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">🏎️</div>
+        <h4 class="pattern-title">The F1Tenth Robot</h4>
+        <p class="pattern-desc">The chassis, 4 wheels, and Ackermann steering joints.</p>
+      </div>
+      <div class="pattern-card">
+        <div class="pattern-icon">📷</div>
+        <h4 class="pattern-title">The Tiled Camera</h4>
+        <p class="pattern-desc">A specialized GPU camera that renders 16 viewports at once into a single giant image tensor, bypassing CPU rendering.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+<section class="module" id="module-3">
+  <div class="module-header">
+    <div class="module-number">Part 2: State Space & Vision</div>
+    <h2 class="module-title">MDP & Quaternions (Theory)</h2>
+    <p class="module-subtitle">Formulating the State Space mathematically.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>Reinforcement Learning relies on the formalism of the <strong>Markov Decision Process (MDP)</strong>, defined by the tuple \( (S, A, P, R, \gamma) \). In this lecture, we focus on \( S \), the State Space. A core assumption of the MDP is the <em>Markov Property</em>: the current state contains all necessary information to make an optimal decision.</p>
+    
+    <div class="academic-citation">
+      <span class="title">Topology and Gimbal Lock</span>
+      <p>Why use quaternions instead of Euler angles (pitch, roll, yaw)? Euler angles suffer from singularities (Gimbal Lock) where the Jacobian matrix loses rank, dropping a degree of freedom when pointing straight up or down. The physics engine utilizes Quaternions (4D hypercomplex numbers) to guarantee continuous, singularity-free integration over time. We extract Euler yaw only at the final boundary before network inference.</p>
+    </div>
+
+    <h3>Mathematical Formulation</h3>
+    <p>A quaternion represents rotation using four numbers: <code>W, X, Y, Z</code>. It is mathematically immune to Gimbal Lock, but it's difficult for an AI to parse into a planar driving direction. Therefore, we mathematically convert the 4D quaternion back into a simple 2D "Yaw" angle using the Atan2 function.</p>
+
+  </div>
+</section>
+<section class="module" id="module-4">
+  <div class="module-header">
+    <div class="module-number">Part 2: State Space & Vision</div>
+    <h2 class="module-title">The Vision Pipeline (Code)</h2>
+    <p class="module-subtitle">Implementing the State Space in Python.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>Let's look at how the Quaternion math theory is implemented in <code>observations.py</code>, and how it is joined with visual data in <code>train_skrl.py</code>.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">OBSERVATIONS.PY (Quaternions to Yaw)</span>
+        <pre><code><span class="code-line"><span class="code-comment"># Calculate yaw from quaternion q = [w, x, y, z]</span></span>
+<span class="code-line">q = asset.data.root_quat_w</span>
+<span class="code-line"></span>
+<span class="code-line">yaw = torch.atan2(</span>
+<span class="code-line">    <span class="code-number">2.0</span> * (q[:, <span class="code-number">0</span>] * q[:, <span class="code-number">3</span>] + q[:, <span class="code-number">1</span>] * q[:, <span class="code-number">2</span>]),</span>
+<span class="code-line">    <span class="code-number">1.0</span> - <span class="code-number">2.0</span> * (q[:, <span class="code-number">2</span>]**<span class="code-number">2</span> + q[:, <span class="code-number">3</span>]**<span class="code-number">2</span>)</span>
+<span class="code-line">)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl">Retrieve the orientation tensor in $\mathbb{R}^4$.</p>
+          <p class="tl">To extract the 2D planar heading $\psi$ (yaw), we map the quaternion components to Euler space. The $\arctan2(y, x)$ function is used to preserve the correct quadrant $[-\pi, \pi]$.</p>
+          <p class="tl">Numerator: represents the sine component $\sin(\psi)$.</p>
+          <p class="tl">Denominator: represents the cosine component $\cos(\psi)$.</p>
+        </div>
+      </div>
+    </div>
+    
+    <h3>Fusing Vision and Telemetry</h3>
+    <p>The yaw is combined with speed and position to form a 12-number telemetry array. But the real robot drives using a camera. Inside <code>train_skrl.py</code>, the <code>SKRLFlattenWrapper</code> uses a ResNet-18 neural network to crush a massive $256 \times 256 \times 3$ image into a dense 512-number array, and then glues it to the 12 telemetry numbers.</p>
+    
+    <div class="callout callout-info">
+      <div class="callout-icon">🧮</div>
+      <div class="callout-content">
+        <strong class="callout-title">The Final State Vector</strong>
+        <p>The final state $S$ passed to the Actor is exactly 524 numbers long: <code>512 (Vision) + 12 (Telemetry) = 524</code>.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+<section class="module" id="module-5">
+  <div class="module-header">
+    <div class="module-number">Part 2: State Space & Vision</div>
+    <h2 class="module-title">Freezing ResNet (Code)</h2>
+    <p class="module-subtitle">Separation of concerns in neural networks.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>There's a clever trick hidden in <code>train_skrl.py</code> regarding the ResNet-18 vision model: we intentionally break its ability to learn.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">TRAIN_SKRL.PY</span>
+        <pre><code><span class="code-line"><span class="code-keyword">if</span> <span class="code-keyword">self</span>._env.cfg.enable_cameras:</span>
+<span class="code-line">    <span class="code-keyword">self</span>.resnet = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)</span>
+<span class="code-line">    <span class="code-keyword">self</span>.resnet.eval()</span>
+<span class="code-line">    <span class="code-keyword">for</span> param <span class="code-keyword">in</span> <span class="code-keyword">self</span>.resnet.parameters():</span>
+<span class="code-line">        param.requires_grad = <span class="code-keyword">False</span></span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl">If the camera is turned on...</p>
+          <p class="tl">Load the ResNet-18 model, pre-loaded with intelligence (it already looked at a million internet photos on ImageNet).</p>
+          <p class="tl">Put it in 'evaluation' mode (meaning it's taking a test, not studying).</p>
+          <p class="tl">For every single parameter (weight) inside ResNet...</p>
+          <p class="tl">Lock it. Do not calculate gradients. Do not let it change, learn, or adapt.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Why Freeze It?</h3>
+    <p>By setting <code>requires_grad = False</code>, we are "freezing" the weights of the neural network. Why would we stop an AI from learning? </p>
+    
+    <p>Imagine teaching a teenager how to drive. You assume they already know how to recognize a road and a tree. You don't spend the first driving lesson teaching them how their eyeballs work. If we allowed the vision model to learn at the same time as the driving model, the AI would be trying to figure out what a white line looks like while simultaneously figuring out how to steer away from it. It's too much variance at once.</p>
+
+  </div>
+</section>
+<section class="module" id="module-6">
+  <div class="module-header">
+    <div class="module-number">Part 3: Policy Architecture</div>
+    <h2 class="module-title">Asymmetric Actor-Critic (Theory)</h2>
+    <p class="module-subtitle">Leveraging privileged simulator state to guide learning.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <div class="academic-citation">
+      <span class="title">Asymmetric Actor Critic for Image-Based Robot Learning (arXiv:1710.06542)</span>
+      <span class="authors">Pinto et al., 2017 (OpenAI / UC Berkeley)</span>
+      <p>This paper introduced a novel training regimen: during simulation, the value function (Critic) is granted access to the exact underlying ground-truth state of the environment, while the policy (Actor) is restricted to the partial, noisy observations (e.g., RGB images) that will be available during real-world deployment.</p>
+    </div>
+
+    <p>Training an end-to-end driving policy purely from pixels is notoriously sample-inefficient. ARCPro solves this by implementing Pinto's Asymmetric Architecture.</p>
+    
+    <p>The Actor has to look at the confusing camera image to drive, but the Critic is allowed to "cheat." The Critic only looks at the precise 12 numbers representing the physics of the car (speed, lane error, heading) pulled directly from the physics engine. The Critic uses its perfect knowledge to grade the Actor. When training is over, we delete the Critic and put the Actor in the real physical robot!</p>
+
+  </div>
+</section>
+<section class="module" id="module-7">
+  <div class="module-header">
+    <div class="module-number">Part 3: Policy Architecture</div>
+    <h2 class="module-title">Actor-Critic in PyTorch (Code)</h2>
+    <p class="module-subtitle">Implementing the Asymmetric split in skrl_models.py.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>Let's examine the network topology in <code>skrl_models.py</code>. Notice the stark difference in the dimensionality of the input layers between the Actor and the Critic.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">SKRL_MODELS.PY (The Critic)</span>
+        <pre><code><span class="code-line"><span class="code-keyword">class</span> ARCProCritic(DeterministicMixin, Model):</span>
+<span class="code-line">    <span class="code-keyword">def</span> __init__(<span class="code-keyword">self</span>, observation_space, action_space, device):</span>
+<span class="code-line">        <span class="code-comment"># Privileged Critic Head (MLP only, no vision)</span></span>
+<span class="code-line">        <span class="code-keyword">self</span>.critic_head = nn.Sequential(</span>
+<span class="code-line">            nn.Linear(<span class="code-number">12</span>, <span class="code-number">256</span>),</span>
+<span class="code-line">            nn.ReLU(),</span>
+<span class="code-line">            nn.Linear(<span class="code-number">256</span>, <span class="code-number">256</span>),</span>
+<span class="code-line">            nn.ReLU(),</span>
+<span class="code-line">            nn.Linear(<span class="code-number">256</span>, <span class="code-number">1</span>)</span>
+<span class="code-line">        )</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">MATHEMATICS</span>
+        <div class="translation-lines">
+          <p class="tl">The Critic network approximates the Value Function $V(s)$.</p>
+          <p class="tl">Input dimensionality is strictly $S \in \mathbb{R}^{12}$. It completely bypasses the 512-dimensional ResNet image embeddings. It only observes exact coordinates, velocities, and tracking errors.</p>
+          <p class="tl">The output is $V \in \mathbb{R}^{1}$, representing the expected discounted return from the current state.</p>
+        </div>
+      </div>
+    </div>
+    
+    <p>By contrast, the <code>ARCProActor</code> ingests $S \in \mathbb{R}^{524}$ (512 vision features + 12 telemetry features) to predict action distributions $\pi(a|s)$.</p>
+
+  </div>
+</section>
+<section class="module" id="module-8">
+  <div class="module-header">
+    <div class="module-number">Part 4: Optimization & Reward Math</div>
+    <h2 class="module-title">PPO Objectives (Theory)</h2>
+    <p class="module-subtitle">Formulating the surrogate objective function.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <div class="academic-citation">
+      <span class="title">Proximal Policy Optimization Algorithms (arXiv:1707.06347)</span>
+      <span class="authors">Schulman et al., 2017 (OpenAI)</span>
+      <p>PPO revolutionized reinforcement learning by introducing a clipped surrogate objective function that prevents destructively large policy updates, striking a balance between sample efficiency and mathematical stability compared to older Trust Region methods (TRPO).</p>
+    </div>
+
+    <h3>The Clipped Surrogate Objective</h3>
+    
+    <p>In standard policy gradient methods, we maximize the expected advantage $A$. However, taking too large of a gradient step can collapse the policy. PPO solves this by defining the probability ratio $r_t(\theta) = \frac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{old}}(a_t|s_t)}$ and clipping it.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">PPO MATHEMATICS</span>
+        <pre><code><span class="code-line">L_CLIP(θ) = E [ min( r(θ)A, clip(r(θ), 1-ε, 1+ε)A ) ]</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">EXPLANATION</span>
+        <div class="translation-lines">
+          <p class="tl">$r(\theta)$ is the ratio of the new policy's probability of taking an action compared to the old policy.</p>
+          <p class="tl">$A$ is the Advantage (calculated by our Privileged Critic). Positive $A$ means the action was better than expected.</p>
+          <p class="tl">If the action was good ($A > 0$), we want to increase $r(\theta)$. But the `clip` function cuts it off at $1+\epsilon$ (usually 1.2).</p>
+          <p class="tl">This mathematical clipping prevents the neural network weights from changing too aggressively in a single optimization step, ensuring monotonic learning.</p>
+        </div>
+      </div>
+    </div>
+    
+    <h3>Why is PPO Necessary for Autonomous Driving?</h3>
+    <p>In autonomous control, a single bad gradient update can completely destroy the policy, turning a car that almost stays in the lane into a car that instantly drives into the wall. PPO's "trust region" clipping ensures that the AI cannot unlearn its driving ability in a single bad batch of data.</p>
+
+  </div>
+</section>
+<section class="module" id="module-9">
+  <div class="module-header">
+    <div class="module-number">Part 4: Optimization & Reward Math</div>
+    <h2 class="module-title">Differential Geometry (Theory)</h2>
+    <p class="module-subtitle">Formulating the geometry of the road.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>To incentivize the policy $\pi$ to navigate a complex track, we must mathematically encode the geometry of the track into the Markov Decision Process reward function $R$. One critical feature is providing the agent with the <em>curvature</em> of the upcoming path.</p>
+
+    <h3>Discrete Calculus for Curvature ($\kappa$)</h3>
+    
+    <p>In differential geometry, the curvature $\kappa$ of a planar curve is defined as the rate of change of the tangent vector's angle with respect to arc length: $\kappa = \frac{d\theta}{ds}$.</p>
+
+    <p>Because our track is parameterized by discrete waypoints $w_i \in \mathbb{R}^2$, we approximate this continuous derivative using forward finite differences.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">TRACK_MANAGER.PY (Pre-computation)</span>
+        <pre><code><span class="code-line"><span class="code-comment"># wp_np: [N, 3] -> [X, Y, Yaw]</span></span>
+<span class="code-line"><span class="code-keyword">for</span> i <span class="code-keyword">in</span> <span class="code-keyword">range</span>(n_wps):</span>
+<span class="code-line">    i1 = (i + <span class="code-number">1</span>) % n_wps</span>
+<span class="code-line">    </span>
+<span class="code-line">    <span class="code-comment"># Discrete dTheta</span></span>
+<span class="code-line">    dyaw = wp_np[i1, <span class="code-number">2</span>] - wp_np[i, <span class="code-number">2</span>]</span>
+<span class="code-line">    <span class="code-keyword">while</span> dyaw > np.pi: dyaw -= <span class="code-number">2</span> * np.pi</span>
+<span class="code-line">    <span class="code-keyword">while</span> dyaw < -np.pi: dyaw += <span class="code-number">2</span> * np.pi</span>
+<span class="code-line">    </span>
+<span class="code-line">    <span class="code-comment"># Discrete ds (Euclidean distance)</span></span>
+<span class="code-line">    ds = np.linalg.norm(wp_np[i1, :<span class="code-number">2</span>] - wp_np[i, :<span class="code-number">2</span>])</span>
+<span class="code-line">    </span>
+<span class="code-line">    <span class="code-keyword">if</span> ds > <span class="code-number">0</span>:</span>
+<span class="code-line">        kappa[i] = dyaw / ds</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">MATHEMATICS</span>
+        <div class="translation-lines">
+          <p class="tl">We iterate over every discretized waypoint on the manifold.</p>
+          <p class="tl">Compute $\Delta \theta$ (the change in yaw). The while loops ensure the angle difference is mapped to the principal branch $[-\pi, \pi]$ to avoid artificial $2\pi$ discontinuities at the boundaries.</p>
+          <p class="tl">Compute $\Delta s$, the $L_2$ norm (Euclidean distance) between the points.</p>
+          <p class="tl">Approximate the derivative: $\kappa \approx \frac{\Delta \theta}{\Delta s}$. This scalar $\kappa$ is injected directly into the agent's state vector $S$.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+<section class="module" id="module-10">
+  <div class="module-header">
+    <div class="module-number">Part 4: Optimization & Reward Math</div>
+    <h2 class="module-title">The Code of Driving Smoothly (Code)</h2>
+    <p class="module-subtitle">Implementing rewards in rewards.py.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>Let's look inside <code>rewards.py</code> to see how driving behaviors are converted into PyTorch math for the PPO agent to optimize.</p>
+
+    <h3>Staying Centered (Lateral Error)</h3>
+    
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">REWARDS.PY</span>
+        <pre><code><span class="code-line"><span class="code-keyword">def</span> lateral_error_reward(env):</span>
+<span class="code-line">    lat_err = env.extras.get(<span class="code-string">"lat_err"</span>, torch.zeros(...))</span>
+<span class="code-line">    abs_lat = torch.abs(lat_err)</span>
+<span class="code-line">    </span>
+<span class="code-line">    <span class="code-comment"># Pure penalty</span></span>
+<span class="code-line">    reward = - (abs_lat * <span class="code-number">10.0</span>)</span>
+<span class="code-line">    <span class="code-keyword">return</span> reward</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl">To calculate the penalty for swerving...</p>
+          <p class="tl">Get the car's current distance from the centerline (e.g., -2 meters left, or 2 meters right).</p>
+          <p class="tl">Drop the negative sign. We only care about absolute distance (2 meters).</p>
+          <p class="tl">Multiply the distance by 10, and make it a negative penalty.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Suppressing the Jitters (Jerk Penalty)</h3>
+    <p>Early AI drivers often oscillate wildly. We fix it by penalizing the <em>difference</em> between the current steering angle and the previous one, encouraging $C^2$ continuity.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">REWARDS.PY</span>
+        <pre><code><span class="code-line"><span class="code-keyword">def</span> jerk_penalty(env):</span>
+<span class="code-line">    current = env.action_manager.action[:, <span class="code-number">0</span>]</span>
+<span class="code-line">    prev = env.extras[<span class="code-string">"prev_action"</span>][:, <span class="code-number">0</span>]</span>
+<span class="code-line">    </span>
+<span class="code-line">    steer_delta = current - prev</span>
+<span class="code-line">    <span class="code-keyword">return</span> -<span class="code-number">100.0</span> * torch.square(steer_delta)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl">Get the steering angle the AI just requested.</p>
+          <p class="tl">Get the steering angle from the previous fraction of a second.</p>
+          <p class="tl">Find the difference between them.</p>
+          <p class="tl">Square the difference (this makes large, sudden jerks exponentially more painful) and multiply by -100.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+<section class="module" id="module-11">
+  <div class="module-header">
+    <div class="module-number">Part 4: Optimization & Reward Math</div>
+    <h2 class="module-title">Finding the Line (Code)</h2>
+    <p class="module-subtitle">Optimizing tracking using Windowed Searches.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>To calculate the <code>lateral_error</code>, the simulator has to answer a basic question 50 times a second: <em>"Out of the 10,000 waypoints that make up the track, which one is closest to the car right now?"</em></p>
+
+    <p>A Global Search across all points is $O(N)$ and would melt the CPU. In <code>track_manager.py</code>, the developers wrote a highly optimized $O(K)$ search algorithm. Instead of checking the whole track, the math relies on the fact that cars don't teleport. If the car was closest to Waypoint #400 a millisecond ago, it must be somewhere near #400 now.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">TRACK_MANAGER.PY</span>
+        <pre><code><span class="code-line"><span class="code-comment"># Windowed Search: Look +/- 50 waypoints around last known index</span></span>
+<span class="code-line">window_size = <span class="code-number">50</span></span>
+<span class="code-line">offsets = torch.arange(-window_size, window_size + <span class="code-number">1</span>)</span>
+<span class="code-line">search_indices = (<span class="code-keyword">self</span>.last_indices.view(-<span class="code-number">1</span>, <span class="code-number">1</span>) + offsets) % num_wps</span>
+<span class="code-line"></span>
+<span class="code-line">candidate_wps = <span class="code-keyword">self</span>.waypoints[search_indices][:, :, :<span class="code-number">2</span>]</span>
+<span class="code-line">candidate_dists = torch.norm(pos[:, <span class="code-keyword">None</span>, :<span class="code-number">2</span>] - candidate_wps, dim=<span class="code-number">2</span>)</span>
+<span class="code-line">min_dists, best_in_window = torch.min(candidate_dists, dim=<span class="code-number">1</span>)</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-comment"># Fallback to Global Search for any envs that teleported (e.g. resets)</span></span>
+<span class="code-line">global_search_mask = min_dists > <span class="code-number">2.0</span></span>
+<span class="code-line"><span class="code-keyword">if</span> global_search_mask.any():</span>
+<span class="code-line">    global_dists = torch.cdist(pos[global_search_mask, :<span class="code-number">2</span>], <span class="code-keyword">self</span>.waypoints[:, :<span class="code-number">2</span>])</span>
+<span class="code-line">    best_global_idx = torch.argmin(global_dists, dim=<span class="code-number">1</span>)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl">Create a small search "window" of just 100 points (50 behind, 50 ahead).</p>
+          <p class="tl">Center this window on whatever waypoint the car was closest to during the previous physics frame.</p>
+          <p class="tl">Gather the exact X,Y coordinates of just those 100 candidate waypoints.</p>
+          <p class="tl">Calculate the distance to those 100 points, and find the absolute closest one.</p>
+          <p class="tl">Wait — did the car crash and respawn at the start of the track? We check if the "closest" point is more than 2 meters away. If so, the car must have teleported!</p>
+          <p class="tl">Only for cars that teleported, run the slow, expensive Global Search to find them again.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+<section class="module" id="module-12">
+  <div class="module-header">
+    <div class="module-number">Part 5: Action Kinematics</div>
+    <h2 class="module-title">Kinematic Bicycle Model (Theory)</h2>
+    <p class="module-subtitle">Translating policy output into rigid body joint actuations.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>The policy $\pi_\theta$ outputs a bounded continuous scalar $a \in [-1, 1]$ representing a desired steering action. However, autonomous vehicles possess two separate steering joints (front-left and front-right). If both wheels turn at identical angles during a curve, the wheels will slip due to mismatched turning radii. This violates the non-holonomic constraints of the vehicle.</p>
+
+    <h3>Ackermann Steering Geometry</h3>
+    
+    <p>To satisfy the no-slip condition, we map the policy's single scalar output into two distinct joint angles using Ackermann steering geometry, which is a variation of the Kinematic Bicycle Model.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">MATHEMATICS</span>
+        <pre><code><span class="code-line"><span class="code-comment"># The Bicycle Model</span></span>
+<span class="code-line">R = L / tan(δ)</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-comment"># The Ackermann Expansion</span></span>
+<span class="code-line">δ_inner = arctan(L / (R - w/2))</span>
+<span class="code-line">δ_outer = arctan(L / (R + w/2))</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">EXPLANATION</span>
+        <div class="translation-lines">
+          <p class="tl">By approximating the car as a bicycle, the turning radius $R$ is defined by the wheelbase $L$ and the virtual center steering angle $\delta$.</p>
+          <p class="tl">We expand the bicycle back into a four-wheeled vehicle. The inner wheel operates on a tighter circle ($R - \frac{w}{2}$), where $w$ is track width. We use arctangent to find the sharper angle.</p>
+          <p class="tl">The outer wheel operates on a wider circle ($R + \frac{w}{2}$).</p>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+</section>
+<section class="module" id="module-13">
+  <div class="module-header">
+    <div class="module-number">Part 5: Action Kinematics</div>
+    <h2 class="module-title">Ackermann Steering Math (Code)</h2>
+    <p class="module-subtitle">Implementing Kinematics in actions.py.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>Let's look at how the bicycle model is implemented in PyTorch tensors inside <code>actions.py</code> to control the F1Tenth rover.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">ACTIONS.PY (Ackermann Mapping)</span>
+        <pre><code><span class="code-line"><span class="code-comment"># Calculate the turning radius (R) from steering angle (delta)</span></span>
+<span class="code-line">turn_radius = <span class="code-keyword">self</span>.wheelbase / torch.tan(torch.abs(steering) + <span class="code-number">1e-6</span>)</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-comment"># Calculate specific inner/outer wheel angles</span></span>
+<span class="code-line">inner_angle = torch.atan(<span class="code-keyword">self</span>.wheelbase / (turn_radius - <span class="code-keyword">self</span>.half_track))</span>
+<span class="code-line">outer_angle = torch.atan(<span class="code-keyword">self</span>.wheelbase / (turn_radius + <span class="code-keyword">self</span>.half_track))</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-comment"># Map to left and right joints based on turn direction</span></span>
+<span class="code-line">left_angle = torch.where(steering > <span class="code-number">0</span>, inner_angle, -outer_angle)</span>
+<span class="code-line">right_angle = torch.where(steering > <span class="code-number">0</span>, outer_angle, -inner_angle)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl">Calculate the imaginary circle the car is turning around (using the length of the car). Add $10^{-6}$ to prevent dividing by zero when going straight.</p>
+          <p class="tl">Calculate the sharper angle for the inner wheel.</p>
+          <p class="tl">Calculate the wider angle for the outer wheel.</p>
+          <p class="tl">If turning left, the left wheel is the inner wheel. If right, it's the outer wheel.</p>
+        </div>
+      </div>
+    </div>
+    
+    <h3>Action Fusing (Velocity Control)</h3>
+    <p>Similarly, the policy outputs separate throttle and brake commands, but the rigid body joints require a singular angular velocity target $\omega$. We fuse them mathematically in <code>CombinedDriveAction</code>.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">ACTIONS.PY (Fusing)</span>
+        <pre><code><span class="code-line">throttle = torch.clamp(actions[:, <span class="code-number">0</span>:<span class="code-number">1</span>], <span class="code-number">0.0</span>, <span class="code-number">1.0</span>)</span>
+<span class="code-line">brake    = torch.clamp(actions[:, <span class="code-number">1</span>:<span class="code-number">2</span>], <span class="code-number">0.0</span>, <span class="code-number">1.0</span>)</span>
+<span class="code-line"></span>
+<span class="code-line">drive = throttle * (<span class="code-number">1.0</span> - brake)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl">Clamp the AI throttle to exactly 0 to 1.</p>
+          <p class="tl">Clamp the AI brake to exactly 0 to 1.</p>
+          <p class="tl">Fuse them using multiplication! If brake is 1.0, the inverse is 0.0, so the drive is immediately cut to 0 regardless of throttle. This guarantees the AI can never drive backwards if it panics and mashes both pedals.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+  </main>
+
+</body>
+</html>

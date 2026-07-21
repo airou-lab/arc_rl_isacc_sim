@@ -1,0 +1,37 @@
+<section class="module" id="module-12">
+  <div class="module-header">
+    <div class="module-number">Part 5: Action Kinematics</div>
+    <h2 class="module-title">Kinematic Bicycle Model (Theory)</h2>
+    <p class="module-subtitle">Translating policy output into rigid body joint actuations.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>The policy $\pi_\theta$ outputs a bounded continuous scalar $a \in [-1, 1]$ representing a desired steering action. However, autonomous vehicles possess two separate steering joints (front-left and front-right). If both wheels turn at identical angles during a curve, the wheels will slip due to mismatched turning radii. This violates the non-holonomic constraints of the vehicle.</p>
+
+    <h3>Ackermann Steering Geometry</h3>
+    
+    <p>To satisfy the no-slip condition, we map the policy's single scalar output into two distinct joint angles using Ackermann steering geometry, which is a variation of the Kinematic Bicycle Model.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">MATHEMATICS</span>
+        <pre><code><span class="code-line"><span class="code-comment"># The Bicycle Model</span></span>
+<span class="code-line">R = L / tan(δ)</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-comment"># The Ackermann Expansion</span></span>
+<span class="code-line">δ_inner = arctan(L / (R - w/2))</span>
+<span class="code-line">δ_outer = arctan(L / (R + w/2))</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">EXPLANATION</span>
+        <div class="translation-lines">
+          <p class="tl">By approximating the car as a bicycle, the turning radius $R$ is defined by the wheelbase $L$ and the virtual center steering angle $\delta$.</p>
+          <p class="tl">We expand the bicycle back into a four-wheeled vehicle. The inner wheel operates on a tighter circle ($R - \frac{w}{2}$), where $w$ is track width. We use arctangent to find the sharper angle.</p>
+          <p class="tl">The outer wheel operates on a wider circle ($R + \frac{w}{2}$).</p>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+</section>

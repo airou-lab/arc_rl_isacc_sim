@@ -1,1 +1,0 @@
-- [ ] Check for changes in `policy_stack` after a `git pull`. Investigate if any updates need to be integrated or if there are breaking changes.

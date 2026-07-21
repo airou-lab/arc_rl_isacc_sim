@@ -1,0 +1,21 @@
+# Database — single-writer SQLite, binary, unmergeable
+gsd.db
+gsd.db-wal
+gsd.db-shm
+
+# Runtime state — locks, PIDs, in-flight session data
+runtime/
+worktrees/
+*.lock
+*.tmp
+
+# High-churn append-only logs
+audit-log.jsonl
+event-log.jsonl
+notifications.jsonl
+
+# Runtime snapshot — rewritten on every state transition
+state-manifest.json
+
+# Legacy planning mirror (superseded by milestones/ and root artifacts)
+legacy_planning/

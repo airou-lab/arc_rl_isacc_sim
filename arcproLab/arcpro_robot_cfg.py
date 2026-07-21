@@ -32,8 +32,8 @@ class ArcProRobotCfg(ArticulationCfg):
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
             retain_accelerations=False,
-            linear_damping=0.0,
-            angular_damping=0.0,
+            linear_damping=0.1,    # RC car rolling resistance + light aero drag
+            angular_damping=0.05,  # Gentle yaw/pitch/roll damping — prevents spin-out
             max_linear_velocity=1000.0,
             max_angular_velocity=1000.0,
             max_depenetration_velocity=100.0,
@@ -66,7 +66,7 @@ class ArcProRobotCfg(ArticulationCfg):
         ),
         "throttle": ImplicitActuatorCfg(
             joint_names_expr=["Joint_Drive_.*"], 
-            effort_limit_sim=0.5, # Reduced from 10.0 to prevent 20G acceleration (backflips)
+            effort_limit_sim=1.0, # Middle ground: 1.0 (4 Nm total) to prevent backflips but maintain drive.
             velocity_limit_sim=100.0,
             stiffness=0.0,
             damping=1.0, 

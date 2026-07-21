@@ -1,0 +1,61 @@
+<section class="module" id="module-10">
+  <div class="module-header">
+    <div class="module-number">Part 4: Optimization & Reward Math</div>
+    <h2 class="module-title">The Code of Driving Smoothly (Code)</h2>
+    <p class="module-subtitle">Implementing rewards in rewards.py.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>Let's look inside <code>rewards.py</code> to see how driving behaviors are converted into PyTorch math for the PPO agent to optimize.</p>
+
+    <h3>Staying Centered (Lateral Error)</h3>
+    
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">REWARDS.PY</span>
+        <pre><code><span class="code-line"><span class="code-keyword">def</span> lateral_error_reward(env):</span>
+<span class="code-line">    lat_err = env.extras.get(<span class="code-string">"lat_err"</span>, torch.zeros(...))</span>
+<span class="code-line">    abs_lat = torch.abs(lat_err)</span>
+<span class="code-line">    </span>
+<span class="code-line">    <span class="code-comment"># Pure penalty</span></span>
+<span class="code-line">    reward = - (abs_lat * <span class="code-number">10.0</span>)</span>
+<span class="code-line">    <span class="code-keyword">return</span> reward</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl">To calculate the penalty for swerving...</p>
+          <p class="tl">Get the car's current distance from the centerline (e.g., -2 meters left, or 2 meters right).</p>
+          <p class="tl">Drop the negative sign. We only care about absolute distance (2 meters).</p>
+          <p class="tl">Multiply the distance by 10, and make it a negative penalty.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Suppressing the Jitters (Jerk Penalty)</h3>
+    <p>Early AI drivers often oscillate wildly. We fix it by penalizing the <em>difference</em> between the current steering angle and the previous one, encouraging $C^2$ continuity.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">REWARDS.PY</span>
+        <pre><code><span class="code-line"><span class="code-keyword">def</span> jerk_penalty(env):</span>
+<span class="code-line">    current = env.action_manager.action[:, <span class="code-number">0</span>]</span>
+<span class="code-line">    prev = env.extras[<span class="code-string">"prev_action"</span>][:, <span class="code-number">0</span>]</span>
+<span class="code-line">    </span>
+<span class="code-line">    steer_delta = current - prev</span>
+<span class="code-line">    <span class="code-keyword">return</span> -<span class="code-number">100.0</span> * torch.square(steer_delta)</span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl">Get the steering angle the AI just requested.</p>
+          <p class="tl">Get the steering angle from the previous fraction of a second.</p>
+          <p class="tl">Find the difference between them.</p>
+          <p class="tl">Square the difference (this makes large, sudden jerks exponentially more painful) and multiply by -100.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>

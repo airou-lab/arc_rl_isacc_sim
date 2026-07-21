@@ -138,8 +138,8 @@ class AckermannSteeringAction(ActionTerm):
         # actions is (num_envs, 1) in range [-1, 1]
         self._raw_actions[:] = actions
         
-        # Convert normalized action to target steering angle (rad)
-        steering_angle = actions.squeeze(1) * self.cfg.max_steering_angle
+        # Convert normalized action to target steering angle (rad) and apply offset
+        steering_angle = actions.squeeze(1) * self.cfg.max_steering_angle + self.cfg.offset
         
         # Handle Straight case (to avoid division by zero)
         is_straight = torch.abs(steering_angle) < 1e-4
@@ -154,10 +154,10 @@ class AckermannSteeringAction(ActionTerm):
         outer_angle = torch.atan(self.wheelbase / (turn_radius + self.half_track))
         
         # Map to Left/Right joints
-        # If steering_angle > 0 (Turning RIGHT): Left is Outer, Right is Inner
-        # If steering_angle < 0 (Turning LEFT): Left is Inner, Right is Outer
-        left_angle = torch.where(steering_angle > 0, outer_angle, -inner_angle)
-        right_angle = torch.where(steering_angle > 0, inner_angle, -outer_angle)
+        # If steering_angle > 0 (Turning LEFT): Left is Inner, Right is Outer
+        # If steering_angle < 0 (Turning RIGHT): Left is Outer, Right is Inner
+        left_angle = torch.where(steering_angle > 0, inner_angle, -outer_angle)
+        right_angle = torch.where(steering_angle > 0, outer_angle, -inner_angle)
         
         # Apply Straight override
         left_angle = torch.where(is_straight, torch.zeros_like(left_angle), left_angle)
@@ -206,16 +206,23 @@ class CombinedDriveAction(GroupedJointAction):
         # Explicitly clamp to [0, 1] to respect the action space
         actions = torch.clamp(actions, 0.0, 1.0)
         self._raw_actions[:] = actions
+        throttle = torch.clamp(actions[:, 0:1], 0.0, 1.0)
+        brake    = torch.clamp(actions[:, 1:2], 0.0, 1.0)
+        # T3.3 go_signal action gate. When the GoSignalManager places this
+        # env in STOP (bar detected within stop_distance_threshold),
+        # env.extras["go_signal"] is 0 and we force throttle to 0 here at
+        # the env boundary regardless of what the network commanded.
+        try:
+            go_signal = self._env.extras.get("go_signal", None)
+            if go_signal is not None:
+                throttle = throttle * go_signal.unsqueeze(-1).to(throttle.dtype)
+        except Exception:
+            pass
         
-        throttle = actions[:, 0]
-        brake = actions[:, 1]
-        
-        # Effective drive signal: throttle modulated by brake
-        # 1.0 brake = 0.0 drive signal. 0.0 brake = pure throttle.
-        drive_signal = throttle * (1.0 - brake)
+        drive = throttle * (1.0 - brake)
         
         # Broadcast and apply scale/offset to all drive joints
-        self._processed_actions[:] = self._offset + self._scale * drive_signal.unsqueeze(1)
+        self._processed_actions[:] = self._offset + self._scale * drive.repeat(1, self._num_joints)
 
     def apply_actions(self):
         self._asset.set_joint_velocity_target(self._processed_actions, joint_ids=self._joint_ids)

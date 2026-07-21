@@ -3,20 +3,19 @@
 ## Project Context
 - **Milestone:** Milestone 3: HD Perception & Production Hardening (v2.6)
 - **Phase:** Phase 16: MARL Transition
-- **Status:** Production training (Mastery Curriculum) is running in the background.
+- **Status:** SKRL single-agent training is running in the background.
 
 ## Active Command
-- **Background Training**: PID 956074
-- **Log File**: `logs/production_mastery_32.log`
-- **Target**: 5,000,000 steps (~150 FPS)
+- **Background Training**: SKRL single-agent training via `start_tmux_training.sh` (running `train_skrl.py`).
+- **Log File**: `logs/skrl_phase1.log`
+- **Target**: Ensure single-agent SKRL is working stably before proceeding to MARL.
 
 ## Recent Changes
-- **Vision**: Upgraded to ResNet-18 with ImageNet-v1 weights and uint8 storage.
-- **Infrastructure**: Refactored singleton `RoadGraph` to vectorized `RoadManager` (B, N).
-- **Rewards**: Implemented 10cm plateau and -100.0 steering jerk penalty.
-- **Scaling**: Verified stability with 32 environments at 224x224.
+- **SKRL Migration**: Migrated from Stable-Baselines3 to SKRL.
+- **SB3 Archive**: Archived all legacy SB3 scripts and policy stack files into `archive/sb3_legacy`.
+- **Infrastructure**: Modified `start_tmux_training.sh` to execute the new SKRL trainer.
 
 ## Immediate Next Steps
-- [ ] **Monitor Training**: Check `logs/production_mastery_32.log` once steps reach ~1M to verify reward convergence.
-- [ ] **SKRL Integration**: Begin implementing the SKRL policy stack bridge for Phase 16 multi-agent support.
-- [ ] **MARL Spawner**: Refactor the vehicle spawner to support multiple agents per environment.
+- [ ] **Monitor Training**: Check `logs/skrl_phase1.log` periodically to verify SKRL training is stable.
+- [ ] **MARL Spawner**: Once single-agent SKRL is confirmed working, refactor the vehicle spawner to support multiple agents per environment.
+- [ ] **SKRL MARL Integration**: Begin upgrading the SKRL policy stack bridge for full Phase 16 multi-agent support.

@@ -1,0 +1,39 @@
+<section class="module" id="module-5">
+  <div class="module-header">
+    <div class="module-number">Part 2: State Space & Vision</div>
+    <h2 class="module-title">Freezing ResNet (Code)</h2>
+    <p class="module-subtitle">Separation of concerns in neural networks.</p>
+  </div>
+
+  <div class="module-content">
+    
+    <p>There's a clever trick hidden in <code>train_skrl.py</code> regarding the ResNet-18 vision model: we intentionally break its ability to learn.</p>
+
+    <div class="translation-block animate-in">
+      <div class="translation-code">
+        <span class="translation-label">TRAIN_SKRL.PY</span>
+        <pre><code><span class="code-line"><span class="code-keyword">if</span> <span class="code-keyword">self</span>._env.cfg.enable_cameras:</span>
+<span class="code-line">    <span class="code-keyword">self</span>.resnet = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)</span>
+<span class="code-line">    <span class="code-keyword">self</span>.resnet.eval()</span>
+<span class="code-line">    <span class="code-keyword">for</span> param <span class="code-keyword">in</span> <span class="code-keyword">self</span>.resnet.parameters():</span>
+<span class="code-line">        param.requires_grad = <span class="code-keyword">False</span></span></code></pre>
+      </div>
+      <div class="translation-english">
+        <span class="translation-label">PLAIN ENGLISH</span>
+        <div class="translation-lines">
+          <p class="tl">If the camera is turned on...</p>
+          <p class="tl">Load the ResNet-18 model, pre-loaded with intelligence (it already looked at a million internet photos on ImageNet).</p>
+          <p class="tl">Put it in 'evaluation' mode (meaning it's taking a test, not studying).</p>
+          <p class="tl">For every single parameter (weight) inside ResNet...</p>
+          <p class="tl">Lock it. Do not calculate gradients. Do not let it change, learn, or adapt.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Why Freeze It?</h3>
+    <p>By setting <code>requires_grad = False</code>, we are "freezing" the weights of the neural network. Why would we stop an AI from learning? </p>
+    
+    <p>Imagine teaching a teenager how to drive. You assume they already know how to recognize a road and a tree. You don't spend the first driving lesson teaching them how their eyeballs work. If we allowed the vision model to learn at the same time as the driving model, the AI would be trying to figure out what a white line looks like while simultaneously figuring out how to steer away from it. It's too much variance at once.</p>
+
+  </div>
+</section>
