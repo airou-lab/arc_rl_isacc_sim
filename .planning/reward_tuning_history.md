@@ -65,3 +65,31 @@ Always read this file before modifying the reward function to ensure you do not 
 
 **Issue 14 (ROOT CAUSE)**: We added track progress telemetry (`Trk%` and `WPΔ`) to verify whether the agent was actually navigating the track. **It was not.** Even episodes with 1,000+ steps and 1,249 reward showed `WPΔ: 0` — zero waypoints traversed. The agent was sitting near spawn, collecting `survival_bonus` and `tanh(forward_speed)` rewards by wiggling or slowly circling. The `progress_reward` function (based on `root_lin_vel_b[:, 0]` — local body velocity) is fundamentally exploitable. The agent can point any direction, creep forward relative to its own body, and farm points indefinitely without advancing along the track. **Every previous "success" metric (reward, episode length, speed) was meaningless without `WPΔ`.**
 **Fix 14**: Replaced `progress_reward` entirely with `waypoint_progress_reward` in `rewards.py`. The new function uses the TrackManager's waypoint index to compute the number of new centerline waypoints traversed per step. This is the ONLY metric that cannot be gamed by circling or wiggling. Set weight to `5.0` (yields ~15 reward/step at 0.5 m/s). Kept `survival_bonus=1.0`, `termination_penalty=20.0`, `stationary=5.0`, `boundary=0.1`. Restarted training.
+
+---
+
+## Physics Fixes Session (2026-07-18)
+
+**Issue 15 — Early Death at Steps 49/55 (Height Termination)**
+During a straight-line open-loop physics test (throttle=1.0, steer=0.0), the car was dying every 49 or 55 steps in a perfectly alternating loop. Root cause: the `lin_vel=(0.0, 2.0, 0.0)` kickstart was launching the car at full speed from spawn. Within ~50 steps (~1 second), it hit the first curve, bounced off, and either dipped below the `height_termination` threshold (0.02m) or flew above `max_height` (0.50m). The kickstart was masking a deeper physics instability.
+**Fix 15** (3 sub-fixes applied atomically):
+- **15A** `spawner.py`: Added `_apply_tire_friction()` — applies `UsdPhysics.MaterialAPI` to all `Wheel_*` prims at spawn time. `static_friction=1.2`, `dynamic_friction=0.8`, `restitution=0.0`. Eliminates bounce on road contact.
+- **15B** `arcpro_robot_cfg.py`: Added `linear_damping=0.1` and `angular_damping=0.05` to chassis rigid body props. Models rolling resistance and prevents spin-out on bumps. Previously both were `0.0` (frictionless in free space).
+- **15C** `arcpro_env_cfg.py`: Removed `lin_vel=(0.0, 2.0, 0.0)` kickstart entirely. Proper tire friction + drive torque (effort_limit=5.0 N·m → ~167N force on 4.2kg car) is more than sufficient to overcome static friction. Tightened `height_termination` threshold `0.02m → 0.005m` to give 15mm more suspension room. Dropped `stationary` penalty speed threshold `0.5 → 0.2 m/s` to match realistic RC car minimum crawl speed.
+**Result**: ✅ **CONFIRMED FIXED.** Post-fix straight-line test ran 500 steps with zero resets. Physics summary: `max_speed_seen = 1.968 m/s`. Speed profile was stable and smooth (0.895 m/s at step 50 → 1.968 m/s peak → settles ~0.7-1.2 m/s as car corners into turns). Z axis stable throughout — no height terminations.
+
+**Issue 16 — WPΔ_rew Reward Spike (Bug 4 — spawn_wp_idx Race Condition)**
+At ~640k–716k steps, `WPΔ_rew` spiked to values like `2434`, `7300`, `5795` — impossible for one step of real navigation. These coincide with `WPs_cum = 3361` (also impossible in one episode). Root cause: `spawn_wp_idx` reset race condition — on episode reset, the TrackManager's `last_indices` is briefly out of sync with the robot's new position, causing a massive false `delta = (new_idx - old_idx) % num_wps` calculation that wraps around the entire track.
+**Fix 16 (PENDING)**: Need to zero out `prev_wp_idx_reward` and `prev_pos_reward` for all reset environments in `rewards.py::waypoint_progress_reward` using `env.reset_terminated`. The `hasattr(env, 'reset_terminated')` guard exists but may not be firing correctly — needs investigation after physics validation.
+
+**ALWAYS READ BEFORE REWARD OR PHYSICS CHANGES**: This file documents 18 issues. Do not repeat them.
+
+## Post-Physics Stabilization Session (2026-07-20)
+
+**Issue 17 — The Torque Limit Wheelie (Mask Unveiled)**
+After Fix 15A applied proper static (1.2) and dynamic (0.8) friction to the tires, the car started popping wheelies and backflipping under full throttle. Root cause: The throttle actuator `effort_limit_sim` had previously been cranked up to `5.0` N·m per wheel (20 Nm total for a 3.3kg car) to artificially overcome the old lack of tire grip. With realistic grip restored, 20 Nm of torque was instantly flipping the car.
+**Fix 17**: Reverted `effort_limit_sim` in `arcpro_robot_cfg.py` back to a realistic `0.5` N·m. The car now accelerates smoothly and remains planted on the ground.
+
+**Issue 18 — The Camera Pipeline Crash (--enable_cameras)**
+Running visual evaluation via `debug.sh --enable_cameras` failed due to a severe shape mismatch (`150540 vs 524`). Root cause: `train_skrl.py` was properly configured with a frozen `ResNet-18` vision encoder (extracting 512 dims from the 224x224 RGB image), but the evaluation scripts (`play_skrl.py`, `play_straight.py`, `test_term.py`) were using a hardcoded, outdated version of `SKRLFlattenWrapper` that just `.reshape` flattened the raw RGB pixels (3*224*224 = 150528 + 12 = 150540 dims).
+**Fix 18**: Extracted the proper ResNet-enabled wrapper into a new shared module `arcproLab/agents/skrl_wrappers.py` and refactored all train and evaluation scripts to import it. `--enable_cameras` now perfectly matches the 524-dim architecture across all scripts.

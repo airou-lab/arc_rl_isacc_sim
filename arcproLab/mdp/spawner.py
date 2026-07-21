@@ -35,7 +35,7 @@ def spawn_f1tenth(
     mass_overrides: dict[str, float] | None = None,
     **kwargs,
 ) -> Usd.Prim:
-    """Custom spawner for F1Tenth that applies per-link mass overrides."""
+    """Custom spawner for F1Tenth that applies per-link mass overrides and RC car tire friction."""
     # 1. Spawn using default spawner
     prim = sim_utils.spawn_from_usd(prim_path, cfg, translation, orientation, **kwargs)
     stage = get_current_stage()
@@ -60,5 +60,47 @@ def spawn_f1tenth(
                     
                     # print(f"[Spawner] SUCCESS: Applied mass {mass} and lowered CoM for {child.GetPath()}")
                     break
+
+    # 2. RC Car Tire Friction — applied to all Wheel_* prims
+    # Rubber-on-asphalt: high grip, near-zero bounce.
+    # static_friction  = 1.2  → resists initial slip (planted launches)
+    # dynamic_friction = 0.8  → rolling grip during cornering
+    # restitution      = 0.0  → no bounce on road contact
+    _apply_tire_friction(prim, stage)
                     
     return prim
+
+
+def _apply_tire_friction(robot_prim: Usd.Prim, stage) -> None:
+    """Apply rubber-on-asphalt PhysX material to all Wheel_* child prims."""
+    from pxr import UsdPhysics, UsdShade, Gf, Sdf
+
+    STATIC_FRICTION  = 1.2
+    DYNAMIC_FRICTION = 0.8
+    RESTITUTION      = 0.0
+
+    robot_path = str(robot_prim.GetPath())
+
+    for child in robot_prim.GetChildren():
+        child_name = child.GetName()
+        if not re.match(r"Wheel_.*", child_name):
+            continue
+
+        child_path = str(child.GetPath())
+        mat_path   = f"{child_path}/TireMaterial"
+
+        # Create or reuse material prim
+        mat_prim = stage.GetPrimAtPath(mat_path)
+        if not mat_prim.IsValid():
+            mat_prim = stage.DefinePrim(mat_path, "Material")
+
+        # Bind PhysicsMaterialAPI
+        phys_mat = UsdPhysics.MaterialAPI.Apply(mat_prim)
+        phys_mat.CreateStaticFrictionAttr().Set(STATIC_FRICTION)
+        phys_mat.CreateDynamicFrictionAttr().Set(DYNAMIC_FRICTION)
+        phys_mat.CreateRestitutionAttr().Set(RESTITUTION)
+
+        # Bind the material to the wheel prim
+        mat_binding = UsdShade.MaterialBindingAPI.Apply(child)
+        mat_obj     = UsdShade.Material(mat_prim)
+        mat_binding.Bind(mat_obj, UsdShade.Tokens.strongerThanDescendants, "physics")

@@ -80,7 +80,8 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             # Exactly on the path center (X=-16.197) at safe drop height
             pos=(-16.197, 5.50, 0.12),
             rot=(0.7071, 0.0, 0.0, 0.7071), # Upright & Face North (WXYZ)
-            lin_vel=(0.0, 2.0, 0.0) # Kickstart velocity to bypass static friction and demonstrate reward
+            # No kickstart — proper tire friction + drive torque is sufficient.
+            # Kickstart was masking physics issues (bouncing, height terminations).
         ),
 
 
@@ -186,7 +187,7 @@ class RewardCfg:
     # Requires min speed of 0.5 m/s, UNLESS the traffic light (go_signal) says to stop!
     stationary = RewTerm(
         func=lambda env: torch.where(
-            (torch.abs(env.scene["robot"].data.root_lin_vel_b[:, 0]) < 0.5) &
+            (torch.abs(env.scene["robot"].data.root_lin_vel_b[:, 0]) < 0.2) &
             (env.extras.get("go_signal", torch.ones(env.num_envs, device=env.device)).squeeze(-1) > 0.5),
             -1.0, 0.0
         ),
@@ -210,7 +211,7 @@ class TerminationCfg:
     roadmark_contact = DoneTerm(func=mdp_done.white_line_contact, params={"threshold": 0.12})
     # height termination: Catch flying robots (falling into void)
     # Lowered to 0.02m to give suspension room to breathe upon impact
-    height = DoneTerm(func=mdp_done.height_termination, params={"threshold": 0.02})
+    height = DoneTerm(func=mdp_done.height_termination, params={"threshold": 0.005})
     # Stagnation: Reset if stuck against a wall
     stagnation = DoneTerm(func=mdp_done.stagnation_termination)
     # FOV Driving: Reset if driving into areas not visible to the camera

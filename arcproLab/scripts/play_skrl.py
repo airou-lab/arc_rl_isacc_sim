@@ -7,7 +7,6 @@ parser.add_argument("--checkpoint", type=str, default=None,
 parser.add_argument("--num_envs", type=int, default=1, help="Number of parallel environments")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
-args_cli.enable_cameras = True # Enable cameras for visuals
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
@@ -57,50 +56,11 @@ print("Importing ARCPro modules...")
 sys.stdout.flush()
 from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic
-from skrl.envs.wrappers.torch import IsaacLabWrapper, Wrapper
+from skrl.envs.wrappers.torch import IsaacLabWrapper
 import numpy as np
 import gymnasium as gym
 
-class SKRLFlattenWrapper(Wrapper):
-    def __init__(self, env):
-        super().__init__(env)
-        
-    @property
-    def observation_space(self):
-        shape_dim = 150540 if self._env.cfg.enable_cameras else 12
-        return gym.spaces.Box(low=-np.inf, high=np.inf, shape=(shape_dim,))
-        
-    def step(self, actions):
-        obs, reward, terminated, truncated, info = self._env.step(actions)
-        return self._flatten_obs(obs), reward, terminated, truncated, info
-        
-    def reset(self):
-        obs, info = self._env.reset()
-        return self._flatten_obs(obs), info
-        
-    def _flatten_obs(self, obs):
-        vec = obs["telemetry"]
-        if "tiled_camera" in obs:
-            img = obs["tiled_camera"].reshape(vec.shape[0], -1)
-            return torch.cat([vec, img], dim=1)
-        return vec
-        
-    @property
-    def state_space(self):
-        return self._env.state_space
-        
-    @property
-    def action_space(self):
-        return self._env.action_space
-        
-    def state(self):
-        return self._env.state()
-        
-    def render(self, *args, **kwargs):
-        return self._env.render(*args, **kwargs)
-        
-    def close(self):
-        self._env.close()
+from agents.skrl_wrappers import SKRLFlattenWrapper
 
 import traceback
 
@@ -109,7 +69,7 @@ try:
     sys.stdout.flush()
     env_cfg = ARCProEnvCfg()
     env_cfg.scene.num_envs = args_cli.num_envs
-    env_cfg.enable_cameras = True
+    env_cfg.enable_cameras = args_cli.enable_cameras
     env_cfg.__post_init__()
 
     print("Instantiating ManagerBasedRLEnv...")

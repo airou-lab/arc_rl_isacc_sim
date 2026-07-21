@@ -14,28 +14,7 @@ from isaaclab.envs import ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
 from skrl.envs.wrappers.torch import IsaacLabWrapper, Wrapper
 
-class SKRLFlattenWrapper(Wrapper):
-    def __init__(self, env):
-        super().__init__(env)
-        
-    @property
-    def observation_space(self):
-        return gym.spaces.Box(low=-np.inf, high=np.inf, shape=(150540,))
-        
-    def step(self, actions):
-        obs, reward, terminated, truncated, info = self._env.step(actions)
-        return self._flatten_obs(obs), reward, terminated, truncated, info
-        
-    def reset(self):
-        obs, info = self._env.reset()
-        return self._flatten_obs(obs), info
-        
-    def _flatten_obs(self, obs):
-        if "tiled_camera" in obs:
-            vec = obs["telemetry"]
-            img = obs["tiled_camera"].reshape(vec.shape[0], -1)
-            return torch.cat([vec, img], dim=1)
-        return obs["telemetry"]
+from agents.skrl_wrappers import SKRLFlattenWrapper
 
 def main():
     env_cfg = ARCProEnvCfg()

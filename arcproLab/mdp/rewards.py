@@ -63,15 +63,15 @@ def waypoint_progress_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg =
     displacement = torch.norm(current_pos - prev_pos, dim=1)  # (num_envs,)
     delta = torch.where(displacement >= 0.02, delta, torch.zeros_like(delta))
 
-    # Zero out reward for envs that just terminated (prevent cross-episode delta bleed)
-    if hasattr(env, 'reset_terminated'):
-        delta = torch.where(env.reset_terminated, torch.zeros_like(delta), delta)
+    # Zero out reward for envs that just reset (prevent cross-episode delta bleed)
+    if hasattr(env, 'reset_buf'):
+        delta = torch.where(env.reset_buf, torch.zeros_like(delta), delta)
         # Reset tracking state for terminated envs
         env.extras["prev_wp_idx_reward"] = torch.where(
-            env.reset_terminated, current_idx, prev_idx
+            env.reset_buf, current_idx, prev_idx
         )
         env.extras["prev_pos_reward"] = torch.where(
-            env.reset_terminated.unsqueeze(1).expand_as(current_pos),
+            env.reset_buf.unsqueeze(1).expand_as(current_pos),
             current_pos, prev_pos
         )
     else:

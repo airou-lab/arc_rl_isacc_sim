@@ -6,7 +6,6 @@ parser.add_argument("--checkpoint", type=str, default="logs/ppo_skrl/20260701-19
 parser.add_argument("--num_envs", type=int, default=1, help="Number of parallel environments")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
-args_cli.enable_cameras = True # Enable cameras for visuals
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
@@ -39,46 +38,7 @@ from skrl.envs.wrappers.torch import IsaacLabWrapper, Wrapper
 import numpy as np
 import gymnasium as gym
 
-class SKRLFlattenWrapper(Wrapper):
-    def __init__(self, env):
-        super().__init__(env)
-        
-    @property
-    def observation_space(self):
-        shape_dim = 150540 if self._env.cfg.enable_cameras else 12
-        return gym.spaces.Box(low=-np.inf, high=np.inf, shape=(shape_dim,))
-        
-    def step(self, actions):
-        obs, reward, terminated, truncated, info = self._env.step(actions)
-        return self._flatten_obs(obs), reward, terminated, truncated, info
-        
-    def reset(self):
-        obs, info = self._env.reset()
-        return self._flatten_obs(obs), info
-        
-    def _flatten_obs(self, obs):
-        vec = obs["telemetry"]
-        if "tiled_camera" in obs:
-            img = obs["tiled_camera"].reshape(vec.shape[0], -1)
-            return torch.cat([vec, img], dim=1)
-        return vec
-        
-    @property
-    def state_space(self):
-        return self._env.state_space
-        
-    @property
-    def action_space(self):
-        return self._env.action_space
-        
-    def state(self):
-        return self._env.state()
-        
-    def render(self, *args, **kwargs):
-        return self._env.render(*args, **kwargs)
-        
-    def close(self):
-        self._env.close()
+from agents.skrl_wrappers import SKRLFlattenWrapper
 
 import traceback
 
@@ -87,7 +47,7 @@ try:
     sys.stdout.flush()
     env_cfg = ARCProEnvCfg()
     env_cfg.scene.num_envs = args_cli.num_envs
-    env_cfg.enable_cameras = True
+    env_cfg.enable_cameras = args_cli.enable_cameras
     env_cfg.__post_init__()
 
     print("Instantiating ManagerBasedRLEnv...")
@@ -106,21 +66,47 @@ try:
     obs, info = env.reset()
 
     print("Entering simulation loop...")
+    print(f"{'Step':>6} | {'Speed(m/s)':>10} | {'Reward':>8} | {'MaxSpd':>8} | {'Done'}")
+    print("-" * 55)
+    sys.stdout.flush()
+
     step_count = 0
-    while simulation_app.is_running():
+    max_speed = 0.0
+    MAX_STEPS = 500  # auto-stop after 500 steps for a clean physics test
+
+    while simulation_app.is_running() and step_count < MAX_STEPS:
         # Action space is 3-dimensional: [steer, throttle, brake]
         action = torch.zeros((args_cli.num_envs, 3), device=env.device)
-        
+
         # Wait 10 steps for the car to drop to the ground before driving
         if step_count > 10:
             action[:, 0] = 0.0  # Steer
             action[:, 1] = 1.0  # Throttle
             action[:, 2] = 0.0  # Brake
-            
+
         obs, reward, terminated, truncated, info = env.step(action)
         step_count += 1
 
-    print("Simulation loop ended.")
+        # Speed is index 3 in the telemetry obs vector (fwd velocity m/s)
+        speed = float(obs[0, 3].item()) if obs.shape[-1] > 3 else float(obs[0, 0].item())
+        rew_val = float(reward[0].item())
+        done = bool((terminated | truncated)[0].item())
+        max_speed = max(max_speed, abs(speed))
+
+        if step_count % 50 == 0 or done:
+            print(f"{step_count:>6} | {speed:>10.3f} | {rew_val:>8.2f} | {max_speed:>8.3f} | {'YES' if done else 'no'}")
+            sys.stdout.flush()
+
+        if done:
+            print(f"[RESET] Episode ended at step {step_count} — resetting.")
+            obs, info = env.reset()
+            step_count = 0
+            max_speed = 0.0
+
+    print("=" * 55)
+    print(f"PHYSICS SUMMARY: max_speed_seen = {max_speed:.3f} m/s over {step_count} steps")
+    print("=" * 55)
+    sys.stdout.flush()
     env.close()
 
 except Exception as e:

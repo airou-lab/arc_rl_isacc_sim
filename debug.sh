@@ -22,5 +22,4 @@ echo ""
 
 exec "$ISAACLAB_PATH" -p "$PROJECT_DIR/arcproLab/scripts/play_skrl.py" \
     --num_envs 1 \
-    --enable_cameras \
     "$@"
