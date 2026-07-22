@@ -73,8 +73,18 @@ def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     if reset_buf is not None:
         env.extras["distance"] = torch.where(reset_buf, torch.zeros_like(env.extras["distance"]), env.extras["distance"])
 
-    # Calculate distance moved in this step
-    env.extras["distance"] += asset.data.root_lin_vel_b[:, 0] * 0.05
+    # Calculate distance moved in this step.
+    # Two defects fixed here (both measured in docs/off-road-debug/03-phase0-baseline.md):
+    #  1. SIGN: forward is local -X (same convention speed_reward uses), so the
+    #     previous `+= root_lin_vel_b[:, 0]` accumulated NEGATIVE distance while
+    #     driving forward. Baseline probe measured slot 11 going -1.62 -> -15.26
+    #     over 5.44m of forward travel.
+    #  2. TIMESTEP: the hardcoded 0.05 is a 20Hz step, but the control rate is
+    #     sim.dt * decimation = 0.002 * 10 = 0.02s (50Hz), so distance was
+    #     inflated 2.5x. The probe measured a ratio of 2.505 against ground
+    #     truth. Using env.step_dt instead so this cannot drift again if
+    #     decimation or sim.dt change.
+    env.extras["distance"] += -asset.data.root_lin_vel_b[:, 0] * env.step_dt
     
     # Store raw values in extras for Reward/Termination (Unmasked)
     env.extras["lat_err"] = lat_err

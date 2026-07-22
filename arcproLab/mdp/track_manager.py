@@ -18,6 +18,16 @@ import os
 # copy, so the two can't drift apart again. See docs/off-road-debug/.
 GATE_ZONE_RADIUS_M = 0.20
 
+# Maximum physically-achievable path curvature (1/m), used to clamp the
+# curvature signal fed to the policy as observation slot 10.
+# The vehicle's own minimum turn radius is
+#   wheelbase / tan(max_steering_angle) = 0.33 / tan(0.5) = 0.604m  -> kappa 1.66
+# (see AckermannSteeringActionCfg in arcpro_env_cfg.py). Clamping at 2.0
+# (radius >= 0.5m) leaves headroom while rejecting the noise spikes the
+# current centerline generator produces. See
+# docs/off-road-debug/03-phase0-baseline.md.
+MAX_PATH_CURVATURE = 2.0
+
 class TrackManager:
     """
     Robust Track Manager with VisualizationMarkers and Gap-Filling.
@@ -93,8 +103,28 @@ class TrackManager:
                     if ds > 0:
                         kappa[i] = dyaw / ds
                 
+                # INTERIM GUARD: clamp curvature to a physically achievable range.
+                # kappa = dyaw/ds, and the current track_centerline.npy derives yaw
+                # from adjacent ~1cm, 1mm-quantized points, so quantization noise is
+                # amplified ~100x by the small ds. Measured offline: only 70.7% of
+                # values are physically plausible, 13% exceed |kappa|>10, and spikes
+                # reach +/-1577 (a 0.6mm turn radius) at the 178 fragment
+                # discontinuities in the file.
+                #
+                # Bound derivation: the car cannot turn tighter than
+                # wheelbase / tan(max_steering_angle) = 0.33 / tan(0.5) = 0.604m,
+                # i.e. |kappa| <= 1.66. No drivable centerline should demand a
+                # tighter radius than the vehicle can physically execute, so we
+                # clamp at 2.0 (radius >= 0.5m) to leave headroom.
+                #
+                # This is a GUARD, not the fix. The real fix is regenerating
+                # track_centerline.npy (Phase 2) -- see
+                # docs/off-road-debug/03-phase0-baseline.md.
+                n_implausible = int(np.sum(np.abs(kappa) > MAX_PATH_CURVATURE))
+                kappa = np.clip(kappa, -MAX_PATH_CURVATURE, MAX_PATH_CURVATURE)
                 self.curvature_tensor = torch.tensor(kappa, device=self.device, dtype=torch.float32)
-                print(f"[TrackManager] Calculated curvature for {n_wps} waypoints.")
+                print(f"[TrackManager] Calculated curvature for {n_wps} waypoints "
+                      f"({n_implausible} clamped to +/-{MAX_PATH_CURVATURE}).")
             else:
                 self.waypoints = torch.tensor([[-16.25, 5.56, -1.57]], device=self.device)
                 self.curvature_tensor = torch.zeros(1, device=self.device)
