@@ -13,24 +13,27 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     Mastery Logic: Relaxed margin (0.15m) to prevent physics-induced resets, 
     but still resets if leaving the road.
     """
-    from mdp.track_manager import get_track_manager
+    from mdp.track_manager import get_track_manager, GATE_ZONE_RADIUS_M
     tm = get_track_manager(device=env.device)
-    
+
     asset = env.scene[asset_cfg.name]
     env_origins = env.scene.env_origins
     local_pos = asset.data.root_pos_w - env_origins
-    
+
     # Get boundary data
     dist_y, dist_w, dist_g = tm.compute_marker_distances(local_pos)
-    
+
     # 1. Boundary hit (White or Yellow line dist < threshold)
     # Default: 0.15m (Provides buffer for 50Hz control loop)
     boundary_hit = (dist_w < threshold) | (dist_y < threshold)
-    
+
     # 2. Gate permeability check (Phase 11-17)
-    # Mask the boundary reset if we are inside a gate zone (dist_g < 0.50m)
-    # This allows the robot to cross white lines that belong to gates
-    in_gate_zone = dist_g < 0.50
+    # Mask the boundary reset if we are inside a gate zone (dist_g < GATE_ZONE_RADIUS_M)
+    # This allows the robot to cross white lines that belong to gates.
+    # Fixed regression: this was silently widened to 0.50m in commit 0a97fb9
+    # ("restore strict boundaries") against the documented 0.20m Phase 15
+    # Mastery spec. See docs/off-road-debug/01-gate-radius-hole-punching.md.
+    in_gate_zone = dist_g < GATE_ZONE_RADIUS_M
     masked_boundary_hit = boundary_hit & (~in_gate_zone)
     
     # 3. Gate contact logic: Still resets if entering gate with bad alignment

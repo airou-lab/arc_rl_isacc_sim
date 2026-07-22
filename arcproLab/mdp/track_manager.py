@@ -7,6 +7,17 @@ import torch
 import numpy as np
 import os
 
+# Single source of truth for "how close counts as belonging to a gate."
+# Design spec: .planning/research/15-MASTERY_REWARDS.md and
+# .planning/phases/15-mastery-curriculum/15-01-{PLAN,SUMMARY}.md both fix
+# this at 0.20m ("Immunity: If dist_gate < 0.20m, set R_line = 0.0").
+# Commit 0a97fb9 ("restore strict boundaries") silently widened the runtime
+# copy of this value to 0.50m and the point-cloud punch radius (below) to
+# 1.0m without updating the spec or mentioning the change in its message.
+# Both consumers now import this constant instead of hardcoding their own
+# copy, so the two can't drift apart again. See docs/off-road-debug/.
+GATE_ZONE_RADIUS_M = 0.20
+
 class TrackManager:
     """
     Robust Track Manager with VisualizationMarkers and Gap-Filling.
@@ -168,10 +179,18 @@ class TrackManager:
 
         y_data, w_data, g_data = [], [], []
         
-        # 1. First, find all Gates explicitly (Global Search like verify_gates.py)
+        # 1. First, find all Gates explicitly.
+        # Scoped to root_prim (env_0), matching the boundary-mesh loop below.
+        # Was Usd.PrimRange(stage.GetPseudoRoot()) -- a whole-stage search
+        # copied from verify_gates.py, a GUI tool that visualizes every gate
+        # in the stage and has no reason to scope to one env. Here it picked
+        # up "laneGate" prims replicated across every other instanced env
+        # (env_1..env_N-1) too, each only having env_0's origin subtracted,
+        # so their world positions never fold back into a consistent local
+        # frame. See docs/off-road-debug/02-gate-discovery-env-scoping.md.
         gate_prim_paths = []
         gate_fallback_pts = []
-        for prim in Usd.PrimRange(stage.GetPseudoRoot()):
+        for prim in Usd.PrimRange(root_prim):
             path_str = str(prim.GetPath())
             is_gate_prim = False
             
@@ -268,19 +287,24 @@ class TrackManager:
             self.raw_gate_pts = np.array(gate_fallback_pts)
             
         # 3. CRITICAL: Punch Holes for Gate Permeability
-        # If any white/yellow point is within 1.0m of a Gate point, REMOVE IT.
-        # This guarantees the robot can pass through gates without triggering termination.
+        # If any white/yellow point is within GATE_ZONE_RADIUS_M of a Gate
+        # point, REMOVE IT. This guarantees the robot can pass through gates
+        # without triggering termination.
+        # Fixed to reuse GATE_ZONE_RADIUS_M (was a separate, larger 1.0m
+        # constant) so the boundary point cloud never has a "dead zone" wider
+        # than the radius white_line_contact() actually treats as a gate.
+        # See docs/off-road-debug/01-gate-radius-hole-punching.md.
         if self.raw_gate_pts is not None:
             gate_xy = self.raw_gate_pts[:, :2]
-            
+
             def punch_holes(raw_pts, name):
                 if raw_pts is None or len(raw_pts) == 0: return None
                 from scipy.spatial import KDTree
                 tree = KDTree(gate_xy)
                 dists, _ = tree.query(raw_pts[:, :2], k=1)
-                
-                # Keep only points further than 1.0m from any gate
-                mask = dists > 1.0
+
+                # Keep only points further than GATE_ZONE_RADIUS_M from any gate
+                mask = dists > GATE_ZONE_RADIUS_M
                 filtered = raw_pts[mask]
                 print(f"[TrackManager] Punched holes in {name}: removed {len(raw_pts) - len(filtered)} overlapping points.")
                 return filtered
