@@ -58,25 +58,25 @@ def waypoint_progress_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg =
     # Clamp: if delta > half the track, agent went backward — no reward
     delta = torch.where(delta > num_wps // 2, torch.zeros_like(delta), delta)
 
-    # FIX C — Displacement gate: only reward if robot actually moved >= 2cm.
-    # Eliminates jitter farming caused by windowed-search WP index oscillation.
+    # FIX C — Displacement gate: only reward if robot actually moved >= 5mm.
     displacement = torch.norm(current_pos - prev_pos, dim=1)  # (num_envs,)
-    delta = torch.where(displacement >= 0.02, delta, torch.zeros_like(delta))
+    passed_gate = displacement >= 0.005
+    delta = torch.where(passed_gate, delta, torch.zeros_like(delta))
 
     # Zero out reward for envs that just reset (prevent cross-episode delta bleed)
-    if hasattr(env, 'reset_buf'):
-        delta = torch.where(env.reset_buf, torch.zeros_like(delta), delta)
-        # Reset tracking state for terminated envs
-        env.extras["prev_wp_idx_reward"] = torch.where(
-            env.reset_buf, current_idx, prev_idx
-        )
-        env.extras["prev_pos_reward"] = torch.where(
-            env.reset_buf.unsqueeze(1).expand_as(current_pos),
-            current_pos, prev_pos
-        )
-    else:
-        env.extras["prev_wp_idx_reward"] = current_idx.clone()
-        env.extras["prev_pos_reward"] = current_pos.clone()
+    # Note: env.reset_buf is cleared before this function runs on the first step of the new episode.
+    # However, env.episode_length_buf is exactly 1 on the first step after a reset!
+    if hasattr(env, 'episode_length_buf'):
+        just_reset = env.episode_length_buf <= 1
+        delta = torch.where(just_reset, torch.zeros_like(delta), delta)
+        # Force update the tracking state so we don't carry over the displacement from the death location
+        passed_gate = passed_gate | just_reset
+        
+    # FIX F: Update the tracking state ONLY if we passed the displacement gate!
+    # If we don't pass the gate, we keep the old prev_pos so the distance accumulates 
+    # until it finally crosses 5mm. This prevents the "dead zone" at 0.20-0.25 m/s.
+    env.extras["prev_wp_idx_reward"] = torch.where(passed_gate, current_idx, prev_idx)
+    env.extras["prev_pos_reward"] = torch.where(passed_gate.unsqueeze(1).expand_as(current_pos), current_pos, prev_pos)
 
     # FIX B — Expose the actual per-step reward delta for accurate telemetry logging
     env.extras["reward_wp_delta_step"] = delta.float()
@@ -127,10 +127,9 @@ def heading_alignment_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
 def boundary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
     Penalizes the agent for crossing or being too close to white/yellow lines.
-    Mastery Logic: Penalize if within 0.15m, but wait for termination logic to reset.
     """
     from .terminations import white_line_contact
-    # Use a slightly more permissive check for the penalty itself
-    # We reuse the logic but we can check if it's "close enough" to be a penalty
-    is_near = white_line_contact(env, threshold=0.15)
+    # Mastery Logic: Penalize if within 0.40m (was 0.15m), but wait for termination logic to reset (at 0.12m).
+    # This provides a 0.28m wide "warning track" of dense negative feedback before the -1000 crash penalty.
+    is_near = white_line_contact(env, threshold=0.40)
     return torch.where(is_near, torch.tensor(-100.0, device=env.device), torch.tensor(0.0, device=env.device))

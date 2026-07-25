@@ -85,12 +85,12 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     # Index 4: Yaw Rate (rad/s) - Local Z angular velocity
     obs[:, 4] = asset.data.root_ang_vel_b[:, 2]
 
-    # Indices 5-7: Last Actions (Clipped)
+    # Indices 5-6: Last Actions (Steer, Drive)
     try:
-        if env.action_manager.action is not None and env.action_manager.action.shape[1] >= 3:
-            obs[:, 5:8] = env.action_manager.action[:, :3] # Steer, Throttle, Brake
+        if env.action_manager.action is not None and env.action_manager.action.shape[1] >= 2:
+            obs[:, 5:7] = env.action_manager.action[:, :2] 
     except:
-        pass 
+        pass
 
     # Index 8 & 9: Lateral and Heading Error
     from mdp.track_manager import get_track_manager
@@ -144,12 +144,15 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     env.extras["dist_y"] = dist_y
     env.extras["dist_w"] = dist_w
     
-    if masked:
-        obs[:, 8] = env.extras["lat_err"] # UNMASKED for Phase 1
-        obs[:, 9] = env.extras["head_err"] # UNMASKED for Phase 1
+    # Index 8 & 9: Lateral and Heading Error
+    # MASKED for Actor (forces RGB learning), UNMASKED for Critic (allows accurate value prediction)
+    if not masked:
+        obs[:, 8] = env.extras["lat_err"] 
+        obs[:, 9] = env.extras["head_err"]
     
     # Index 10: Path Curvature (Kappa)
-    obs[:, 10] = kappa
+    if not masked:
+        obs[:, 10] = kappa
 
     # Index 11: Total Distance (Accumulated)
     if "distance" in env.extras:

@@ -133,11 +133,15 @@ def main():
     cfg_ppo["random_timesteps"] = 0
     cfg_ppo["learning_starts"] = 0
     cfg_ppo["state_preprocessor"] = None
-    cfg_ppo["value_preprocessor"] = None
+    # Use native PPO KL early stopping and Entropy to prevent policy collapse
+    cfg_ppo["kl_threshold"] = 0.008
+    cfg_ppo["entropy_loss_scale"] = 0.001
+    cfg_ppo["learning_rate_scheduler"] = None
+    
     log_dir = os.path.join("logs", "ppo_skrl", datetime.now().strftime("%Y%m%d-%H%M%S"))
     cfg_ppo["experiment"]["directory"] = log_dir
     cfg_ppo["experiment"]["write_interval"] = 100
-    cfg_ppo["experiment"]["checkpoint_interval"] = max(1, 500000 // env.num_envs)
+    cfg_ppo["experiment"]["checkpoint_interval"] = 250  # Save every 250 rollouts (approx 32k steps)
     
     agent = TelemetryPPO(models=models, memory=memory, cfg=cfg_ppo, observation_space=env.observation_space, action_space=env.action_space, device="cuda:0")
     

@@ -15,18 +15,19 @@ def get_latest_metrics():
         # Read last 200 lines to find the latest table
         tail = subprocess.check_output(["tail", "-n", "200", LOG_FILE]).decode('utf-8')
         
-        timesteps = re.findall(r"total_timesteps\s+\|\s+([-\d\.e\+]+)", tail)
-        ep_len = re.findall(r"ep_len_mean\s+\|\s+([-\d\.e\+]+)", tail)
-        std = re.findall(r"std\s+\|\s+([-\d\.e\+]+)", tail)
-        fps = re.findall(r"fps\s+\|\s+([-\d\.e\+]+)", tail)
-        
-        speed = re.findall(r"speed_mps\s+\|\s+([-\d\.e\+]+)", tail)
+        # Parse custom print format: Step {timestep} | Rew: {rew} | Len: {len} | Spd: {spd} | WPs_cum: {wp_cum} | WPΔ_rew: {wp_step}
+        timesteps = re.findall(r"Step (\d+)", tail)
+        ep_len = re.findall(r"Len: (\d+)", tail)
+        speed = re.findall(r"Spd: ([-\d\.]+)", tail)
+        # We don't have std and fps in the custom print, so default to None
+        std = []
+        fps = []
         
         return {
             "timesteps": int(float(timesteps[-1])) if timesteps else 0,
             "ep_len": float(ep_len[-1]) if ep_len else 0,
-            "std": float(std[-1]) if std else 0,
-            "fps": float(fps[-1]) if fps else 0,
+            "std": float(std[-1]) if std else None,
+            "fps": float(fps[-1]) if fps else None,
             "speed": float(speed[-1]) if speed else 0
         }
     except Exception as e:
@@ -67,7 +68,7 @@ def main():
             failure = None
             
             # 1. Divergence Check (STD Explosion)
-            if s > 6.0:
+            if s is not None and s > 6.0:
                 failure = f"DIVERGENCE: STD exploded to {s}. The neural network has gone insane."
             
             # 2. Stagnation Check (Glass Ceiling)
@@ -76,8 +77,8 @@ def main():
             elif t > 500000 and e < 100.0:
                 failure = f"STAGNATION: Surviving only {e} steps after 500k timesteps. The agent is likely stuck in a crawling local minimum."
             
-            # 3. Crash Check (Resource Lock)
-            elif t > 10000 and f < 2:
+            # 3. Crash Check (Resource Lock - only checked when FPS metric exists)
+            elif f is not None and t > 10000 and f < 2:
                 failure = f"SYSTEM CRASH: FPS dropped to {f}. Simulation is likely frozen or OOM."
 
             if failure:
@@ -87,8 +88,8 @@ def main():
                 with open(DIAGNOSIS_FILE, "w") as f_out:
                     f_out.write(f"# WATCHDOG DIAGNOSIS\n\n**Failure Detected at T={t}**\n\n> {failure}\n\n**Action Taken**: Training session 'training' has been killed to save GPU time.\n\n**Next Steps**: Please ask Gemini to analyze the logs and apply a 'Stabilization Patch'.")
                 
-                # ACTUALLY KILL THE TRAINING (The watchdog forgot this line!)
-                os.system("tmux kill-session -t training 2>/dev/null || pkill -f train_policy.py")
+                # ACTUALLY KILL THE TRAINING
+                os.system("tmux kill-session -t training 2>/dev/null; pkill -f train_skrl.py; pkill -f train_policy.py")
                 
                 # 2. Call Antigravity CLI to autonomously analyze, fix, and restart
                 print("Summoning Antigravity agent to autofix...")
@@ -103,12 +104,12 @@ def main():
                 print("Training will be restarted by the agent. Watchdog exiting.")
                 break
         
-        # Report progress every 250k steps using agy CLI
+        # Report progress every 500k steps using agy CLI
         if metrics:
-            current_milestone = metrics["timesteps"] // 250000
-            if current_milestone > last_reported_milestone and metrics["timesteps"] >= 250000:
-                print(f"Reporting {current_milestone * 250}k milestone to Antigravity...")
-                prompt = f"RL Training Progress Report: Agent successfully reached {metrics['timesteps']} timesteps! Current Speed: {metrics['speed']} m/s, EpLen: {metrics['ep_len']}."
+            current_milestone = metrics["timesteps"] // 500000
+            if current_milestone > last_reported_milestone and metrics["timesteps"] >= 500000:
+                print(f"Reporting {current_milestone * 500}k milestone to Antigravity...")
+                prompt = f"RL Training Progress Report: Agent reached {metrics['timesteps']} timesteps! Current Speed: {metrics['speed']} m/s, EpLen: {metrics['ep_len']}. The strict target is EpLen >= 600. Please analyze if it is stalling below this target and if we should intervene or let it continue."
                 os.system(f"nohup agy run --prompt '{prompt}' > /dev/null 2>&1 &")
                 last_reported_milestone = current_milestone
 

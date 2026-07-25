@@ -152,7 +152,7 @@ class ActionCfg:
         max_steering_angle=0.5,
         offset=-0.005
     )
-    b_drive = arcpro_actions.CombinedDriveActionCfg(
+    b_drive = arcpro_actions.GroupedJointVelocityActionCfg(
         asset_name="robot", 
         joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
         scale=-20.0,
@@ -167,11 +167,12 @@ class RewardCfg:
     # Anti-Suicide: Reduced from extreme 100.0 (-5000) to 20.0 (-1000) to allow value function to learn smoothly.
     termination_penalty = RewTerm(func=mdp_rew.termination_penalty, weight=20.0)
     
-    # Performance: Waypoint-based progress. Rewards the agent ONLY for advancing
-    # along the track's centerline waypoints. Cannot be gamed by circling near spawn.
-    # Fix D: Boosted weight 5.0 → 20.0. At 0.5 m/s (~1.7 WPs/step), agent earns
-    # ~34/step, making navigation clearly more profitable than survival farming.
-    progress_reward = RewTerm(func=mdp_rew.waypoint_progress_reward, weight=20.0)
+    # Fix E: Bound the waypoint progress reward with tanh and boost weight to 50.0.
+    # At 0.5 m/s (~1.7 WPs), tanh(1.7) = 0.93 * 50 = ~46 pts/step.
+    # At 1.5 m/s (~5.1 WPs), tanh(5.1) = 0.99 * 50 = ~49 pts/step.
+    # This massive reward bootstraps the learning of cornering (surviving 500 steps = 23k points),
+    # but the tanh bound prevents the endless runner exploit because sprinting 3x faster only yields 6% more points!
+    progress_reward = RewTerm(func=lambda env: torch.tanh(mdp_rew.waypoint_progress_reward(env)), weight=50.0)
     
     # Exploration: Tiny reward for applying any throttle/drive action to break out of stagnation
     action_drive_reward = RewTerm(
@@ -191,7 +192,7 @@ class RewardCfg:
             (env.extras.get("go_signal", torch.ones(env.num_envs, device=env.device)).squeeze(-1) > 0.5),
             -1.0, 0.0
         ),
-        weight=5.0
+        weight=10.0
     )
     
     # Phase 2: Waypoint Tracking (Disabled for Phase 1)
@@ -202,8 +203,10 @@ class RewardCfg:
     jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.0)
     
     # Boundary Penalty: (Enabled: Risk-aware shaping to smoothly steer away from walls)
-    # Note: Native func returns -100.0, so weight=0.1 yields -10.0 penalty.
-    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.1)
+    # Note: Native func returns -100.0. We use weight=0.6 so the penalty is -60.0.
+    # This overpowers the maximum +50.0 progress reward, ensuring a NET NEGATIVE score
+    # when driving in the warning track, forcing the agent to steer away!
+    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.6)
 
 
 @configclass

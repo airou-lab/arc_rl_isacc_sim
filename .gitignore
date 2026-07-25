@@ -24,3 +24,5 @@ exts/omni.*
 .thumbs.db
 debug_frames/
 *.npz
+.gsd/archive.db
+*.db
