@@ -7,6 +7,10 @@ import torch
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
+# Set once when the go_signal path first faults, so the warning in
+# _compute_telemetry fires a single time instead of at 50 Hz.
+_GO_SIGNAL_FAULT_LOGGED = False
+
 def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     return _compute_telemetry(env, asset_cfg, masked=True)
 
@@ -71,10 +75,24 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
             go_signal = env.extras.get("go_signal", torch.ones(env.num_envs, device=env.device))
             
         obs[:, 1] = go_signal
-    except Exception:
+    except Exception as e:
         # Defensive: detector or camera failure must not crash training.
-        # Falls back to "always go" (slot 1 stays 0 — telemetry obs init).
+        # Falls back to "always go" (slot 1 = 1.0).
+        #
+        # This path used to be silent, which is how B4 survived: with
+        # stop_line_detector.py absent from the tree the import raised every
+        # step, go_signal was pinned at 1.0, and nothing said so. Warn once
+        # per process — at 50 Hz anything else floods the log.
+        global _GO_SIGNAL_FAULT_LOGGED
+        if not _GO_SIGNAL_FAULT_LOGGED:
+            _GO_SIGNAL_FAULT_LOGGED = True
+            print(
+                f"[Observations] go_signal unavailable ({type(e).__name__}: {e}). "
+                "Telemetry slot 1 pinned to 1.0 (always GO) for the rest of this "
+                "run. The stop-bar path is NOT being exercised."
+            )
         obs[:, 1] = 1.0
+        env.extras["go_signal"] = torch.ones(env.num_envs, device=env.device)
 
     # Slot 2: goal_dist — PVP-masked to 0.
     obs[:, 2] = 0.0

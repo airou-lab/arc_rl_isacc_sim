@@ -467,8 +467,8 @@ path to keep in sync.
 
 When `age > MAX_AGE_STEPS`, `valid` drops to 0 — the radio is effectively
 down. The vehicle still has its camera, and `VisualStopLineDetector`
-(`stop_line_detector.py`, 505 lines in `arc_rl_isacc_policy`, 439 on
-`origin/Aaron_Summer_Testing_V1`, **absent from `main`**) continues to report
+(`stop_line_detector.py`, restored to `main` from
+`origin/Aaron_Summer_Testing_V1` — see §11 item 6) continues to report
 stop-line presence and range from the image.
 
 **The cv2 detector is not a V2I fallback bolted on for this protocol — it is
@@ -580,15 +580,25 @@ expired data.
    the USD was not rescaled in Phase 14-01. Anything reading it must divide by
    8. Worth either rescaling the subtree or deleting it, since it is a standing
    trap — it already produced one wrong constant.
-6. **`stop_line_detector.py` must be restored to `main` before any of this is
-   testable.** `go_signal_manager.py` imports it; the file exists only on
-   `origin/Aaron_Summer_Testing_V1` (439 lines) and in `arc_rl_isacc_policy`
-   (505 lines, newer). Until it lands, telemetry slot 1 is pinned at 1.0 by the
-   bare `except` at `observations.py:74-77`, so **neither** the perception path
-   (§5.2) **nor** the degraded-mode fallback (§8) can be exercised — the two
-   paths this protocol depends on are both unreachable. This is the first fix,
-   ahead of any V2I code: it restores the channel the rest of the design routes
-   around.
+6. **`stop_line_detector.py` — RESTORED (2026-07-27).** `go_signal_manager.py`
+   imports it and it was absent from `main`, so telemetry slot 1 was pinned at
+   1.0 by the bare `except` in `observations.py` and **neither** the perception
+   path (§5.2) **nor** the degraded-mode fallback (§8) could be exercised.
+   Restored from `origin/Aaron_Summer_Testing_V1` (439 lines, `f91f138`,
+   2026-06-18).
+
+   **Not** the `arc_rl_isacc_policy` copy, despite that one being longer (505
+   lines) — line count read as recency in an earlier draft of this document and
+   it was wrong in both directions. The policy copy is a month older
+   (`e200b27`, 2026-05-15), still carries the pre-retune
+   `min_line_width_px = 56`, lacks the distance-aware run-count threshold, and
+   pulls in `agent.intersection_geometry`. Its extra length is
+   `GeometricStopLineDetector`, which synthesizes detections from privileged
+   world-frame geometry — a C7 violation on the actor path, and exactly the
+   thing this protocol exists to keep off the radio and out of the observation.
+
+   Still **untested at runtime**: this Mac has no numpy (§ state doc). Syntax
+   verified; behavioural verification belongs on the Linux box.
 
 ---
 

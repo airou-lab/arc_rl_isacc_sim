@@ -72,20 +72,48 @@ advertises 524. Whether this crashes or silently mis-feeds depends on whether
 the installed SKRL routes `env.state()` to the value model. **Check on the
 training box:** print `inputs["states"].shape` inside `ARCProCritic.compute`.
 
-**B4 — `stop_line_detector.py` is missing from `main`.** *(highest priority)*
-`arcproLab/mdp/go_signal_manager.py` imports it; the file exists only on
-`origin/Aaron_Summer_Testing_V1` (439 lines) and in the policy repo (505 lines,
-newer). Consumers that would raise swallow it — `observations.py:74-77` (bare
+**B4 — `stop_line_detector.py` was missing from `main`. FIXED 2026-07-27.**
+`arcproLab/mdp/go_signal_manager.py` imports it; the file existed only on
+`origin/Aaron_Summer_Testing_V1` and in the policy repo. Consumers that would
+raise swallow it — `observations.py:74-77` (bare
 except → `obs[:,1] = 1.0`, always GO), `actions.py:215-220` (`except: pass`),
 `events.py:111`. `arcpro_env_cfg.py:191` never sees the error at all: it reads
 `env.extras.get("go_signal", torch.ones(...))`, so the default silently supplies
-GO. **`go_signal` is permanently 1.0 and nothing logs it.**
+GO. **`go_signal` was permanently 1.0 and nothing logged it.**
 
-Consequence beyond the obvious: this is *Arika's* intended perception path
+Why it mattered: this is *Arika's* intended perception path
 (`go_signal_manager.py` docstring — the same module runs on the real D435i
-stream), so its absence disables the one deployment-realistic infrastructure
+stream), so its absence disabled the one deployment-realistic infrastructure
 channel `main` has. `docs/V2I_PROTOCOL.md` §5.2 and §8 both route through it.
-Restoring it works *with* her architecture, which is why it precedes B1/B2.
+Restoring it works *with* her architecture, which is why it preceded B1/B2.
+
+**Fix applied:**
+1. Restored `arcproLab/mdp/stop_line_detector.py` (439 lines) from
+   `origin/Aaron_Summer_Testing_V1@f91f138`. Import contract verified against
+   `go_signal_manager.py:41-44` — `StopLineDetectionContext`,
+   `StopLineDetectorConfig`, `VisualStopLineDetector` all present; `detect()`
+   returns `.detected`/`.distance_m` as the FSM expects. No external deps
+   beyond numpy + optional cv2.
+2. `observations.py` — the `except` around the go_signal block now warns once
+   per process naming the exception, instead of silently pinning slot 1. It
+   also writes `env.extras["go_signal"]` explicitly on the fault path. The
+   stale in-code comment ("slot 1 stays 0") was corrected; it said the opposite
+   of what the line below it did.
+3. `skrl_wrappers.py` — `go_signal` is now published to `info` for the SKRL
+   logger. A flat 1.0 mean is the tell that the detector is not firing.
+
+**Chose the branch copy, not the policy copy, despite 439 < 505 lines.** The
+policy copy is a month older (`e200b27`, 2026-05-15 vs `f91f138`, 2026-06-18),
+carries the pre-retune `min_line_width_px = 56` against the branch's 20, lacks
+the distance-aware run-count threshold, and imports
+`agent.intersection_geometry`. Its extra 66 lines are `GeometricStopLineDetector`
+— a privileged world-frame oracle, i.e. a C7 violation on the actor path. An
+earlier draft of both documents called the policy copy "newer" purely from line
+count. It was wrong on recency *and* on desirability.
+
+**Not runtime-verified.** No numpy on this Mac (§2). Syntax checked only;
+behaviour must be confirmed on the Linux box — watch that `go_signal` mean drops
+below 1.0 on approach.
 
 **B5 — `road_manager.py` is dead on `main`.** `go_signals` hardcoded to 1.0 at
 :87 and discarded by the caller (`observations.py:41` does `turn_tokens, _ =`).
@@ -121,8 +149,11 @@ IsaacLab `ManagerBasedRLEnv`. V2I ownership **moves into `arc_rl_isacc_sim`**.
 
 Worth porting (architecture-neutral, ~1500 lines, already tested):
 `scheduler_core.py`, `scheduler_transport.py`, `intersection_node_server.py`,
-`intersection_graph.py`, `intersection_geometry.py`, `stop_line_detector.py`,
+`intersection_graph.py`, `intersection_geometry.py`,
 `config/intersection_topology.json`, `tests/`.
+
+~~`stop_line_detector.py`~~ — **do not port from here.** The
+`Aaron_Summer_Testing_V1` copy supersedes it and is what landed (B4).
 
 Must be rewritten (targets the abandoned stack): `agent_env_wrapper.py` and the
 `WorkerScheduler` facade.
@@ -295,11 +326,12 @@ Ordered so that every step works *with* post-SKRL `main` rather than against it
 1. ~~Commit the spec.~~ Done — `a760312`, revised to v0.2.0.
 2. ~~Correct both docs against traced code.~~ This pass. Commit **docs only**;
    `.planning/RESUME.md` stays unstaged (§6).
-3. **B4 — restore `stop_line_detector.py`.** Port the 505-line policy-repo
-   version. Highest value and lowest conflict: it resurrects Arika's intended
-   perception path, un-pins telemetry slot 1 from 1.0, and makes §5.2/§8 of the
-   spec testable for the first time. Add logging for `go_signal` — its silence
-   is why the defect survived.
+3. ~~**B4 — restore `stop_line_detector.py`.**~~ Done. Restored from
+   `Aaron_Summer_Testing_V1@f91f138` (not the policy copy — see B4), plus
+   fault logging in `observations.py` and `go_signal` publication in
+   `skrl_wrappers.py`. **Needs a runtime pass on the Linux box** before
+   step 4: confirm the detector imports, and that logged `go_signal` mean
+   dips below 1.0 on approach rather than sitting flat.
 4. **B1 — `waypoint_progress_reward` differencing.** It is the Phase 1 reward
    (w20) and it is quadratic in episode length; every Phase 1 exit criterion is
    read through it.

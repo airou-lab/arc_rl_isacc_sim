@@ -47,6 +47,12 @@ class SKRLFlattenWrapper(Wrapper):
             # Expose the per-step reward WP delta
             if "reward_wp_delta_step" in base_env.extras:
                 info["reward_wp_delta_step"] = base_env.extras["reward_wp_delta_step"].clone()
+            # Stop-bar compliance (T3.2). Logged because it was previously
+            # invisible: with the detector missing this sits at a constant 1.0,
+            # and nothing surfaced that the stop-bar path was inert (B4). A flat
+            # 1.0 mean here means the detector is not firing.
+            if "go_signal" in base_env.extras:
+                info["go_signal"] = base_env.extras["go_signal"].clone().float()
         except Exception:
             pass
             
