@@ -1,21 +1,22 @@
-# Resume Context for ARCPro RL Phase 16 (MARL Transition)
+# IsaacLab F1Tenth RL Training - Resume Context
 
 ## Current Status
-* **Milestone:** 3 (HD Perception & Production Hardening, v2.6)
-* **Phase:** 16 (MARL Transition)
-* **Active Process:** Single-agent vision-based SKRL training is running stably in the background. The agent uses purely RGB camera input (ResNet-18 backbone) while being masked from direct mathematical telemetry (`lat_err`, `head_err`, `kappa`).
-* **Session Details:** Running in tmux session named `training`. (Run `tmux attach -t training`). Live logs are actively writing to `logs/skrl_phase1.log`.
+We successfully debugged a major kinematics failure where the F1Tenth vehicle was acting like a forklift (driving backwards with locked front wheels). 
+The physics are now visually confirmed to be stable. The car is properly driving in All-Wheel Drive (AWD) and steering correctly using Ackermann kinematics.
+A fresh SKRL training run (16-env) has been started via tmux because the previous neural network checkpoints were incompatible with the corrected physics.
 
-## Most Recent Changes (Session: Fixes 29-30)
-1. **Verified Codebase:** Deployed an autonomous Codebase Verifier subagent that conducted a comprehensive goal-backward audit against 28 historical failure modes. Result: **Zero remaining bugs, exploits, or math anomalies.**
-2. **Fixed Watchdog Suicide Loop (Fix 29):** The watchdog script (`watchdog.py`) was instantly killing the tmux session due to a missing FPS metric parsing as `0` and triggering an OOM freeze check. Fixed by handling missing metrics as `None` and guarding crash conditions.
-3. **Fixed Log Leakage (Fix 30):** Updated `start_tmux_training.sh` to automatically archive old logs on startup, use a fresh `tee` log pipe, and delay watchdog boot by 20 seconds to allow Isaac Sim to initialize cleanly.
-4. **Git Cleanup:** Untracked `.gsd/archive.db` and added it to `.gitignore` to prevent binary merge conflicts.
+## Most Recent Changes (Last Session)
+1. **Fixed "Forklift" Reverse Driving:** In `arcpro_env_cfg.py`, the `b_drive` action space scale/offset was reverted from `20.0` to `-20.0`. The car now drives forward relative to its mesh, placing the steering axle correctly at the front (restoring Front-Wheel Steering).
+2. **Fixed "Parking Brake" Front Wheels:** Reverted the RWD experiment back to **AWD**. The `b_drive` and `throttle` actuators in `arcpro_env_cfg.py` and `arcpro_robot_cfg.py` were updated to target all four wheels (`["Joint_Drive_.*"]`). This prevents the front wheels from acting as unactuated parking brakes dragging on the pavement.
+3. **Updated Test Scripts:** Created `steer.sh` and `play_steer.py` (and updated `play_straight.py`) to correctly interface with the 2D action space `[steer, drive]`. The user successfully visually verified the car driving straight and steering.
+4. **Wiped Checkpoints:** Deleted the obsolete neural network checkpoints in `logs/ppo_skrl/` that were trained on the broken backwards physics.
+5. **Started Fresh Training:** Executed `./start_tmux_training.sh`. The training and watchdog are currently running in a background tmux session named `training`.
 
 ## Active Issues / Blockers
-1. **Uncommitted Git State:** All edits (watchdog fixes, launcher fixes, `.gitignore`, and the uncommitted reward math fixes on `arcpro_env_cfg.py`) are currently untracked/unstaged on `main`.
+- **None at the moment.** The training is running. We must wait to see if the agent can overcome the first curve with the corrected physics. 
 
-## Immediate Next Steps for the Next Agent
-1. **Monitor Training:** Run `tmux attach -t training` or tail `logs/skrl_phase1.log` to check how the agent is surviving and tracking waypoints.
-2. **Git Commit Check:** Ask the user if they would like to commit the stable codebase changes to `main` (or create a feature branch) before proceeding.
-3. **MARL Vehicle Spawner:** Once single-agent performance is confirmed stable, begin refactoring the spawner to support Multi-Agent instances for Phase 16.
+## Next Steps for New Agent
+1. Read `.planning/monitor_agent_prompt.md` to understand the watchdog rules.
+2. Ask the user if they want to check the status of the training by attaching to the tmux session or if they want to spawn a monitor subagent to periodically check the tensorboard logs.
+3. Do NOT modify the physics or drive actions. They have been visually verified to work!
+4. If the agent is crashing early, focus strictly on **reward tuning** (using `reward_tuning_history.md` as a guide) rather than changing the robot's physical attributes.

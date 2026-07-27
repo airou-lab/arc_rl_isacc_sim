@@ -75,8 +75,8 @@ def _apply_tire_friction(robot_prim: Usd.Prim, stage) -> None:
     """Apply rubber-on-asphalt PhysX material to all Wheel_* child prims."""
     from pxr import UsdPhysics, UsdShade, Gf, Sdf
 
-    STATIC_FRICTION  = 1.2
-    DYNAMIC_FRICTION = 0.8
+    STATIC_FRICTION  = 3.0
+    DYNAMIC_FRICTION = 3.0
     RESTITUTION      = 0.0
 
     robot_path = str(robot_prim.GetPath())
@@ -101,6 +101,12 @@ def _apply_tire_friction(robot_prim: Usd.Prim, stage) -> None:
         phys_mat.CreateRestitutionAttr().Set(RESTITUTION)
 
         # Bind the material to the wheel prim
+        mat_obj = UsdShade.Material(mat_prim)
         mat_binding = UsdShade.MaterialBindingAPI.Apply(child)
-        mat_obj     = UsdShade.Material(mat_prim)
         mat_binding.Bind(mat_obj, UsdShade.Tokens.strongerThanDescendants, "physics")
+        
+        # Explicitly bind to Geom children just in case
+        for geom_child in child.GetChildren():
+            if "Geom" in geom_child.GetName() or geom_child.HasAPI(UsdPhysics.CollisionAPI):
+                geom_binding = UsdShade.MaterialBindingAPI.Apply(geom_child)
+                geom_binding.Bind(mat_obj, UsdShade.Tokens.strongerThanDescendants, "physics")

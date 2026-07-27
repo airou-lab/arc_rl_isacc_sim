@@ -64,13 +64,17 @@ def waypoint_progress_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg =
     delta = torch.where(passed_gate, delta, torch.zeros_like(delta))
 
     # Zero out reward for envs that just reset (prevent cross-episode delta bleed)
-    # Note: env.reset_buf is cleared before this function runs on the first step of the new episode.
-    # However, env.episode_length_buf is exactly 1 on the first step after a reset!
+    just_reset = torch.zeros_like(delta, dtype=torch.bool)
+    if hasattr(env, 'reset_terminated'):
+        just_reset = just_reset | env.reset_terminated
+    if hasattr(env, 'reset_buf'):
+        just_reset = just_reset | env.reset_buf
     if hasattr(env, 'episode_length_buf'):
-        just_reset = env.episode_length_buf <= 1
-        delta = torch.where(just_reset, torch.zeros_like(delta), delta)
-        # Force update the tracking state so we don't carry over the displacement from the death location
-        passed_gate = passed_gate | just_reset
+        just_reset = just_reset | (env.episode_length_buf <= 1)
+        
+    delta = torch.where(just_reset, torch.zeros_like(delta), delta)
+    # Force update the tracking state so we don't carry over the displacement from the death location
+    passed_gate = passed_gate | just_reset
         
     # FIX F: Update the tracking state ONLY if we passed the displacement gate!
     # If we don't pass the gate, we keep the old prev_pos so the distance accumulates 

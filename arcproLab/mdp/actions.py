@@ -183,13 +183,13 @@ class GroupedJointVelocityAction(GroupedJointAction):
         # env in STOP (bar detected within stop_distance_threshold),
         # env.extras["go_signal"] is 0 and we force velocity to 0.0 here at
         # the env boundary regardless of what the network commanded.
-        try:
-            go_signal = self._env.extras.get("go_signal", None)
-            if go_signal is not None:
-                # Force velocity target to 0.0 if go_signal is 0
-                self._processed_actions[:] = self._processed_actions * go_signal.unsqueeze(-1).to(self._processed_actions.dtype)
-        except Exception:
-            pass
+        # try:
+        #     go_signal = self._env.extras.get("go_signal", None)
+        #     if go_signal is not None:
+        #         # Force velocity target to 0.0 if go_signal is 0
+        #         self._processed_actions[:] = self._processed_actions * go_signal.unsqueeze(-1).to(self._processed_actions.dtype)
+        # except Exception:
+        #     pass
 
     def apply_actions(self):
         self._asset.set_joint_velocity_target(self._processed_actions, joint_ids=self._joint_ids)
@@ -227,12 +227,12 @@ class CombinedDriveAction(GroupedJointAction):
         # env in STOP (bar detected within stop_distance_threshold),
         # env.extras["go_signal"] is 0 and we force throttle to 0 here at
         # the env boundary regardless of what the network commanded.
-        try:
-            go_signal = self._env.extras.get("go_signal", None)
-            if go_signal is not None:
-                throttle = throttle * go_signal.unsqueeze(-1).to(throttle.dtype)
-        except Exception:
-            pass
+        # try:
+        #     go_signal = self._env.extras.get("go_signal", None)
+        #     if go_signal is not None:
+        #         throttle = throttle * go_signal.unsqueeze(-1).to(throttle.dtype)
+        # except Exception:
+        #     pass
         
         drive = throttle * (1.0 - brake)
         

@@ -59,8 +59,8 @@ class ARCProSceneCfg(InteractiveSceneCfg):
     track = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Track",
         spawn=sim_utils.UsdFileCfg(
-            usd_path=os.path.join(USD_DIR, "no_graph_sim_clean_1x_flattened.usda"),
-            scale=(1.0, 1.0, 1.0), # Resized physically in Phase 14-01
+            usd_path=os.path.join(USD_DIR, "track_1x_wrapper.usda"),
+            scale=(1.0, 1.0, 1.0),
         ),
         # Use origin position to match USD world coordinates
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
@@ -78,7 +78,7 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         init_state=ARCPRO_ROBOT_CFG.init_state.replace(
             # Spawn point: right lane heading toward junction_18 intersection.
             # Exactly on the path center (X=-16.197) at safe drop height
-            pos=(-16.197, 5.50, 0.12),
+            pos=(-16.197, 5.50, 0.5),
             rot=(0.7071, 0.0, 0.0, 0.7071), # Upright & Face North (WXYZ)
             # No kickstart — proper tire friction + drive torque is sufficient.
             # Kickstart was masking physics issues (bouncing, height terminations).
@@ -154,8 +154,8 @@ class ActionCfg:
     )
     b_drive = arcpro_actions.GroupedJointVelocityActionCfg(
         asset_name="robot", 
-        joint_names=["Joint_Drive_RL", "Joint_Drive_RR", "Joint_Drive_FL", "Joint_Drive_FR"], 
-        scale=-20.0,
+        joint_names=["Joint_Drive_.*"], 
+        scale=-20.0, 
         offset=-20.0
     )
 
@@ -188,11 +188,10 @@ class RewardCfg:
     # Requires min speed of 0.5 m/s, UNLESS the traffic light (go_signal) says to stop!
     stationary = RewTerm(
         func=lambda env: torch.where(
-            (torch.abs(env.scene["robot"].data.root_lin_vel_b[:, 0]) < 0.2) &
-            (env.extras.get("go_signal", torch.ones(env.num_envs, device=env.device)).squeeze(-1) > 0.5),
+            torch.abs(env.scene["robot"].data.root_lin_vel_b[:, 0]) < 0.2,
             -1.0, 0.0
         ),
-        weight=10.0
+        weight=50.0
     )
     
     # Phase 2: Waypoint Tracking (Disabled for Phase 1)
@@ -203,10 +202,10 @@ class RewardCfg:
     jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.0)
     
     # Boundary Penalty: (Enabled: Risk-aware shaping to smoothly steer away from walls)
-    # Note: Native func returns -100.0. We use weight=0.6 so the penalty is -60.0.
-    # This overpowers the maximum +50.0 progress reward, ensuring a NET NEGATIVE score
-    # when driving in the warning track, forcing the agent to steer away!
-    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.6)
+    # Note: Native func returns -100.0. We use weight=0.4 so the penalty is -40.0.
+    # This ensures a net positive score (+50 progress - 40 penalty = +10) in the warning track,
+    # preventing 'Penalty Over-Saturation' for a newborn vision agent while still preferring the center.
+    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.4)
 
 
 @configclass
@@ -257,7 +256,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
 
     def __post_init__(self):
         self.decimation = 10 # 500Hz / 10 = 50Hz control (Nyquist stability for 6cm clearance)
-        self.episode_length_s = 300.0 
+        self.episode_length_s = 3000.0 
         self.viewer.camera_follow_prim_path = None
         # Enable cameras conditionally
         if not self.enable_cameras:

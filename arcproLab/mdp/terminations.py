@@ -33,7 +33,9 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     
     # 1. Boundary hit (White or Yellow line dist < threshold)
     # Default: 0.15m (Provides buffer for 50Hz control loop)
-    boundary_hit = (dist_w < threshold) | (dist_y < threshold)
+    # Also add a fallback: if lateral error > 3.5m, it is definitely off the road.
+    boundary_hit = (dist_w < threshold) | (dist_y < threshold) | (torch.abs(lat_err) > 3.5)
+
     
     # 2. Gate permeability check (Phase 11-17)
     # Mask the boundary reset if we are inside a gate zone (dist_g < 0.50m)

@@ -75,14 +75,13 @@ try:
     MAX_STEPS = 500  # auto-stop after 500 steps for a clean physics test
 
     while simulation_app.is_running() and step_count < MAX_STEPS:
-        # Action space is 3-dimensional: [steer, throttle, brake]
-        action = torch.zeros((args_cli.num_envs, 3), device=env.device)
+        # Action space is 2-dimensional: [steer, drive]
+        action = torch.zeros((args_cli.num_envs, 2), device=env.device)
 
         # Wait 10 steps for the car to drop to the ground before driving
         if step_count > 10:
             action[:, 0] = 0.0  # Steer
-            action[:, 1] = 1.0  # Throttle
-            action[:, 2] = 0.0  # Brake
+            action[:, 1] = 1.0  # Drive (forward)
 
         obs, reward, terminated, truncated, info = env.step(action)
         step_count += 1

@@ -12,6 +12,8 @@ from pxr import UsdGeom, Usd, Gf
 import math
 
 def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")):
+    if env_ids is None:
+        env_ids = torch.arange(env.scene.num_envs, device=env.device)
     """
     Event to reset the robot to the starting waypoint with Domain Randomization.
     Randomizes X-offset, Heading, and Initial Velocity to force 'Recovery' learning.
@@ -42,42 +44,15 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     # 3. Compute final rotations (WXYZ)
     quats = torch.zeros((num_resets, 4), device=env.device)
     
-    # Ground Alignment (Raycast for Normal)
-    query = omni.physx.get_physx_scene_query_interface()
     for i, env_id in enumerate(env_ids):
-        world_x, world_y = final_pos[i, 0].item(), final_pos[i, 1].item()
-        hit = query.raycast_closest((world_x, world_y, 100.0), (0.0, 0.0, -1.0), 200.0)
-        
-        # 180-degree Roll (X-axis) * Yaw (Z-axis)
-        # Combine: q_final = q_yaw * q_roll
-        # Base North+Upright: w=0, x=0.7071, y=0.7071, z=0
-        
+        # Standard upright Yaw rotation (Z-axis)
         yaw_offset = rand_yaw[i].item()
         half_yaw = (base_spawn_yaw + yaw_offset) / 2.0
-        c = math.cos(half_yaw)
-        s = math.sin(half_yaw)
         
-        # Combined WXYZ result:
-        quats[i, 0] = 0.0 * c - 1.0 * 0.0 # W
-        quats[i, 1] = 0.7071 * c + 0.7071 * s # X
-        quats[i, 2] = 0.7071 * c - 0.7071 * s # Y
-        quats[i, 3] = 0.0 * c + 0.0 * s # Z
-        
-        # Standard upright Yaw rotation (Z-axis)
-        # W = cos(yaw/2)
-        # X = 0
-        # Y = 0
-        # Z = sin(yaw/2)
         quats[i, 0] = math.cos(half_yaw)
         quats[i, 1] = 0.0
         quats[i, 2] = 0.0
         quats[i, 3] = math.sin(half_yaw)
-
-        if hit["hit"]:
-            # Snap Z to road
-            spawn_z = hit["position"][2] + 0.12
-            final_pos[i, 2] = spawn_z
-    
     # 4. Apply Initial Velocity (World Frame)
     velocities = torch.zeros((num_resets, 6), device=env.device)
     

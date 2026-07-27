@@ -80,7 +80,7 @@ During a straight-line open-loop physics test (throttle=1.0, steer=0.0), the car
 
 **Issue 16 — WPΔ_rew Reward Spike (Bug 4 — spawn_wp_idx Race Condition)**
 At ~640k–716k steps, `WPΔ_rew` spiked to values like `2434`, `7300`, `5795` — impossible for one step of real navigation. These coincide with `WPs_cum = 3361` (also impossible in one episode). Root cause: `spawn_wp_idx` reset race condition — on episode reset, the TrackManager's `last_indices` is briefly out of sync with the robot's new position, causing a massive false `delta = (new_idx - old_idx) % num_wps` calculation that wraps around the entire track.
-**Fix 16 (PENDING)**: Need to zero out `prev_wp_idx_reward` and `prev_pos_reward` for all reset environments in `rewards.py::waypoint_progress_reward` using `env.reset_terminated`. The `hasattr(env, 'reset_terminated')` guard exists but may not be firing correctly — needs investigation after physics validation.
+**Fix 16 (APPLIED)**: Zeroed out `prev_wp_idx_reward` and `prev_pos_reward` for all reset environments in `rewards.py::waypoint_progress_reward` by checking `env.reset_terminated` and `env.reset_buf`. This ensures the massive backwards track wrap-around distance isn't rewarded during the reset step.
 
 **ALWAYS READ BEFORE REWARD OR PHYSICS CHANGES**: This file documents 18 issues. Do not repeat them.
 
@@ -149,3 +149,31 @@ The training tmux session was instantly crashing 5 seconds after startup. Root c
 **Issue 30 — Log State Leakage on Restart**
 The watchdog script was evaluating old metrics from previous training runs before the new simulation finished initializing. Root cause: `start_tmux_training.sh` used `tee -a` which appended to `logs/skrl_phase1.log`.
 **Fix 30**: Updated `start_tmux_training.sh` to automatically archive `logs/skrl_phase1.log` before launching, changed `tee -a` to `tee` for a fresh log state, and increased the watchdog launch delay from 5 to 20 seconds to give Isaac Sim time to initialize the environments.
+
+---
+
+## Kinematics & Physics Session (2026-07-26)
+
+**Issue 31 — The Forklift Effect (Driving Backwards)**
+The car was visually driving backwards and steering like a forklift (Rear-Wheel Steering) causing erratic 360s. Root cause: The `b_drive` action space scale/offset in `arcpro_env_cfg.py` had been changed to `20.0` (positive). However, the F1Tenth USD model requires a negative velocity to drive in the forward mesh direction.
+**Fix 31**: Reverted the `b_drive` scale and offset to `-20.0`. The car now drives forward physically, putting the steering axle at the front where it belongs (restoring Front-Wheel Steering).
+
+**Issue 32 — The Parking Brake / AWD Lock-Up**
+When the car was converted to RWD, the front wheels (`FL`, `FR`) were removed from the `b_drive` group but they remained in the `throttle` actuator in `arcpro_robot_cfg.py`. Because they were captured by the actuator but given no RL command, they defaulted to `0.0` rad/s. The `damping=1.0` setting caused the front wheels to act as active parking brakes, dragging and causing extreme pivot skids. Removing them from the actuator entirely caused them to lock up via USD defaults.
+**Fix 32**: Reverted the car to **All-Wheel Drive (AWD)**. Both `b_drive` and the `throttle` actuator now explicitly target `["Joint_Drive_.*"]`. All 4 wheels receive the same forward velocity, mechanically pushing the car forward together without any dragging or unactuated locks. Old checkpoints were wiped due to the physics change, and training was restarted from scratch.
+
+**Issue 33 — Newborn Vision Penalty Over-Saturation (The Warning Track Trap)**
+After restarting training from scratch as a pure vision agent (Issue 32 & 25), the agent was consistently crashing at ~90 steps (the first curve) with massive negative episode rewards. Root cause: In Fix 23, the `boundary_penalty` was explicitly set to `-60.0` to completely overpower the `+50.0` progress reward, resulting in a net negative score (`-10.0` per step) in the warning track. For a newborn agent exploring randomly, entering the warning track felt strictly negative, causing "Penalty Over-Saturation." The agent learned that taking any action resulted in pain, hindering its ability to learn to follow the lane.
+**Fix 33**: Decreased the `boundary_penalty` weight in `arcpro_env_cfg.py` from `0.6` to `0.4` (yielding `-40.0` points/step). Now, driving in the warning track yields a net positive score (`+50 - 40 = +10`), which is better than the `-10` stationary penalty but strictly worse than driving in the center (`+50`). This ensures that completing the task remains the dominant incentive during early exploration, providing a smooth potential-based gradient away from the walls without crushing the agent's will to drive.
+**Result**: Applied and restarted training.
+
+**Issue 34 — The Warning Track Trap vs Stationary Min-Max (Speed 0.02, Len 866)**
+Even after Fix 33 reduced the `boundary_penalty` to -40.0, the agent continued to sit completely still at the start line (Speed: 0.02, Length: 866, Rew: -792.6). Root cause analysis: An untrained agent driving slowly (e.g. 0.1 m/s) in the warning track earns very little progress reward (+10) but takes the full boundary penalty (-40), yielding a net -30 points per step. Meanwhile, sitting perfectly still triggers the `stationary` penalty (weight 10.0 = -10 points) plus a +1 survival bonus, yielding a net -9 points per step. Since -9 is mathematically superior to -30, the agent learned that venturing out and exploring slowly was far more painful than just sitting parked.
+**Fix 34**: Massively increased the `stationary` penalty weight from 10.0 to 50.0. Sitting still now yields a net -49 points per step. This makes parking strictly worse than the worst-case driving scenario (slowly scraping the wall at -30/step). The agent is mathematically forced to hit the gas to escape the -49 point stationary bleed.
+**Result**: Applied, wiped checkpoints, and restarted training.
+
+**Issue 35 — The False Positive Action Gate Immunity (Speed 0.13, Len 1001)**
+After Fix 34 increased the `stationary` penalty to -50.0 to force movement, the agent continued to sit completely still! Analysis of the log (`Len: 1001`, `Rew: -870.6`) revealed that it was triggering the stagnation termination (1000 steps), but the reward was only -870 instead of the expected -50,000 for sitting still. 
+Root cause: The agent was inadvertently using an exploit caused by the `GoSignalManager`. Even though there are no stop lines on the `track_1x_wrapper.usda` map, the visual stop line detector was occasionally hallucinating false positive stop lines on the track boundaries. This set `go_signal = 0.0`. In `actions.py`, a safety gate forced the car's throttle to 0.0 when `go_signal` was 0. Even worse, the `stationary` penalty was conditionally masked by `go_signal > 0.5`. This meant that when the car was forced to stop by a false positive, it was completely immune to the `stationary` penalty while still collecting +1.0 survival bonus and +0.5 action drive reward per step. The agent learned it could just sit there, let the false positives lock its brakes, and farm points for free without ever triggering the stationary penalty.
+**Fix 35**: Disabled the `go_signal` action gate entirely in `arcproLab/mdp/actions.py` for Phase 1. Also removed the `go_signal > 0.5` condition from the `stationary` penalty in `arcpro_env_cfg.py` so it now fires unconditionally when speed is < 0.2 m/s. The agent can no longer hide behind traffic lights to dodge the penalty.
+**Result**: Applied, wiped checkpoints, and restarted training.

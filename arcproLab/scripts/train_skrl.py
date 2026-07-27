@@ -5,6 +5,7 @@ parser = argparse.ArgumentParser(description="Train SKRL AAC policy for ARCPro L
 parser.add_argument("--num_envs", type=int, default=16, help="Number of parallel simulation environments.")
 parser.add_argument("--seed", type=int, default=42, help="Seed for the environment.")
 parser.add_argument("--total_timesteps", type=int, default=5000000, help="Total timesteps to train.")
+parser.add_argument("--resume", type=str, default="", help="Path to checkpoint to resume from.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -145,6 +146,10 @@ def main():
     
     agent = TelemetryPPO(models=models, memory=memory, cfg=cfg_ppo, observation_space=env.observation_space, action_space=env.action_space, device="cuda:0")
     
+    if args_cli.resume:
+        print(f"Resuming from checkpoint: {args_cli.resume}")
+        agent.load(args_cli.resume)
+        
     # 7. Train
     print(f"Starting SKRL AAC training for {args_cli.total_timesteps} steps...")
     trainer_cfg = {
