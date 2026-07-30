@@ -133,7 +133,8 @@ class TrackManager:
             points_attr = mesh.GetPointsAttr().Get()
             indices_attr = mesh.GetFaceVertexIndicesAttr().Get()
             counts_attr = mesh.GetFaceVertexCountsAttr().Get()
-            if not points_attr or not indices_attr: return None
+            if not points_attr or not indices_attr:
+                raise ValueError(f"Mesh at {prim.GetPath()} is missing points or indices.")
             
             xform = xform_cache.GetLocalToWorldTransform(prim)
             transformed_pts = []
@@ -143,7 +144,8 @@ class TrackManager:
             return {'points': transformed_pts, 'indices': indices_attr, 'counts': counts_attr}
 
         def finalize_group(data_list, name):
-            if not data_list: return None
+            if not data_list:
+                raise ValueError(f"No valid meshes found for {name}.")
             all_dense_pts = []
             resolution = 0.01 # High resolution (1cm) for 1.0x scale
             for path, mesh_data in data_list:
@@ -161,7 +163,8 @@ class TrackManager:
                             num_steps = max(1, int(dist / resolution))
                             for step in range(num_steps):
                                 all_dense_pts.append(p1 + (p2 - p1) * (step / num_steps))
-            if not all_dense_pts: return None
+            if not all_dense_pts:
+                raise ValueError(f"Failed to sample any dense points for {name}.")
             final_pts = np.unique(np.round(np.array(all_dense_pts), 3), axis=0)
             print(f"[TrackManager] Finalized {name}: {len(final_pts)} points.")
             return final_pts
@@ -278,7 +281,8 @@ class TrackManager:
             gate_xy = self.raw_gate_pts[:, :2]
             
             def punch_holes(raw_pts, name):
-                if raw_pts is None or len(raw_pts) == 0: return None
+                if raw_pts is None or len(raw_pts) == 0:
+                    raise ValueError(f"Cannot punch holes in {name}: points array is empty or None.")
                 from scipy.spatial import KDTree
                 tree = KDTree(gate_xy)
                 dists, _ = tree.query(raw_pts[:, :2], k=1)
@@ -401,7 +405,8 @@ class TrackManager:
                 return VisualizationMarkers(cfg)
 
             def to_w(pts, z_off=0.05):
-                if pts is None: return None
+                if pts is None:
+                    raise ValueError("Cannot convert points to world coordinates: points array is None.")
                 w = torch.zeros((len(pts), 3), device=self.device)
                 w[:, 0], w[:, 1], w[:, 2] = torch.tensor(pts[:, 0], device=self.device) + origin[0], torch.tensor(pts[:, 1], device=self.device) + origin[1], torch.tensor(pts[:, 2], device=self.device) + origin[2] + z_off
                 return w

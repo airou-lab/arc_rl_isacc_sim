@@ -41,8 +41,8 @@ def spawn_f1tenth(
     stage = get_current_stage()
     
     if mass_overrides:
-        # Apply overrides to children
-        for child in prim.GetChildren():
+        # Apply overrides recursively to all descendants
+        for child in Usd.PrimRange(prim):
             child_name = child.GetName()
             # print(f"[Spawner] Checking child: {child_name}")
             for pattern, mass in mass_overrides.items():
@@ -81,7 +81,7 @@ def _apply_tire_friction(robot_prim: Usd.Prim, stage) -> None:
 
     robot_path = str(robot_prim.GetPath())
 
-    for child in robot_prim.GetChildren():
+    for child in Usd.PrimRange(robot_prim):
         child_name = child.GetName()
         if not re.match(r"Wheel_.*", child_name):
             continue

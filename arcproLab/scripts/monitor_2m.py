@@ -10,7 +10,7 @@ EXPECTED_SPEED = 0.50
 
 def get_latest_metrics():
     if not os.path.exists(LOG_FILE):
-        return None
+        raise FileNotFoundError(f"Monitor failed: {LOG_FILE} does not exist.")
     try:
         tail = subprocess.check_output(["tail", "-n", "300", LOG_FILE]).decode('utf-8')
         t = re.findall(r"total_timesteps\s+\|\s+([-\d\.e\+]+)", tail)
@@ -23,7 +23,7 @@ def get_latest_metrics():
             "speed": float(s[-1]) if s else 0,
         }
     except Exception as e:
-        return None
+        raise ValueError(f"Monitor failed to parse log: {e}")
 
 def main():
     print(f"Monitoring training until {TARGET_STEPS} steps...")

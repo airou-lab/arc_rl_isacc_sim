@@ -177,3 +177,116 @@ After Fix 34 increased the `stationary` penalty to -50.0 to force movement, the 
 Root cause: The agent was inadvertently using an exploit caused by the `GoSignalManager`. Even though there are no stop lines on the `track_1x_wrapper.usda` map, the visual stop line detector was occasionally hallucinating false positive stop lines on the track boundaries. This set `go_signal = 0.0`. In `actions.py`, a safety gate forced the car's throttle to 0.0 when `go_signal` was 0. Even worse, the `stationary` penalty was conditionally masked by `go_signal > 0.5`. This meant that when the car was forced to stop by a false positive, it was completely immune to the `stationary` penalty while still collecting +1.0 survival bonus and +0.5 action drive reward per step. The agent learned it could just sit there, let the false positives lock its brakes, and farm points for free without ever triggering the stationary penalty.
 **Fix 35**: Disabled the `go_signal` action gate entirely in `arcproLab/mdp/actions.py` for Phase 1. Also removed the `go_signal > 0.5` condition from the `stationary` penalty in `arcpro_env_cfg.py` so it now fires unconditionally when speed is < 0.2 m/s. The agent can no longer hide behind traffic lights to dodge the penalty.
 **Result**: Applied, wiped checkpoints, and restarted training.
+
+**Issue 36 — The Critic Shape Deadlock (Agent hangs at step 0)**
+After fixing the camera observations and explicitly starting the agent with `--enable_cameras` (Issue 18/32/25), the `SKRLFlattenWrapper` began passing the concatenated 524-dimensional visual+telemetry states to the agent. Because the SKRL `SequentialTrainer` uses the default policy observations (`states`) for the Critic unless explicitly separated, the `ARCProCritic` was receiving an input tensor of shape `(N, 524)`. However, the Critic's MLP head was strictly defined as `nn.Linear(12, 256)`. PyTorch threw an internal `RuntimeError` due to a dimension mismatch (12 vs 524). Because Isaac Sim physics pipelines often swallow PyTorch exceptions during callback execution, the python script silently deadlocked and hung at 100% CPU indefinitely instead of crashing.
+**Fix 36**: Added an explicit slicing condition inside `ARCProCritic.compute()` in `skrl_models.py`. If the input state has `524` dimensions (indicating the cameras are active), it explicitly slices the last 12 dimensions (`state[:, -12:]`) which correspond exactly to the telemetry vector from the environment wrapper. The Critic now successfully processes the telemetry.
+**Result**: Applied, wiped checkpoints, and restarted training.
+
+**Issue 37 — The Donut Farming Exploit & Min-Max Reversion (Len: 1001, Spd: 0.03, WP: 0)**
+At Step ~128k, the agent became catastrophically stuck in a new local minimum, surviving the maximum 1000 steps with `0` waypoint progress, `0.03` speed, and achieving a total episode reward of around `-905.5`. 
+Root cause analysis revealed two exploits:
+1. **Donut Farming**: By steering continuously in a tight circle near the center of the track, the agent maintained an instantaneous forward speed `> 0.2 m/s` (dodging the `stationary` penalty) and stayed out of the `boundary` warning track, all while collecting `action_drive` rewards (+0.5).
+2. **Min-Max Reversion**: Even when the agent simply parked against the wall and triggered the `stationary` and `boundary` penalties, the net episode score resulted in `~-905.5`. Because crashing yields a flat `-1000.0` termination penalty, sitting completely still or doing donuts and eating minor penalties was *mathematically superior* to driving blindly and crashing.
+**Fix 37**: 
+- Added an `action_steer_penalty` with `weight=-2.0` (`RewTerm(func=lambda env: torch.square(env.action_manager.action[:, 0]))`) to severely punish the constant maximum steering required for Donut Farming.
+- Increased the `stationary` penalty weight from `50.0` to `200.0` to guarantee that parking and taking the stationary penalty for 1000 steps will definitively exceed `-1000.0` points, mathematically forcing the agent to prefer driving (and eventually crashing) over parking.
+**Result**: Applied, wiped checkpoints, and restarted training.
+
+**Issue 38 — High-Speed Donut Farming (The 500k Milestone Exploit)**
+At the 500k milestone, the agent's episode lengths reached up to ~723, but the episodic reward dropped to ~-704.8 and waypoint progress (`WPΔ_rew`) was 0.0. Root cause analysis: In Fix 37, we added an `action_steer_penalty` of `-2.0` to combat low-speed donuts. However, when the agent drives at higher speeds (> 0.2 m/s), it avoids the massive `-200.0` stationary penalty. By steering fully (1.0), it drives in fast circles (donuts), yielding `+1.0` (survival) `+0.5` (drive) `-2.0` (steer) = `-0.5` net points per step. Doing donuts for the maximum 1,000 steps yields a total score of `-500.0`. Since crashing into a wall yields a flat `-1000.0` terminal penalty, doing high-speed donuts (-500) was still *mathematically superior* to crashing (-1000). The agent once again preferred endless circles over navigating curves.
+**Fix 38**: Increased the `action_steer_penalty` weight from `-2.0` to `-10.0`. Doing donuts now yields a net penalty of `-8.5` per step (yielding `-8500.0` over 1000 steps), making it vastly worse than crashing (`-1000.0`). Normal cornering is unaffected because the massive `+46.5` progress reward per step mathematically eclipses the brief `-10.0` steering penalty.
+**Result**: Applied, wiped checkpoints, and restarted training.
+
+### Issue 39: Deterministic Sitting Still Exploit (Stagnation Avoidance)
+- **Problem:** The agent learned to sit perfectly still at the spawn point (Spd: 0.01). It avoided the `stationary` penalty because of a PyTorch scalar casting issue in the `torch.where` lambda inside `arcpro_env_cfg.py` (which returned 0.0 instead of -1.0). By sitting still, it accumulated positive `survival_bonus` points until the `stagnation_termination` triggered at step 1001, resulting in a slightly negative but highly stable reward (`-15623.7`), which the Value Function mathematically preferred over exploring and instantly crashing (`-1000` penalty).
+- **Fix:** Moved `stationary_penalty` to `mdp_rew` and explicitly used `torch.tensor(-1.0)` in the `torch.where` outputs to ensure proper broadcasting and tensor type tracking by IsaacLab's RewardManager.
+- **Addition:** Added a 50-step grace period (`env.episode_length_buf > 50`) to the `stationary` penalty to prevent "Immediate Suicide" (where the agent would crash immediately to avoid the -200/step penalty while accelerating from a standstill).
+
+### Issue 40: The Suicide Loophole (Stationary Penalty Over-Saturation)
+- **Problem:** The stationary penalty was set to 200.0 (per step) for speeds under 0.5 m/s. When the agent tried to slow down for the curve, it immediately accrued -1000 points over 5 steps. Since crashing is a flat -1000 penalty, the agent intentionally committed suicide into the wall rather than slowing down.
+- **Fix:** Reduced `stationary` penalty weight in `arcpro_env_cfg.py` from 200.0 to 15.0 to prevent intentional crashing.
+
+### Issue 41: Phase 2 Penalty Over-Saturation
+- **Problem:** The agent was subjected to `lateral_error` (-10.0) and `action_steer_penalty` (-10.0) while still learning basic cornering from vision, causing it to refuse to steer.
+- **Fix:** Temporarily reverted to a Phase 1 curriculum by setting both `lateral_error` and `action_steer_penalty` weights to 0.0 in `arcpro_env_cfg.py`.
+
+### Issue 42: Catastrophic Forgetting & PPO Batch Size
+- **Problem:** The agent randomly forgot how to drive after 639 steps. The PPO `rollouts` (128) and `mini_batches` (16) resulted in a tiny batch size of 80 transitions per backprop, originally designed to prevent OOM when storing 150k-dim raw images. With 524-dim ResNet features, this tiny batch size caused massive gradient variance.
+- **Fix:** In `train_skrl.py`, increased `memory_size` and `rollouts` to 1024, and reduced `mini_batches` to 4, generating stable batches of 2560 transitions.
+
+
+### Issue 43: Immediate Death via Settling Physics and Bad Spawns
+- **Problem:** The agent was exhibiting episode lengths of 4-24 steps. Root cause analysis revealed three issues: 1) `height_termination` had a threshold of `0.01` and NO grace period, meaning normal physics suspension settling instantly killed the agent. 2) `white_line_contact` had a tiny 5-step grace period, causing bad environmental spawns to execute the agent on step 6. 3) The policy applied massive actions on step 1, causing the unsettled physics to flip the car.
+- **Fix:** Added a 20-step grace period (`is_spawn = env.episode_length_buf < 20`) to both boundaries and height limits. Lowered height minimum to `-0.05` to safely allow tire compression. Added a `WarmupActionWrapper` in `train_skrl.py` to freeze the agent's controls to 0.0 for the first 10 steps.
+- **Result:** Applied, wiped checkpoints, and restarted training.
+
+### Issue 44: Deep Local Minimum Stagnation (The -15,000 Trap)
+- **Problem:** After applying fixes to the Warmup wrapper, the training was resumed from a corrupted checkpoint (`agent_27750.pt`) that had learned a deep fear of moving. The agent output `action=-1.0` (stop) consistently. Although the newly fixed `stationary_penalty` properly applied a massive `-15,000` penalty per episode, PPO gradient updates were struggling to pull the network weights out of this deep local minimum because the `termination_penalty` (-1000) was still relatively high compared to short exploratory progress.
+- **Fix:** In accordance with RL reward shaping best practices for overcoming stagnation plateaus, I reduced the `termination_penalty` weight in `arcpro_env_cfg.py` from `20.0` to `10.0` (reducing the crash penalty to `-500`). This lowers the threshold for exploratory forward movement to break even against crashing (now only requiring 10 waypoints of progress instead of 20). 
+- **Result:** Wiped all corrupted checkpoints and restarted training from scratch to allow the randomly initialized network (mean action 0.0, resulting in half-max forward speed) to naturally bootstrap the progress reward.
+
+### Issue 45: Early Plateaus and Steering Jitter
+- **Problem:** At the 500k milestone, the agent achieved a positive mean reward (32.5) but the episode length plateaued at a mean of ~246 steps. The agent was swerving and oscillating on straightaways, leading to premature crashes. Without an explicit penalty for erratic steering, random action jitter caused by standard PPO exploration was generating "reward hacked" short episodes where the agent would progress slightly and then crash into the walls, rather than committing to a smooth trajectory.
+- **Fix:** Researched PPO steering oscillation mitigation in IsaacLab. Enabled the `action_rate_smoothness_reward` with a weight of `10.0` in `arcpro_env_cfg.py`. This shaping term penalizes the squared difference between consecutive steering actions, effectively suppressing high-frequency jitter and encouraging smooth, continuous trajectory commitments.
+- **Result:** Wiped checkpoints and restarted to force the value function to accurately learn the new baseline.
+
+### Issue 46: The Smoothing Penalty Trap and Early Termination
+- **Problem:** At the second 500k milestone, the `ep_len_mean` dropped from ~246 steps to ~107 steps. Adding the `action_rate_smoothness_reward` (-10.0) successfully stopped the jitter, but it also heavily penalized the sharp, corrective steering necessary to recover when the agent drifted towards the lane boundaries. Consequently, the agent chose to crash gracefully rather than execute a sharp turn. Furthermore, the `roadmark_contact` termination threshold (0.12) was too tight for a vision-only agent at this stage of learning, terminating episodes the moment the wheels touched the line.
+- **Fix:** 
+  1. Reduced the `action_rate_smoothness_reward` weight from `10.0` to `2.0` in `arcpro_env_cfg.py`. This provides a gentle nudge towards smoothness without overwhelmingly punishing necessary sharp corrections.
+  2. Relaxed the `roadmark_contact` threshold in `arcpro_env_cfg.py` from `0.12` to `0.05`. This allows the agent to drive slightly over the white line before terminating, providing a larger "safe zone" to experience the curve's visual features and recover before instant death.
+- **Result:** Wiped checkpoints and restarted to evaluate the relaxed boundary constraints.
+
+### Issue 47: Catastrophic Failure at Spawn (User Manual Edits)
+- **Problem:** The training abruptly broke, with the agent instantly dying after the 20-step spawn grace period (`ep_len_mean: 20.0`, `speed_mps: 0.0`). This was caused by manual edits to `arcpro_env_cfg.py` introducing a new `ground_contact_term` with a very low threshold (`1.0`) and raising the `height` termination threshold to `0.025`. Because the F1Tenth chassis suspension sags when dropped onto the track, its `z_pos` briefly dips below `0.025`, and the wheels occasionally clip through the thin track mesh, triggering the `ground_contact` sensor against the underlying ground plane.
+- **Fix:** Retained the user's new termination concepts but relaxed the thresholds to tolerate suspension dynamics:
+  1. Lowered `height` threshold from `0.025` to `0.01` (allowing 4cm of suspension sag on the track while still reliably terminating if it drops to `0.0` off the track).
+  2. Increased `ground_contact_term` threshold from `1.0` to `50.0` to ignore minor mesh clipping forces.
+- **Result:** Wiped checkpoints and restarted the training script as per self-healing protocol.
+
+### Issue 48: User Reverted Fix (Catastrophic Spawn Failure Reoccurs)
+- **Problem:** The user manually reverted `Issue 47`'s fix, disabling `height` entirely and resetting `ground_contact_term` to `1.0`. As expected, this immediately caused the agent to die instantly upon spawning (`Len: 20`, `Spd: 0.0`) because the wheels clip through the thin track mesh and constantly touch the underlying ground plane, generating >1.0N of contact force.
+- **Fix:** Restored the `ground_contact_term` threshold to `50.0` (which ignores the wheels clipping the ground plane, but successfully triggers when the car falls off the track and slams its full weight into the ground). Left `height` disabled as per the user's intent, and added a detailed multi-line warning comment in `arcpro_env_cfg.py` directly above the line so the user understands why `1.0` is physically impossible in this specific mesh layout.
+- **Result:** Wiped checkpoints and restarted the training script (again) as per self-healing protocol.
+
+### Issue 49: The 500k Milestone Stagnation (Erratic Swerving & Speed Threshold)
+- **Problem:** At the 500k milestone, the `ep_len_mean` dropped from ~261 to ~49, and `speed_mps` remained very low (~0.17). Root cause analysis revealed two issues: 
+  1. We accidentally disabled `action_steer_penalty` completely (0.0). Since `action_rate_smoothness_reward` only punishes *changes* in steering, the agent learned to slam the steering to full lock and hold it there (paying a one-time penalty) and drive directly off the track into the wall at step 49.
+  2. The `stationary_penalty` threshold in `rewards.py` was still `0.5` m/s, causing the agent to take massive penalties (-15 per step) whenever it tried to slow down for corners. The agent opted to drive slowly into walls rather than take the huge step penalties.
+- **Fix:** 
+  1. Re-enabled `action_steer_penalty` with `weight=0.5` to provide a consistent penalty for holding the wheel at extreme angles, forcing the agent to drive straight unless a turn is required.
+  2. Lowered the `stationary_penalty` threshold in `rewards.py` from `0.5` to `0.2` m/s to allow the agent to safely slow down for sharp turns without triggering the penalty.
+- **Result:** Wiped checkpoints and restarted the training to force the value function to accurately learn the new baseline.
+
+### Issue 50: The High-Water Mark (Jitter Farming Exploit)
+- **Problem:** At 310k steps, the agent was scoring massive positive rewards (`Rew: 3586.2`) while its episode length reached 649, yet its actual progress (`WPs_cum: 0`) was ZERO! The agent discovered "Jitter Farming": by vibrating back and forth over a single waypoint boundary (e.g. from index 10 to 11 and back), the `waypoint_progress_reward` kept returning positive deltas because it only compared `current_idx` to `prev_idx` from the last step. The agent farmed infinite `progress_reward`, `survival_bonus`, and `heading` points without actually driving down the track.
+- **Fix:** Rewrote `waypoint_progress_reward` to use a **High-Water Mark**. We now track `cumulative_wp_index` (which correctly adds or subtracts waypoints based on forward/backward movement, handling track wrap-arounds seamlessly). The reward is *only* dispensed when the `cumulative_wp_index` strictly exceeds `max_cumulative_wp_index` (the furthest progress ever achieved in the current episode). Jittering backward subtracts from the cumulative index, meaning the agent must travel forward to regain the lost ground just to break even, entirely eliminating the exploit.
+- **Result:** Wiped checkpoints and restarted the training script.
+
+### Issue 51: The Action Drive Reward Conflict & Strict Lane Margins
+- **Problem:** At the 500k milestone, the agent was consistently crashing at the first sharp curve (`Len: ~132`). Root cause analysis revealed two factors:
+  1. `action_drive_reward` was still active from early Phase 1. Because it used `torch.abs(action[:, 1])` and the drive action is mapped to `[-40, 0]` (where -1 is stop and 1 is max speed), the reward function was paying the agent `+0.5` points to either go MAX SPEED or STOP completely, while awarding `0.0` points for intermediate speeds. This conflicted with the agent's need to slow down smoothly for corners.
+  2. The `roadmark_contact` termination threshold was aggressively strict (`0.05m`), meaning the agent died instantly if it drifted just 5cm over the white line, giving it no room to learn corrective steering from the visual shift of the lane boundaries.
+- **Fix:** 
+  1. Disabled `action_drive_reward` by setting its weight to `0.0`, as the new High-Water Mark `progress_reward` perfectly handles driving incentives without introducing action-space noise.
+  2. Relaxed the `roadmark_contact` threshold to `0.15m` to provide a forgiving buffer for the newborn vision agent to drift slightly and recover before triggering instant death.
+- **Result:** Wiped checkpoints and restarted the training to embed the smoother action space.
+
+### Issue 52: The "Donut Farming" Relapse (Positive Steer Penalty Bug)
+- **Problem:** Around 220k steps into the second training run, the agent suddenly achieved massive positive rewards (`Rew: 5072.0`) while surviving the maximum `1001` steps, despite its final `WPs_cum` being `0`. The agent was performing high-speed donuts in place. 
+- **Root Cause Analysis:**
+  1. The `action_steer_penalty` was implemented as a lambda returning `torch.square(action[:, 0])`. However, its weight was set to `0.5` (positive), meaning the reward function was *paying* the agent +0.5 points per step to hold the steering wheel at maximum lock!
+  2. Because the agent was holding max steering and max throttle, it performed rapid donuts. This generated a high internal body velocity (`speed > 0.2` m/s), completely bypassing the `stationary_penalty`.
+  3. The donuts caused the agent's position to slightly drift back and forth along the track, occasionally bumping up its `max_cumulative_wp_index` (earning legitimate progress rewards) before drifting backward again, resulting in a net `WPs_cum: 0` at the end of the episode but thousands of points accumulated over the 1000 steps.
+- **Fix:** Changed the weight of `action_steer_penalty` to `-0.5` so it actually penalizes erratic swerving and donut behavior instead of rewarding it.
+- **Result:** Wiped checkpoints and restarted.
+
+### Issue 53: Sparse Reward Stagnation (The "Gas Pedal" Problem)
+- **Problem:** After fixing the donut exploit and disabling the flawed `action_drive_reward` in Issue 51, the agent's performance collapsed. It was surviving for ~90 steps but earning heavily negative rewards (`Rew: -301.8`) and failing to make any track progress (`WPs_cum: 2`). 
+- **Root Cause Analysis:** 
+  1. We disabled `action_drive_reward` because it was using `torch.abs()` (rewarding stopping as much as driving).
+  2. However, without a dense reward for simply pressing the gas pedal, the agent fell victim to the Sparse Reward problem. The massive `progress_reward` (+50) only triggers if the agent successfully moves forward and crosses a waypoint. Because the agent was randomly exploring, it never consistently held the gas pedal long enough to cross waypoints and discover the massive reward waiting for it.
+  3. Instead, it just jiggled in place, triggered the `stationary_penalty`, and died. 
+- **Fix:** Re-enabled `action_drive_reward` (weight `0.5`) but fixed its mathematical mapping. The drive action maps `[-1, 1]` to `[0, -40]` rad/s (where 1.0 is max forward speed). We now return the raw `action[:, 1]` instead of the absolute value. This provides a dense, linear "breadcrumb" reward (+0.5 for max throttle, 0.0 for half throttle, -0.5 for braking) that guides the newborn agent to press the gas and discover the waypoint rewards, without penalizing intermediate speeds!
+- **Result:** Wiped checkpoints and restarted.

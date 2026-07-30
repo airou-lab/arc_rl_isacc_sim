@@ -40,31 +40,31 @@ def main():
     
     os.makedirs("debug_frames", exist_ok=True)
     
-    # Action: [steer, throttle, brake]
-    # Small forward nudge to see if lines move
-    action = torch.tensor([[0.0, 0.2, 0.0]], device=env.device)
+    # Action: [steer, drive]
+    # Steer slightly to the right (positive steer) and drive forward
+    action = torch.tensor([[0.5, 0.2]], device=env.device)
     
     for i in range(200):
         obs_dict, rewards, terminated, truncated, info = env.step(action)
         
         # Capture frame at step 0, 50, 100, 150, 200
         if i % 50 == 0:
-            if "visual" in obs_dict:
-                img = obs_dict["visual"].cpu().numpy()[0] # (224, 224, 3)
-                # It's float32 [0, 1], convert to uint8
-                img_uint8 = (np.clip(img, 0, 1) * 255).astype(np.uint8)
-                # RGB to BGR for cv2
-                img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
+            if "tiled_camera" in env.scene.sensors:
+                # Get RAW unnormalized image directly from sensor
+                img = env.scene.sensors["tiled_camera"].data.output["rgb"].cpu().numpy()[0] # (224, 224, 3)
                 
-                fname = f"debug_frames/frame_{i}.png"
-                cv2.imwrite(fname, img_bgr)
-                print(f"[DEBUG] Saved camera frame {i} to {fname}")
+                print(f"[DEBUG] Frame {i}: shape={img.shape}, dtype={img.dtype}, min={np.min(img)}, max={np.max(img)}, mean={np.mean(img):.2f}")
                 
-                # Check for black frames
-                if np.mean(img) < 0.01:
+                # It's uint8 [0, 255]
+                img_bgr = cv2.cvtColor(img.astype(np.uint8), cv2.COLOR_RGB2BGR)
+                
+                cv2.imwrite(f"debug_frames/frame_{i}.png", img_bgr)
+                print(f"[DEBUG] Saved camera frame {i} to debug_frames/frame_{i}.png")
+                
+                if np.mean(img) < 1.0:
                     print(f"!!! WARNING: Frame {i} appears to be BLACK.")
             else:
-                print("!!! ERROR: 'visual' observations not found in obs_dict.")
+                print("!!! ERROR: 'tiled_camera' sensor not found.")
 
         if terminated[0]:
             print(f"Episode terminated at step {i}.")

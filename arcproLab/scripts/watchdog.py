@@ -9,7 +9,7 @@ DIAGNOSIS_FILE = "logs/WATCHDOG_DIAGNOSIS.md"
 
 def get_latest_metrics():
     if not os.path.exists(LOG_FILE):
-        return None
+        raise FileNotFoundError(f"Watchdog failed: {LOG_FILE} does not exist.")
     
     try:
         # Read last 200 lines to find the latest table
@@ -31,8 +31,7 @@ def get_latest_metrics():
             "speed": float(speed[-1]) if speed else 0
         }
     except Exception as e:
-        print(f"Error parsing log: {e}")
-        return None
+        raise ValueError(f"Watchdog failed to parse log: {e}")
 
 def main():
     print("Watchdog Active. Monitoring Phase 16 Training...")
@@ -104,11 +103,11 @@ def main():
                 print("Training will be restarted by the agent. Watchdog exiting.")
                 break
         
-        # Report progress every 500k steps using agy CLI
+        # Report progress every 300k steps using agy CLI
         if metrics:
-            current_milestone = metrics["timesteps"] // 500000
-            if current_milestone > last_reported_milestone and metrics["timesteps"] >= 500000:
-                print(f"Reporting {current_milestone * 500}k milestone to Antigravity...")
+            current_milestone = metrics["timesteps"] // 300000
+            if current_milestone > last_reported_milestone and metrics["timesteps"] >= 300000:
+                print(f"Reporting {current_milestone * 300}k milestone to Antigravity...")
                 prompt = f"RL Training Progress Report: Agent reached {metrics['timesteps']} timesteps! Current Speed: {metrics['speed']} m/s, EpLen: {metrics['ep_len']}. The strict target is EpLen >= 600. Please analyze if it is stalling below this target and if we should intervene or let it continue."
                 os.system(f"nohup agy run --prompt '{prompt}' > /dev/null 2>&1 &")
                 last_reported_milestone = current_milestone

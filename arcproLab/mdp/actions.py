@@ -9,6 +9,8 @@ import isaaclab.envs.mdp.actions.actions_cfg as actions_cfg
 @dataclass
 class GroupedJointActionCfg(actions_cfg.JointActionCfg):
     """Configuration for a grouped joint action term."""
+    invert_right_joints: bool = False
+    
     def __post_init__(self):
         # Set missing class_type for the manager to know which class to instantiate
         if self.class_type is None:
@@ -33,6 +35,12 @@ class GroupedJointAction(ActionTerm):
         # Action buffers
         self._raw_actions = torch.zeros(self.num_envs, self.action_dim, device=self.device)
         self._processed_actions = torch.zeros(self.num_envs, self._num_joints, device=self.device)
+        
+        # Pre-compute right wheel indices for mirroring
+        self._right_wheel_indices = [
+            i for i, name in enumerate(self._joint_names)
+            if name.endswith("_R") or name.endswith("_RR") or name.endswith("_FR")
+        ]
 
     @property
     def action_dim(self) -> int:
@@ -76,6 +84,10 @@ class GroupedJointAction(ActionTerm):
 
         # Broadcast and apply scale/offset
         self._processed_actions[:] = self._offset + self._scale * actions.repeat(1, self._num_joints)
+        
+        # Invert right-side joints if they are physically mirrored in the USD
+        if getattr(self.cfg, "invert_right_joints", False) and len(self._right_wheel_indices) > 0:
+            self._processed_actions[:, self._right_wheel_indices] *= -1.0
 
     def apply_actions(self):
         # To be implemented by child classes
@@ -91,6 +103,7 @@ class AckermannSteeringActionCfg(ActionTermCfg):
     max_steering_angle: float = 0.5
     scale: float = 1.0
     offset: float = 0.0
+    invert_right_joint: bool = False
 
     def __post_init__(self):
         self.class_type = AckermannSteeringAction
@@ -108,7 +121,11 @@ class AckermannSteeringAction(ActionTerm):
         # Resolve joints
         self._joint_ids, self._joint_names = self._asset.find_joints(self.cfg.joint_names)
         if len(self._joint_ids) != 2:
-            raise ValueError(f"AckermannSteeringAction requires exactly 2 joints, found {len(self._joint_ids)}")
+            raise ValueError(f"AckermannSteeringAction requires exactly 2 joints, found {len(self._joint_ids)}: {self._joint_names}")
+        
+        # Explicitly map which index corresponds to which requested joint to prevent sorting bugs
+        self._left_idx = self._joint_names.index(self.cfg.joint_names[0])
+        self._right_idx = self._joint_names.index(self.cfg.joint_names[1])
         
         # Constants
         self.wheelbase = cfg.wheelbase
@@ -163,9 +180,12 @@ class AckermannSteeringAction(ActionTerm):
         left_angle = torch.where(is_straight, torch.zeros_like(left_angle), left_angle)
         right_angle = torch.where(is_straight, torch.zeros_like(right_angle), right_angle)
         
-        # Store processed actions
-        self._processed_actions[:, 0] = left_angle
-        self._processed_actions[:, 1] = right_angle
+        # Store processed actions mapped explicitly to their actual indices
+        self._processed_actions[:, self._left_idx] = left_angle
+        self._processed_actions[:, self._right_idx] = right_angle
+        
+        if self.cfg.invert_right_joint:
+            self._processed_actions[:, self._right_idx] = -self._processed_actions[:, self._right_idx]
 
     def apply_actions(self):
         self._asset.set_joint_position_target(self._processed_actions, joint_ids=self._joint_ids)

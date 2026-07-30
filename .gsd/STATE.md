@@ -26,12 +26,14 @@
 - **D018:** The new ResNet brain was crashing instantly due to Phase 2 penalties. Re-implemented Phase 1 Curriculum (disabling `lateral_error`, `stationary`, `heading`, `smoothness`, `jerk`) so the fresh visual brain can learn basic forward momentum first.
 - **D019-D021:** Subagent attempted to fix the Endless Runner exploit and conservative agent traps by adjusting `termination_penalty` and introducing bounded `tanh` progress rewards.
 - **D022 (ROOT CAUSE FIX):** Discovered via track progress telemetry (`Trk%`, `WPΔ`) that the agent was NEVER navigating the track. Even 1000-step episodes showed `WPΔ: 0`. The `progress_reward` based on local body velocity was fundamentally exploitable. Replaced with `waypoint_progress_reward` using TrackManager waypoint index deltas.
+- **D023:** Fixed "Warning Track Trap". Decreased boundary penalty from 0.6 to 0.4 so the agent wouldn't receive a massive negative reward just for exploring near the walls.
+- **D024:** Fixed "Stationary Trap" & "GoSignal Exploit". Increased stationary penalty to 50.0 and removed the GoSignal safety override which the agent exploited by staring at the wall to trigger a false-positive stop light, gaining immunity to stationary penalties.
+- **D025:** Fixed "Blind Training". Discovered `--enable_cameras` was missing from `start_tmux_training.sh`. The agent was training completely blind with a 12-dim input instead of the 524-dim ResNet-18 vision system. Added the flag and completely wiped all old blind checkpoints to start fresh. Added strict RGB-only directive to monitor agent.
 
 ## Blockers
 - None
 
 ## Next Action
-- A new **SKRL** training session is running in `tmux` with the **waypoint-based progress reward** (weight 5.0).
-- The `Trk%` and `WPΔ` telemetry is active in `logs/skrl_phase1.log` to verify real track navigation.
-- **Debugging Target:** `ep_len_mean >= 600` AND `speed > 0.5 m/s` AND `WPΔ > 0` (must show actual track progress).
-- **Incoming Agent:** Monitor `WPΔ` closely. If it stays at 0, investigate whether `waypoint_progress_reward` is being called correctly and whether the TrackManager indices are updating. If the agent makes real track progress, proceed to re-enable Phase 2 precision penalties.
+- The true RGB-only **SKRL** training session (with cameras enabled) is running in `tmux`.
+- Background `strict_monitor_agent` is actively checking logs every 15 minutes, doing full evaluations at every 500k milestone.
+- **Debugging Target:** Wait for 500k steps to verify visual navigation recovery (steering to avoid walls).

@@ -33,20 +33,21 @@ def main():
     print("="*60)
     
     obs_dict, _ = env.reset()
-    action = torch.tensor([[0.0, 1.0, 0.0]], device=env.device)
+    action = torch.tensor([[0.0, 0.0]], device=env.device)
     
-    for i in range(20):
+    for i in range(50):
         obs_dict, rewards, terminated, truncated, info = env.step(action)
         
         # Manually check termination conditions
-        contact = mdp_done.white_line_contact(env, threshold=0.05).item()
-        height = mdp_done.height_termination(env).item()
+        contact = mdp_done.white_line_contact(env, threshold=0.15).item()
+        height = mdp_done.height_termination(env, threshold=-0.02).item()
         stagnation = mdp_done.stagnation_termination(env).item()
         
         z = env.scene["robot"].data.root_pos_w[0, 2].item()
         speed = torch.norm(env.scene["robot"].data.root_lin_vel_b[0, :2]).item()
+        lat_err = env.extras.get("lat_err", torch.zeros(1))[0].item() if "lat_err" in env.extras else 0.0
         
-        print(f"Step {i:2d} | Z: {z:.3f} | Spd: {speed:.2f} || Contact: {contact} | Height: {height} | Stag: {stagnation}")
+        print(f"Step {i:2d} | Z: {z:.3f} | Spd: {speed:.2f} | LatErr: {lat_err:.2f} || Contact: {contact} | Height: {height} | Stag: {stagnation}")
 
         if terminated[0]:
             print(f"\nTERMINATED at step {i}!")

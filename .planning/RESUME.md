@@ -1,22 +1,22 @@
-# IsaacLab F1Tenth RL Training - Resume Context
+# Context Resume Guide
 
 ## Current Status
-We successfully debugged a major kinematics failure where the F1Tenth vehicle was acting like a forklift (driving backwards with locked front wheels). 
-The physics are now visually confirmed to be stable. The car is properly driving in All-Wheel Drive (AWD) and steering correctly using Ackermann kinematics.
-A fresh SKRL training run (16-env) has been started via tmux because the previous neural network checkpoints were incompatible with the corrected physics.
+- **Project:** ARCPro Reinforcement Learning for autonomous driving (IsaacLab / SKRL).
+- **Goal:** True RGB-only self-driving on the `openStreetUSD` track using a frozen `ResNet-18` backbone.
+- **State:** The agent is actively training in the background. It is currently in a "Phase 1 Curriculum" (strict lane-centering penalties are temporarily disabled so it can safely learn to corner without penalty-induced fear).
+- **Recent Breakthrough:** The agent reached 639 steps (successfully cornering) but suffered catastrophic forgetting due to a tiny PPO batch size. We just fixed this by uncorking the PPO memory buffer, stabilizing its learning gradients.
 
-## Most Recent Changes (Last Session)
-1. **Fixed "Forklift" Reverse Driving:** In `arcpro_env_cfg.py`, the `b_drive` action space scale/offset was reverted from `20.0` to `-20.0`. The car now drives forward relative to its mesh, placing the steering axle correctly at the front (restoring Front-Wheel Steering).
-2. **Fixed "Parking Brake" Front Wheels:** Reverted the RWD experiment back to **AWD**. The `b_drive` and `throttle` actuators in `arcpro_env_cfg.py` and `arcpro_robot_cfg.py` were updated to target all four wheels (`["Joint_Drive_.*"]`). This prevents the front wheels from acting as unactuated parking brakes dragging on the pavement.
-3. **Updated Test Scripts:** Created `steer.sh` and `play_steer.py` (and updated `play_straight.py`) to correctly interface with the 2D action space `[steer, drive]`. The user successfully visually verified the car driving straight and steering.
-4. **Wiped Checkpoints:** Deleted the obsolete neural network checkpoints in `logs/ppo_skrl/` that were trained on the broken backwards physics.
-5. **Started Fresh Training:** Executed `./start_tmux_training.sh`. The training and watchdog are currently running in a background tmux session named `training`.
+## Most Recent Changes
+We resolved several critical exploits/bugs:
+1. **Issue 40 (Suicide Loophole):** Lowered `stationary` penalty from 200 to 15. The agent was intentionally crashing to escape the massive per-step penalty of slowing down.
+2. **Issue 41 (Phase 2 Penalty Over-Saturation):** Disabled `lateral_error` and `action_steer_penalty` so the agent is allowed to wobble while it learns basic visual cornering.
+3. **Issue 42 (Catastrophic Forgetting):** Modified `train_skrl.py` to increase `rollouts` and `memory_size` to 1024, yielding a massive, stable batch size of 2,560 for PPO.
 
-## Active Issues / Blockers
-- **None at the moment.** The training is running. We must wait to see if the agent can overcome the first curve with the corrected physics. 
+## Active Background Tasks / Subagents
+1. **Tmux Session:** There is a detached tmux session named `training` running the Isaac Sim RL environment (`./start_tmux_training.sh`).
+2. **Subagent:** The `strict_monitor_agent` is running in the background (via cron) to monitor the logs every 15 minutes. It will notify you automatically when the agent hits the 500k or 1 Million step milestones.
 
-## Next Steps for New Agent
-1. Read `.planning/monitor_agent_prompt.md` to understand the watchdog rules.
-2. Ask the user if they want to check the status of the training by attaching to the tmux session or if they want to spawn a monitor subagent to periodically check the tensorboard logs.
-3. Do NOT modify the physics or drive actions. They have been visually verified to work!
-4. If the agent is crashing early, focus strictly on **reward tuning** (using `reward_tuning_history.md` as a guide) rather than changing the robot's physical attributes.
+## Next Steps for Incoming Agent
+1. Wait for the user's prompt or the subagent's milestone report.
+2. Check `logs/skrl_phase1.log` (via `tail -n 30`) to observe the latest `ep_len_mean` and `speed_mps`.
+3. If the agent successfully masters cornering (consistently surviving > 1000 steps), the next objective will be to re-enable the Phase 2 precision penalties (`lateral_error` and `action_steer_penalty`) in `arcpro_env_cfg.py` to force it to perfectly center itself in the lane.

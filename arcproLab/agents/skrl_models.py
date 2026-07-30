@@ -4,7 +4,7 @@ from skrl.models.torch import Model, GaussianMixin, DeterministicMixin
 from torchvision.models import resnet18, ResNet18_Weights
 
 class ARCProActor(GaussianMixin, Model):
-    def __init__(self, observation_space, action_space, device, clip_actions=False,
+    def __init__(self, observation_space, action_space, device, clip_actions=True,
                  clip_log_std=True, min_log_std=-20, max_log_std=2, reduction="sum"):
         Model.__init__(self, observation_space, action_space, device)
         GaussianMixin.__init__(self, clip_actions, clip_log_std, min_log_std, max_log_std, reduction)
@@ -70,6 +70,9 @@ class ARCProCritic(DeterministicMixin, Model):
         else:
             if state.dim() == 2 and state.shape[1] == 150540:
                 vec = state[:, :12]
+            elif state.dim() == 2 and state.shape[1] == 524:
+                # SKRLFlattenWrapper returns [visual_feats (512), telemetry (12)]
+                vec = state[:, -12:]
             else:
                 vec = state
             

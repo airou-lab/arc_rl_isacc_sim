@@ -3,19 +3,19 @@
 ## Project Context
 - **Milestone:** Milestone 3: HD Perception & Production Hardening (v2.6)
 - **Phase:** Phase 16: MARL Transition
-- **Status:** SKRL single-agent training is running in the background.
+- **Status:** SKRL single-agent RGB visual training is running in the background.
 
 ## Active Command
-- **Background Training**: SKRL single-agent training via `start_tmux_training.sh` (running `train_skrl.py`).
+- **Background Training**: SKRL single-agent training via `start_tmux_training.sh` (cameras ON).
 - **Log File**: `logs/skrl_phase1.log`
-- **Target**: Ensure single-agent SKRL is working stably before proceeding to MARL.
+- **Background Monitor**: `strict_monitor_agent` is running on a 15-minute cron, waiting for 500k step milestones.
 
 ## Recent Changes
-- **SKRL Migration**: Migrated from Stable-Baselines3 to SKRL.
-- **SB3 Archive**: Archived all legacy SB3 scripts and policy stack files into `archive/sb3_legacy`.
-- **Infrastructure**: Modified `start_tmux_training.sh` to execute the new SKRL trainer.
+- Added `--enable_cameras` to `start_tmux_training.sh` to fix blind training.
+- Patched stationary and GoSignal exploits. Wiped old blind checkpoints.
+- Enforced RGB-only self driving directives in planning docs.
 
 ## Immediate Next Steps
-- [ ] **Monitor Training**: Check `logs/skrl_phase1.log` periodically to verify SKRL training is stable.
-- [ ] **MARL Spawner**: Once single-agent SKRL is confirmed working, refactor the vehicle spawner to support multiple agents per environment.
-- [ ] **SKRL MARL Integration**: Begin upgrading the SKRL policy stack bridge for full Phase 16 multi-agent support.
+- [ ] **Monitor Training**: Let the `strict_monitor_agent` handle the 500k milestone checks.
+- [ ] **Visual Verification**: Use `./steer.sh` to visually verify driving behavior once the agent crosses 500k+ steps.
+- [ ] **MARL Spawner**: Once single-agent SKRL is confirmed working with vision, refactor the vehicle spawner to support multiple agents per environment.

@@ -42,17 +42,17 @@ class EventCfg:
 class ARCProSceneCfg(InteractiveSceneCfg):
     """GSD Phase 7: True Physics Mode (1.0x Scale)."""
     
-    # Lighting
+    # Lighting (Distant + Dome for full ambient visibility)
     light = AssetBaseCfg(
-        prim_path="/World/light", 
-        spawn=sim_utils.DistantLightCfg(intensity=3000.0, color=(1.0, 1.0, 1.0))
+        prim_path="/World/light",
+        spawn=sim_utils.DistantLightCfg(intensity=1500.0, color=(1.0, 1.0, 1.0)),
     )
 
     # Ground Plane (Visual + Safety Backup)
     ground_plane = AssetBaseCfg(
         prim_path="/World/defaultGroundPlane",
-        spawn=sim_utils.GroundPlaneCfg(),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -0.05)),
+        spawn=sim_utils.GroundPlaneCfg(size=(200.0, 200.0)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -0.50)),
     )
 
     # Track from no_graph_sim.usd (Clean 1x version: No grass/foliage/fences)
@@ -96,8 +96,12 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             horizontal_aperture=3.86, # 90-degree HFOV (2 * atan(3.86 / (2 * 1.93)))
             focal_length=1.93,
         ),
-        # Raised to 0.35m with no tilt to see further down the track
-        offset=TiledCameraCfg.OffsetCfg(pos=(-0.3, 0.0, 0.35), rot=(1.0, 0.0, 0.0, 0.0), convention="parent"),
+        # Raised to 0.35m with no tilt to see further down the track (convention="ros" aligns camera forward)
+        # Moved forward to pos=(0.5, 0.0, 0.35) to ensure it is completely outside the car mesh
+        # The car mesh is inverted, so Local -X is forward.
+        # We place it further forward (-0.5) to clear the chassis mesh entirely.
+        # We use world convention. Car forward is -X. We yaw 180 (Z) and pitch down 15 (Y).
+        offset=TiledCameraCfg.OffsetCfg(pos=(-0.5, 0.0, 0.35), rot=(0.0, 0.1305, 0.0, 0.9914), convention="world"),
         data_types=["rgb"], width=224, height=224,
     )
 
@@ -121,6 +125,15 @@ class ARCProSceneCfg(InteractiveSceneCfg):
     # Contact Sensor: Detect chassis collisions (crashes)
     contact_forces = ContactSensorCfg(
         prim_path="{ENV_REGEX_NS}/Robot/Chassis",
+        update_period=0.0,
+        history_length=3,
+        debug_vis=False,
+    )
+
+    # Ground Contact Sensor: Detects any physical collision between the entire robot (.*) and the groundplane USD
+    ground_contact = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/.*",
+        filter_prim_paths_expr=["/World/defaultGroundPlane"],
         update_period=0.0,
         history_length=3,
         debug_vis=False,
@@ -164,8 +177,8 @@ class RewardCfg:
     # Survival Bonus: Reduced to 1.0. We rely mostly on bounded progress reward now.
     survival_bonus = RewTerm(func=lambda env: torch.ones(env.num_envs, device=env.device), weight=1.0)
 
-    # Anti-Suicide: Reduced from extreme 100.0 (-5000) to 20.0 (-1000) to allow value function to learn smoothly.
-    termination_penalty = RewTerm(func=mdp_rew.termination_penalty, weight=20.0)
+    # Anti-Suicide: Reduced from extreme 100.0 (-5000) to 10.0 (-500) to allow value function to learn smoothly and overcome stagnation fear.
+    termination_penalty = RewTerm(func=mdp_rew.termination_penalty, weight=10.0)
     
     # Fix E: Bound the waypoint progress reward with tanh and boost weight to 50.0.
     # At 0.5 m/s (~1.7 WPs), tanh(1.7) = 0.93 * 50 = ~46 pts/step.
@@ -175,28 +188,25 @@ class RewardCfg:
     progress_reward = RewTerm(func=lambda env: torch.tanh(mdp_rew.waypoint_progress_reward(env)), weight=50.0)
     
     # Exploration: Tiny reward for applying any throttle/drive action to break out of stagnation
+    # Phase 1: Re-enabled steering penalty (weight=0.5) to prevent erratic swerving into walls
+    action_steer_penalty = RewTerm(func=lambda env: torch.square(env.action_manager.action[:, 0]), weight=-0.5)
+
     action_drive_reward = RewTerm(
-        func=lambda env: torch.abs(env.action_manager.action[:, 1]),
+        func=lambda env: env.action_manager.action[:, 1],
         weight=0.5
     )
     
-    # Precision: Lane centering (Phase 2 constraint - currently disabled for Phase 1 curriculum)
+    # Precision: Lane centering (Disabled for Phase 1 Curriculum)
     lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=0.0)
     
     # Force movement: Penalty forces it to move!
     # Fix Bug 5: Use torch.abs() so reverse driving doesn't spuriously trigger penalty.
     # Requires min speed of 0.5 m/s, UNLESS the traffic light (go_signal) says to stop!
-    stationary = RewTerm(
-        func=lambda env: torch.where(
-            torch.abs(env.scene["robot"].data.root_lin_vel_b[:, 0]) < 0.2,
-            -1.0, 0.0
-        ),
-        weight=50.0
-    )
+    stationary = RewTerm(func=mdp_rew.stationary_penalty, weight=15.0)
     
-    # Phase 2: Waypoint Tracking (Disabled for Phase 1)
-    heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=0.0)
-    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=0.0)
+    # Phase 2: Waypoint Tracking
+    heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
+    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=2.0)
     
     # Jitter Suppression (Disabled for Phase 1)
     jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.0)
@@ -210,10 +220,17 @@ class RewardCfg:
 
 @configclass
 class TerminationCfg:
-    roadmark_contact = DoneTerm(func=mdp_done.white_line_contact, params={"threshold": 0.12})
+    roadmark_contact = DoneTerm(func=mdp_done.white_line_contact, params={"threshold": 0.15})
     # height termination: Catch flying robots (falling into void)
-    # Lowered to 0.02m to give suspension room to breathe upon impact
-    height = DoneTerm(func=mdp_done.height_termination, params={"threshold": 0.005})
+    # Disabled entirely! We are relying fully on ground_contact_term to detect falling off the track.
+    # height = DoneTerm(func=mdp_done.height_termination, params={"threshold": 0.01})
+    # Physical USD Contact: Terminate if any part of the robot touches the physical ground plane.
+    # NOTE FOR USER: Threshold MUST be > 50.0! The track mesh is thin and rests 5cm above the ground plane.
+    # The car's wheels slightly clip through the track mesh and constantly touch the ground plane beneath it,
+    # generating small contact forces (e.g., 5-20N). A threshold of 1.0 triggers instantly on spawn.
+    # A threshold of 50.0+ ignores the clipping wheels but will successfully trigger when the full weight
+    # of the car slams into the ground plane after falling off the track!
+    ground_contact_term = DoneTerm(func=mdp_done.ground_contact_termination, params={"sensor_cfg": SceneEntityCfg("ground_contact"), "threshold": 150.0})
     # Stagnation: Reset if stuck against a wall
     stagnation = DoneTerm(func=mdp_done.stagnation_termination)
     # FOV Driving: Reset if driving into areas not visible to the camera

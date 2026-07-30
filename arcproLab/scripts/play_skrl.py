@@ -64,6 +64,19 @@ from agents.skrl_wrappers import SKRLFlattenWrapper
 
 import traceback
 
+class WarmupActionWrapper(gym.Wrapper):
+    def __init__(self, env, warmup_steps=10):
+        super().__init__(env)
+        self.warmup_steps = warmup_steps
+        
+    def step(self, action):
+        if hasattr(self.env.unwrapped, "episode_length_buf"):
+            mask = self.env.unwrapped.episode_length_buf < self.warmup_steps
+            action = action.clone()
+            action[mask, 0] = 0.0   # Steer: 0.0 is center
+            action[mask, 1] = -1.0  # Throttle: action * (-20) - 20 = 0.0 (Stop)
+        return self.env.step(action)
+
 try:
     print("Configuring environment...")
     sys.stdout.flush()
@@ -75,6 +88,7 @@ try:
     print("Instantiating ManagerBasedRLEnv...")
     sys.stdout.flush()
     env = ManagerBasedRLEnv(cfg=env_cfg, render_mode="human")
+    env = WarmupActionWrapper(env, warmup_steps=10)
 
     print("Wrapping environment...")
     sys.stdout.flush()

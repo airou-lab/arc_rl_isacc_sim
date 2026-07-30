@@ -37,34 +37,38 @@ def waypoint_progress_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg =
         env.extras["reward_wp_delta_step"] = torch.zeros(env.num_envs, device=env.device)
         return torch.zeros(env.num_envs, device=env.device)
 
-    asset = env.scene[asset_cfg.name]
-    current_pos = asset.data.root_pos_w[:, :2].clone()  # (num_envs, 2) world XY
-    current_idx = tm.last_indices  # (num_envs,)
+    current_idx = tm.last_indices.clone()  # (num_envs,)
     num_wps = tm.waypoints.shape[0]
 
     # Initialize tracking state on first call
     if "prev_wp_idx_reward" not in env.extras:
         env.extras["prev_wp_idx_reward"] = current_idx.clone()
-        env.extras["prev_pos_reward"] = current_pos.clone()
+        env.extras["cumulative_wp_index"] = torch.zeros(env.num_envs, dtype=torch.float32, device=env.device)
+        env.extras["max_cumulative_wp_index"] = torch.zeros(env.num_envs, dtype=torch.float32, device=env.device)
         env.extras["reward_wp_delta_step"] = torch.zeros(env.num_envs, device=env.device)
         return torch.zeros(env.num_envs, device=env.device)
 
     prev_idx = env.extras["prev_wp_idx_reward"]
-    prev_pos = env.extras["prev_pos_reward"]
 
-    # Compute forward WP delta (handle wrap-around for closed tracks)
+    # Compute true step delta (handles wrap-around)
     delta = (current_idx - prev_idx) % num_wps
+    delta_real = torch.where(delta > num_wps // 2, delta - num_wps, delta).float()
 
-    # Clamp: if delta > half the track, agent went backward — no reward
-    delta = torch.where(delta > num_wps // 2, torch.zeros_like(delta), delta)
+    # Update cumulative progress
+    env.extras["cumulative_wp_index"] += delta_real
 
-    # FIX C — Displacement gate: only reward if robot actually moved >= 5mm.
-    displacement = torch.norm(current_pos - prev_pos, dim=1)  # (num_envs,)
-    passed_gate = displacement >= 0.005
-    delta = torch.where(passed_gate, delta, torch.zeros_like(delta))
+    # Calculate reward as the amount by which we exceed the highest progress ever achieved this episode
+    cum_wp = env.extras["cumulative_wp_index"]
+    max_cum = env.extras["max_cumulative_wp_index"]
+    reward_delta = cum_wp - max_cum
+    reward_delta = torch.clamp(reward_delta, min=0.0)
 
-    # Zero out reward for envs that just reset (prevent cross-episode delta bleed)
-    just_reset = torch.zeros_like(delta, dtype=torch.bool)
+    # Update high-water mark
+    env.extras["max_cumulative_wp_index"] = torch.maximum(max_cum, cum_wp)
+    env.extras["prev_wp_idx_reward"] = current_idx.clone()
+
+    # Zero out everything for envs that just reset
+    just_reset = torch.zeros_like(reward_delta, dtype=torch.bool)
     if hasattr(env, 'reset_terminated'):
         just_reset = just_reset | env.reset_terminated
     if hasattr(env, 'reset_buf'):
@@ -72,20 +76,17 @@ def waypoint_progress_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg =
     if hasattr(env, 'episode_length_buf'):
         just_reset = just_reset | (env.episode_length_buf <= 1)
         
-    delta = torch.where(just_reset, torch.zeros_like(delta), delta)
-    # Force update the tracking state so we don't carry over the displacement from the death location
-    passed_gate = passed_gate | just_reset
-        
-    # FIX F: Update the tracking state ONLY if we passed the displacement gate!
-    # If we don't pass the gate, we keep the old prev_pos so the distance accumulates 
-    # until it finally crosses 5mm. This prevents the "dead zone" at 0.20-0.25 m/s.
-    env.extras["prev_wp_idx_reward"] = torch.where(passed_gate, current_idx, prev_idx)
-    env.extras["prev_pos_reward"] = torch.where(passed_gate.unsqueeze(1).expand_as(current_pos), current_pos, prev_pos)
+    reward_delta = torch.where(just_reset, torch.zeros_like(reward_delta), reward_delta)
+    
+    # If reset, we MUST clear the cumulative trackers so the next episode starts fresh at 0
+    env.extras["cumulative_wp_index"] = torch.where(just_reset, torch.zeros_like(cum_wp), cum_wp)
+    env.extras["max_cumulative_wp_index"] = torch.where(just_reset, torch.zeros_like(max_cum), env.extras["max_cumulative_wp_index"])
+    env.extras["prev_wp_idx_reward"] = torch.where(just_reset, current_idx, current_idx)
 
-    # FIX B — Expose the actual per-step reward delta for accurate telemetry logging
-    env.extras["reward_wp_delta_step"] = delta.float()
+    # Expose the actual per-step reward delta for accurate telemetry logging
+    env.extras["reward_wp_delta_step"] = reward_delta
 
-    return delta.float()
+    return reward_delta
 
 def termination_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     """Penalty triggered only when a termination occurs."""
@@ -137,3 +138,9 @@ def boundary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     # This provides a 0.28m wide "warning track" of dense negative feedback before the -1000 crash penalty.
     is_near = white_line_contact(env, threshold=0.40)
     return torch.where(is_near, torch.tensor(-100.0, device=env.device), torch.tensor(0.0, device=env.device))
+
+def stationary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """Penalizes the robot for sitting still, with a 50-step grace period for spawning."""
+    speed = torch.norm(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1)
+    is_stationary = (speed < 0.2) & (env.episode_length_buf > 50)
+    return torch.where(is_stationary, torch.tensor(-1.0, device=env.device), torch.tensor(0.0, device=env.device))

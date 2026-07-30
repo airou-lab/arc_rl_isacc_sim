@@ -134,8 +134,8 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
 
     # Calculate distance moved in this step (only update once per step)
     if masked:
-        # FIX: Use 0.02 for 50Hz clock (was previously 0.05 for 20Hz)
-        env.extras["distance"] += asset.data.root_lin_vel_b[:, 0] * 0.02
+        # Local X points backwards on the mesh, so negate it for forward distance
+        env.extras["distance"] += -asset.data.root_lin_vel_b[:, 0] * 0.02
     
     # Store raw values in extras for Reward/Termination (Unmasked)
     env.extras["lat_err"] = lat_err
