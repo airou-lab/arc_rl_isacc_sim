@@ -23,7 +23,7 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     
     # Exactly on the path center (X=-16.197) at safe drop height
     base_spawn_x, base_spawn_y = -16.197, 5.50
-    base_spawn_yaw = 1.5708 # Face North
+    base_spawn_yaw = -1.5708 # Face South (Correct track direction)
     
     # 1. Domain Randomization (Hardening)
     # Disabled for debugging pure straight-line traversal

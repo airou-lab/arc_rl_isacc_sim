@@ -98,10 +98,9 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         ),
         # Raised to 0.35m with no tilt to see further down the track (convention="ros" aligns camera forward)
         # Moved forward to pos=(0.5, 0.0, 0.35) to ensure it is completely outside the car mesh
-        # The car mesh is inverted, so Local -X is forward.
-        # We place it further forward (-0.5) to clear the chassis mesh entirely.
-        # We use world convention. Car forward is -X. We yaw 180 (Z) and pitch down 15 (Y).
-        offset=TiledCameraCfg.OffsetCfg(pos=(-0.5, 0.0, 0.35), rot=(0.0, 0.1305, 0.0, 0.9914), convention="world"),
+        # The car drives in +X direction. We place it at +0.5 to clear the chassis mesh.
+        # We pitch down 15 degrees around Y (w=0.9914, y=0.1305).
+        offset=TiledCameraCfg.OffsetCfg(pos=(0.5, 0.0, 0.35), rot=(0.9914, 0.0, 0.1305, 0.0), convention="world"),
         data_types=["rgb"], width=224, height=224,
     )
 
@@ -117,8 +116,8 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             mass_props=sim_utils.MassPropertiesCfg(mass=0.001) # Explicitly 1 gram so it doesn't tip the car
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(-0.3, 0.0, 0.35),
-            rot=(0.0, -0.866, 0.0, 0.5) # Points X forward correctly based on chassis
+            pos=(0.3, 0.0, 0.35),
+            rot=(0.707, 0.0, 0.707, 0.0) # Points X forward
         )
     )
 
@@ -168,8 +167,8 @@ class ActionCfg:
     b_drive = arcpro_actions.GroupedJointVelocityActionCfg(
         asset_name="robot", 
         joint_names=["Joint_Drive_.*"], 
-        scale=-20.0, 
-        offset=-20.0
+        scale=20.0, 
+        offset=20.0
     )
 
 @configclass

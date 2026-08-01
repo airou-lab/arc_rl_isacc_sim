@@ -290,3 +290,61 @@ At the 500k milestone, the agent's episode lengths reached up to ~723, but the e
   3. Instead, it just jiggled in place, triggered the `stationary_penalty`, and died. 
 - **Fix:** Re-enabled `action_drive_reward` (weight `0.5`) but fixed its mathematical mapping. The drive action maps `[-1, 1]` to `[0, -40]` rad/s (where 1.0 is max forward speed). We now return the raw `action[:, 1]` instead of the absolute value. This provides a dense, linear "breadcrumb" reward (+0.5 for max throttle, 0.0 for half throttle, -0.5 for braking) that guides the newborn agent to press the gas and discover the waypoint rewards, without penalizing intermediate speeds!
 - **Result:** Wiped checkpoints and restarted.
+
+### Issue 49: Re-enabled Phase 2 Penalties causing Suicide Loophole
+- **Problem:** The previous commit re-enabled Phase 2 penalties (`heading` and `smoothness` at 2.0). Since the agent was learning vision from scratch, this caused penalty over-saturation. The agent suffered ~120 step episodes, crashing early to avoid accumulating these penalties.
+- **Fix:** Reverted `heading` and `smoothness` weights back to `0.0` in `arcpro_env_cfg.py` to restore the Phase 1 curriculum, while keeping the beneficial physics bug fixes intact.
+- **Result:** Wiped checkpoints and restarted training.
+
+### Issue 50: High-Water-Mark Reward Bug (WPdelta=0)
+- **Problem:** The new waypoint_progress_reward used a high-water-mark - only rewarding NEW progress beyond the furthest point reached in the episode. For short ~100-step episodes the agent died before reaching new territory, so the reward was always 0. The agent learned purely from survival + drive rewards with zero progress gradient, locking at ~100 step episodes.
+- **Fix:** Reverted to simple per-step forward delta in rewards.py. Also bumped termination_penalty weight from 10.0 to 20.0 (yielding -1000 on crash), so crashing at step 100 is net -850, definitively worse than surviving.
+- **Result:** Wiped checkpoints and restarted training.
+
+---
+
+## Session 2026-07-31 — 3-Pass System Audit + Refactor
+
+### Issue 48: tanh Saturation of Progress Reward (Speed Gradient Killed)
+- **Problem:** `progress_reward` used `tanh(WPs/step) * 50`. At 0.08 m/s (0.19 WPs/step), tanh≈0.19 — so going 25× faster (2.0 m/s, 2.4 WPs/step, tanh≈0.98) only yielded 5× more reward. Policy learned the slow-crawl equilibrium was good enough.
+- **Fix:** Removed `tanh`, switched to linear `weight=30.0`. Speed gradient is now direct: 6× faster = 6× more reward.
+- **File:** `arcpro_env_cfg.py`, `mdp/rewards.py`
+
+### Issue 49: Spawn Domain Randomization Disabled (Overfitting)
+- **Problem:** `rand_offset_x = torch.zeros(...)` and `rand_yaw = torch.zeros(...)` in `events.py` — all 128 envs spawned at the same position every reset, causing the policy to memorize one trajectory with no generalization.
+- **Fix:** Re-enabled: `±0.3m` X-offset, `±5°` yaw.
+- **File:** `mdp/events.py`
+
+### Issue 50: Stagnation Termination Too Loose
+- **Problem:** `stagnation_termination` fired at `speed < 0.1 m/s` after `1000 steps`. The stationary_penalty fires at `< 0.2 m/s`, so the agent could crawl at 0.08–0.19 m/s accruing -15/step for 1000 steps (-15,000 total) before forced reset.
+- **Fix:** Tightened to `< 0.2 m/s` after `200 steps` to match stationary_penalty threshold.
+- **File:** `mdp/terminations.py`
+
+### Issue 51: Boundary Penalty Zone Too Wide (Accumulation Trap)
+- **Problem:** `boundary_penalty` fired at 0.40m from wall but termination at 0.15m — a 0.25m-wide trap where agents bled -40/step indefinitely. This explained -2600 episode rewards.
+- **Fix:** Tightened warning zone from `0.40m → 0.20m`. Now only 5cm warning band before hard termination.
+- **File:** `mdp/rewards.py` + constant `BOUNDARY_WARN_THRESHOLD_M`
+
+### Issue 52: go_signal_manager Python CPU Loop (6-32× Slowdown)
+- **Problem:** `go_signal_manager.update()` ran 128 cv2 (HSV + contour) calls per step with GPU→CPU tensor transfer. At ~1-5ms per call: 128–640ms overhead against 20ms budget. Explained training running at 4.7 steps/sec instead of ~15 steps/sec.
+- **Fix:** Bypassed `mgr.update(images)` in Phase 1 (no stop bars in training zone). Always return `ones`. Re-enable for Phase 3+ intersection curriculum.
+- **File:** `mdp/observations.py` → `_obs_go_signal()`
+
+### Issue 53: Observation Slots Unnormalized / Dead
+- **Problem:** obs slot 3 (speed) and slot 4 (yaw_rate) were injected raw (0–5 m/s / 0–20 rad/s) into the network alongside ResNet features (~[0,1]). Slot 11 (distance) grew unbounded. Slot 7 was never assigned (dead).
+- **Fix:** Slot 3 ÷ `OBS_MAX_SPEED_MPS=2.0`, slot 4 ÷ `OBS_MAX_YAW_RATE_RPS=5.0`, slot 11 ÷ `OBS_MAX_DISTANCE_M=50.0`. Module-level constants in `observations.py`.
+- **File:** `mdp/observations.py`
+
+### Issue 54: PPO Hyperparameters Too Conservative
+- **Problem:** `kl_threshold=0.008` aborted gradient steps too early (early training has large policy gradients). `entropy_loss_scale=0.001` provided insufficient exploration pressure to escape slow-crawl trap.
+- **Fix:** `kl_threshold: 0.008 → 0.02`. `entropy_loss_scale: 0.001 → 0.005`.
+- **File:** `scripts/train_skrl.py`
+
+### Refactor (No Behavior Change)
+- Split `_compute_telemetry()` monolith into 6 named helper functions in `observations.py`.
+- Added module-level constants to `rewards.py` and `observations.py`.
+- Replaced 3 inline lambdas in `arcpro_env_cfg.py` with named `mdp_rew.*` functions.
+
+### Post-Fix Training Baseline
+- Step 7,300, Rew: ~-45, Spd: ~0.18 m/s (up from 0.08 m/s pre-fix)
+- Old checkpoints archived to `logs/archive_pre_11fix_*/`

@@ -26,7 +26,7 @@ class ArcProRobotCfg(ArticulationCfg):
     
     spawn: sim_utils.UsdFileCfg = sim_utils.UsdFileCfg(
         func=spawn_f1tenth_preset,
-        usd_path=os.path.join(os.path.dirname(__file__), "assets", "robot", "F1Tenth_Metric.usd"),
+        usd_path=os.path.join(os.path.dirname(__file__), "assets", "robot", "F1Tenth_Metric_Fixed.usd"),
         scale=(1.0, 1.0, 1.0), 
         activate_contact_sensors=True,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(

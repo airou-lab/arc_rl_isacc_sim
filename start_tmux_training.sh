@@ -22,7 +22,7 @@ if [ ! -z "$LATEST_CKPT" ]; then
 fi
 
 # Pane 0: Start the actual training, pipe output to tee so it logs AND shows on screen
-tmux send-keys -t training:0.0 "export TORCH_USE_CUDA_DSA=1; export PYTHONUNBUFFERED=1; /home/arika/IsaacLab/isaaclab.sh -p arcproLab/scripts/train_skrl.py --num_envs 10 --headless --enable_cameras --total_timesteps 5000000 $RESUME_FLAG | tee logs/skrl_phase1.log" C-m
+tmux send-keys -t training:0.0 "export TORCH_USE_CUDA_DSA=1; export PYTHONUNBUFFERED=1; /home/arika/IsaacLab/isaaclab.sh -p arcproLab/scripts/train_skrl.py --num_envs 128 --headless --enable_cameras --total_timesteps 5000000 $RESUME_FLAG | tee logs/skrl_phase1.log" C-m
 
 # Pane 1: Split vertically and start the watchdog
 tmux split-window -t training:0 -v
