@@ -114,8 +114,9 @@ def main():
     # 1. Setup Environment Configuration
     env_cfg = ARCProEnvCfg()
     env_cfg.scene.num_envs = args_cli.num_envs
-    env_cfg.enable_cameras = args_cli.enable_cameras 
-    env_cfg.__post_init__() 
+    if args_cli.enable_cameras:
+        env_cfg.enable_cameras = True
+    env_cfg.__post_init__()
 
     # 2. Create Environment
     env = ManagerBasedRLEnv(cfg=env_cfg)
@@ -144,13 +145,13 @@ def main():
     cfg_ppo = PPO_DEFAULT_CONFIG.copy()
     cfg_ppo["rollouts"] = 128
     cfg_ppo["mini_batches"] = 16  # Small mini-batch size (128*4/16 = 32 images per backprop)
-    cfg_ppo["learning_rate"] = 1e-4
+    cfg_ppo["learning_rate"] = 3e-5  # Reduced from 1e-4 to prevent policy collapse after 241k peak
     cfg_ppo["random_timesteps"] = 0
     cfg_ppo["learning_starts"] = 0
     cfg_ppo["state_preprocessor"] = None
     # Use native PPO KL early stopping and Entropy to prevent policy collapse
-    cfg_ppo["kl_threshold"] = 0.008
-    cfg_ppo["entropy_loss_scale"] = 0.001
+    cfg_ppo["kl_threshold"] = 0.016  # Relaxed from 0.008 — too tight was causing snap-back collapses
+    cfg_ppo["entropy_loss_scale"] = 0.005  # Raised from 0.001 for more exploration out of local minima
     cfg_ppo["learning_rate_scheduler"] = None
     
     log_dir = os.path.join("logs", "ppo_skrl", datetime.now().strftime("%Y%m%d-%H%M%S"))
