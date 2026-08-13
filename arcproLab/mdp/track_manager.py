@@ -7,6 +7,112 @@ import torch
 import numpy as np
 import os
 
+def _get_mesh_info(prim, xform_cache, env0_origin):
+    from pxr import UsdGeom
+    mesh = UsdGeom.Mesh(prim)
+    points_attr = mesh.GetPointsAttr().Get()
+    indices_attr = mesh.GetFaceVertexIndicesAttr().Get()
+    counts_attr = mesh.GetFaceVertexCountsAttr().Get()
+    if not points_attr or not indices_attr:
+        raise ValueError(f"Mesh at {prim.GetPath()} is missing points or indices.")
+    
+    xform = xform_cache.GetLocalToWorldTransform(prim)
+    transformed_pts = []
+    for p in points_attr:
+        pw = xform.Transform(p)
+        transformed_pts.append([pw[0] - env0_origin[0], pw[1] - env0_origin[1], pw[2] - env0_origin[2]])
+    return {'points': transformed_pts, 'indices': indices_attr, 'counts': counts_attr}
+
+def _finalize_group(data_list, name):
+    if not data_list:
+        raise ValueError(f"No valid meshes found for {name}.")
+    all_dense_pts = []
+    resolution = 0.01 # High resolution (1cm) for 1.0x scale
+    for path, mesh_data in data_list:
+        pts = np.array(mesh_data['points'])
+        indices = mesh_data['indices']
+        counts = mesh_data['counts']
+        curr_idx = 0
+        for count in counts:
+            face_indices = indices[curr_idx : curr_idx + count]
+            curr_idx += count
+            for i in range(count):
+                p1, p2 = pts[face_indices[i]], pts[face_indices[(i + 1) % count]]
+                dist = np.linalg.norm(p2 - p1)
+                if dist > 0:
+                    num_steps = max(1, int(dist / resolution))
+                    for step in range(num_steps):
+                        all_dense_pts.append(p1 + (p2 - p1) * (step / num_steps))
+    if not all_dense_pts:
+        raise ValueError(f"Failed to sample any dense points for {name}.")
+    final_pts = np.unique(np.round(np.array(all_dense_pts), 3), axis=0)
+    print(f"[TrackManager] Finalized {name}: {len(final_pts)} points.")
+    return final_pts
+
+def _punch_holes(raw_pts, gate_xy, name):
+    if raw_pts is None or len(raw_pts) == 0:
+        raise ValueError(f"Cannot punch holes in {name}: points array is empty or None.")
+    from scipy.spatial import KDTree
+    tree = KDTree(gate_xy)
+    dists, _ = tree.query(raw_pts[:, :2], k=1)
+    
+    mask = dists > 1.0
+    filtered = raw_pts[mask]
+    print(f"[TrackManager] Punched holes in {name}: removed {len(raw_pts) - len(filtered)} overlapping points.")
+    return filtered
+
+def _sample_waypoints(y_pts, w_pts):
+    from scipy.spatial import KDTree
+    tree = KDTree(w_pts)
+    dists, idxs = tree.query(y_pts)
+    
+    midpoints = (y_pts + w_pts[idxs]) / 2.0
+    valid_mask = dists < 4.0
+    midpoints = midpoints[valid_mask]
+    
+    dists_to_origin = np.linalg.norm(midpoints, axis=1)
+    curr = np.argmin(dists_to_origin)
+    
+    tree_nn = KDTree(midpoints)
+    visited = np.zeros(len(midpoints), dtype=bool)
+    visited[curr] = True
+    ordered = [midpoints[curr]]
+    
+    for _ in range(len(midpoints) - 1):
+        curr_pt = ordered[-1]
+        dists, idxs = tree_nn.query(curr_pt, k=50)
+        
+        found = False
+        for idx in np.atleast_1d(idxs):
+            if not visited[idx]:
+                visited[idx] = True
+                ordered.append(midpoints[idx])
+                found = True
+                break
+        
+        if not found:
+            unvisited_idxs = np.where(~visited)[0]
+            if len(unvisited_idxs) == 0: break
+            unvisited_pts = midpoints[unvisited_idxs]
+            dists_glob = np.linalg.norm(unvisited_pts - curr_pt, axis=1)
+            best_idx = unvisited_idxs[np.argmin(dists_glob)]
+            visited[best_idx] = True
+            ordered.append(midpoints[best_idx])
+            
+    ordered = np.array(ordered)
+    n = len(ordered)
+    yaws = np.zeros(n)
+    for i in range(n):
+        i_next = (i + 1) % n
+        dy = ordered[i_next, 1] - ordered[i, 1]
+        dx = ordered[i_next, 0] - ordered[i, 0]
+        yaws[i] = np.arctan2(dy, dx)
+        
+    final_wps = np.zeros((n, 3))
+    final_wps[:, :2] = ordered
+    final_wps[:, 2] = yaws
+    return final_wps
+
 class TrackManager:
     """
     Robust Track Manager with VisualizationMarkers and Gap-Filling.
@@ -128,46 +234,7 @@ class TrackManager:
         xform_cache = UsdGeom.XformCache()
         env0_origin = xform_cache.GetLocalToWorldTransform(root_prim).ExtractTranslation()
 
-        def get_mesh_info(prim, xform_cache, env0_origin):
-            mesh = UsdGeom.Mesh(prim)
-            points_attr = mesh.GetPointsAttr().Get()
-            indices_attr = mesh.GetFaceVertexIndicesAttr().Get()
-            counts_attr = mesh.GetFaceVertexCountsAttr().Get()
-            if not points_attr or not indices_attr:
-                raise ValueError(f"Mesh at {prim.GetPath()} is missing points or indices.")
-            
-            xform = xform_cache.GetLocalToWorldTransform(prim)
-            transformed_pts = []
-            for p in points_attr:
-                pw = xform.Transform(p)
-                transformed_pts.append([pw[0] - env0_origin[0], pw[1] - env0_origin[1], pw[2] - env0_origin[2]])
-            return {'points': transformed_pts, 'indices': indices_attr, 'counts': counts_attr}
 
-        def finalize_group(data_list, name):
-            if not data_list:
-                raise ValueError(f"No valid meshes found for {name}.")
-            all_dense_pts = []
-            resolution = 0.01 # High resolution (1cm) for 1.0x scale
-            for path, mesh_data in data_list:
-                pts = np.array(mesh_data['points'])
-                indices = mesh_data['indices']
-                counts = mesh_data['counts']
-                curr_idx = 0
-                for count in counts:
-                    face_indices = indices[curr_idx : curr_idx + count]
-                    curr_idx += count
-                    for i in range(count):
-                        p1, p2 = pts[face_indices[i]], pts[face_indices[(i + 1) % count]]
-                        dist = np.linalg.norm(p2 - p1)
-                        if dist > 0:
-                            num_steps = max(1, int(dist / resolution))
-                            for step in range(num_steps):
-                                all_dense_pts.append(p1 + (p2 - p1) * (step / num_steps))
-            if not all_dense_pts:
-                raise ValueError(f"Failed to sample any dense points for {name}.")
-            final_pts = np.unique(np.round(np.array(all_dense_pts), 3), axis=0)
-            print(f"[TrackManager] Finalized {name}: {len(final_pts)} points.")
-            return final_pts
 
         y_data, w_data, g_data = [], [], []
         
@@ -223,7 +290,7 @@ class TrackManager:
                         is_gate = True
                         break
 
-            mesh_info = get_mesh_info(prim, xform_cache, env0_origin)
+            mesh_info = _get_mesh_info(prim, xform_cache, env0_origin)
             if not mesh_info or len(mesh_info['points']) == 0: continue
 
             binding_api = UsdShade.MaterialBindingAPI(prim)
@@ -265,11 +332,11 @@ class TrackManager:
                 elif "white" in search_str: 
                     w_data.append((path_str, mesh_info))
 
-        self.raw_yellow_pts = finalize_group(y_data, "Yellow")
-        self.raw_white_pts = finalize_group(w_data, "White")
+        self.raw_yellow_pts = _finalize_group(y_data, "Yellow")
+        self.raw_white_pts = _finalize_group(w_data, "White")
         
         # Finalize Gate points, using fallbacks if no meshes were found
-        self.raw_gate_pts = finalize_group(g_data, "Gate")
+        self.raw_gate_pts = _finalize_group(g_data, "Gate")
         if self.raw_gate_pts is None and len(gate_fallback_pts) > 0:
             print("[TrackManager] No gate meshes found. Using prim centers as fallback.")
             self.raw_gate_pts = np.array(gate_fallback_pts)
@@ -280,88 +347,16 @@ class TrackManager:
         if self.raw_gate_pts is not None:
             gate_xy = self.raw_gate_pts[:, :2]
             
-            def punch_holes(raw_pts, name):
-                if raw_pts is None or len(raw_pts) == 0:
-                    raise ValueError(f"Cannot punch holes in {name}: points array is empty or None.")
-                from scipy.spatial import KDTree
-                tree = KDTree(gate_xy)
-                dists, _ = tree.query(raw_pts[:, :2], k=1)
-                
-                # Keep only points further than 1.0m from any gate
-                mask = dists > 1.0
-                filtered = raw_pts[mask]
-                print(f"[TrackManager] Punched holes in {name}: removed {len(raw_pts) - len(filtered)} overlapping points.")
-                return filtered
-
-            self.raw_yellow_pts = punch_holes(self.raw_yellow_pts, "Yellow")
-            self.raw_white_pts = punch_holes(self.raw_white_pts, "White")
+            self.raw_yellow_pts = _punch_holes(self.raw_yellow_pts, gate_xy, "Yellow")
+            self.raw_white_pts = _punch_holes(self.raw_white_pts, gate_xy, "White")
 
     def sample_waypoints_from_usd(self, density=0.1):
         """Generates track centerline waypoints from USD boundary markers using a KD-Tree."""
         if self.raw_yellow_pts is None or self.raw_white_pts is None:
             self.collect_raw_marker_points()
             
-        y_pts = self.raw_yellow_pts[:, :2]
-        w_pts = self.raw_white_pts[:, :2]
-        
-        # 1. Use KDTree to find the nearest white point for each yellow point
-        from scipy.spatial import KDTree
-        tree = KDTree(w_pts)
-        dists, idxs = tree.query(y_pts)
-        
-        # 2. The midpoint is the centerline
-        midpoints = (y_pts + w_pts[idxs]) / 2.0
-        
-        # 3. Filter valid midpoints (track width usually < 4.0m)
-        valid_mask = dists < 4.0
-        midpoints = midpoints[valid_mask]
-        
-        # 4. Sequence the points using Fast Nearest Neighbor
-        # Start at origin or closest to origin
-        dists_to_origin = np.linalg.norm(midpoints, axis=1)
-        curr = np.argmin(dists_to_origin)
-        
-        tree_nn = KDTree(midpoints)
-        visited = np.zeros(len(midpoints), dtype=bool)
-        visited[curr] = True
-        ordered = [midpoints[curr]]
-        
-        for _ in range(len(midpoints) - 1):
-            curr_pt = ordered[-1]
-            dists, idxs = tree_nn.query(curr_pt, k=50) # Look at 50 nearest to find an unvisited one
-            
-            found = False
-            for idx in np.atleast_1d(idxs):
-                if not visited[idx]:
-                    visited[idx] = True
-                    ordered.append(midpoints[idx])
-                    found = True
-                    break
-            
-            if not found:
-                # Fallback: find closest globally if gap is large
-                unvisited_idxs = np.where(~visited)[0]
-                if len(unvisited_idxs) == 0: break
-                unvisited_pts = midpoints[unvisited_idxs]
-                dists_glob = np.linalg.norm(unvisited_pts - curr_pt, axis=1)
-                best_idx = unvisited_idxs[np.argmin(dists_glob)]
-                visited[best_idx] = True
-                ordered.append(midpoints[best_idx])
-                
-        ordered = np.array(ordered)
-        
-        # 5. Compute Yaw
-        n = len(ordered)
-        yaws = np.zeros(n)
-        for i in range(n):
-            i_next = (i + 1) % n
-            dy = ordered[i_next, 1] - ordered[i, 1]
-            dx = ordered[i_next, 0] - ordered[i, 0]
-            yaws[i] = np.arctan2(dy, dx)
-            
-        final_wps = np.zeros((n, 3))
-        final_wps[:, :2] = ordered
-        final_wps[:, 2] = yaws
+        final_wps = _sample_waypoints(self.raw_yellow_pts[:, :2], self.raw_white_pts[:, :2])
+        n = len(final_wps)
         
         self.waypoints = torch.tensor(final_wps, device=self.device, dtype=torch.float32)
         print(f"[TrackManager] Generated {n} sequenced waypoints.")

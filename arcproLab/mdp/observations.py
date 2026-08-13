@@ -45,9 +45,8 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
         print(f"[Observations] Failed to get turn tokens: {e}")
         obs[:, 0] = 0.0
 
-    # Slot 1: go_signal — UNMASKED. Driven by GoSignalManager from the camera
-    #         feed (T3.2). When go_signal=0 the policy should brake;
-    #         T3.3 also enforces this in the action term as a safety gate.
+    # Slot 1: go_signal — UNMASKED. Driven by GoSignalManager from the camera feed.
+    #         When go_signal=0 the policy should learn to brake.
     try:
         from mdp.go_signal_manager import get_go_signal_manager
         mgr = get_go_signal_manager(num_envs=env.num_envs, device=env.device)
@@ -97,7 +96,7 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     tm = get_track_manager(device=env.device)
 
     # 1. Update persistent track indices and compute errors
-    lat_err, head_err, kappa = tm.compute_errors(local_pos, yaw)    
+    lat_err, raw_head_err, kappa = tm.compute_errors(local_pos, yaw)    
     
     # 2. Get Marker Distances (Yellow, White, Gate)
     dist_y, dist_w, dist_g = tm.compute_marker_distances(local_pos)
@@ -105,22 +104,27 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     # Distance Tracking (Accumulated)
     if "distance" not in env.extras:
         env.extras["distance"] = torch.zeros(env.num_envs, device=env.device)
+        
+    # === BI-DIRECTIONAL TRACK SUPPORT ===
+    # The track waypoints may be sequenced opposite to the car's intended driving direction.
+    if "track_dir" not in env.extras:
+        env.extras["track_dir"] = torch.where(torch.abs(raw_head_err) > 1.5708, -1.0, 1.0).to(env.device)
+        
+    is_reverse = env.extras["track_dir"] < 0
+    head_err = torch.where(is_reverse, raw_head_err - 3.14159 * torch.sign(raw_head_err), raw_head_err)
+    lat_err = torch.where(is_reverse, -lat_err, lat_err)
     
     # === TRACK PROGRESS TRACKING ===
     # Uses the waypoint index from TrackManager to measure how far the agent
     # has actually traveled along the track (not just forward velocity).
     if masked and tm.last_indices is not None and tm.waypoints is not None:
         num_wps = tm.waypoints.shape[0]
-        current_wp_idx = tm.last_indices  # (num_envs,) int
         
-        # Track the spawn waypoint index (set on first call or on reset)
-        if "spawn_wp_idx" not in env.extras:
-            env.extras["spawn_wp_idx"] = current_wp_idx.clone()
+        # Use securely tracked cumulative index from rewards.py if available.
+        # This prevents the TrackManager teleportation exploit from ruining the logs.
+        # It also syncs the logged WPs_cum exactly with the rewarded WPs_cum.
+        delta_wp = env.extras.get("cumulative_wp_index", torch.zeros_like(tm.last_indices)).long()
         
-        # Compute net waypoints traveled from spawn (handles wrap-around)
-        delta_wp = (current_wp_idx - env.extras["spawn_wp_idx"]) % num_wps
-        # Clamp: if delta > half the track, agent moved backward — treat as 0
-        delta_wp = torch.where(delta_wp > num_wps // 2, torch.zeros_like(delta_wp), delta_wp)
         track_progress_pct = (delta_wp.float() / num_wps) * 100.0  # 0-100%
         env.extras["track_progress_pct"] = track_progress_pct
         env.extras["track_wp_delta"] = delta_wp  # raw waypoints traversed
@@ -131,6 +135,8 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
         env.extras["distance"] = torch.where(reset_buf, torch.zeros_like(env.extras["distance"]), env.extras["distance"])
         if "spawn_wp_idx" in env.extras and tm.last_indices is not None:
             env.extras["spawn_wp_idx"] = torch.where(reset_buf, tm.last_indices, env.extras["spawn_wp_idx"])
+            new_dir = torch.where(torch.abs(raw_head_err) > 1.5708, -1.0, 1.0).to(env.device)
+            env.extras["track_dir"] = torch.where(reset_buf, new_dir, env.extras["track_dir"])
 
     # Calculate distance moved in this step (only update once per step)
     if masked:

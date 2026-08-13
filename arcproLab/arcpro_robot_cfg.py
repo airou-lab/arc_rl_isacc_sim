@@ -35,7 +35,7 @@ class ArcProRobotCfg(ArticulationCfg):
             linear_damping=0.1,    # RC car rolling resistance + light aero drag
             angular_damping=0.05,  # Gentle yaw/pitch/roll damping — prevents spin-out
             max_linear_velocity=1000.0,
-            max_angular_velocity=1000.0,
+            max_angular_velocity=5.0,  # Real RC car yaw rate cap — prevents spinning-top exploit
             max_depenetration_velocity=10.0, # Reduced from 100.0 to prevent joints from snapping/dislocating during clipping
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(

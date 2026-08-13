@@ -51,11 +51,10 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     aligned_long = torch.abs(head_err) < 0.8  # ~45 deg
     
     # Also check if moving forward (Grace period for spawn)
-    # The RC car's 3D model is inverted, so Local X points out the rear.
-    # Therefore, moving visually forward means Local X velocity is negative.
+    # The car was flipped to drive in +X (v1.0-working), so visually forward is positive.
     vel = asset.data.root_lin_vel_b[:, 0]
     # Allow 0 velocity if aligned or if it's the first few steps of the episode
-    moving_forward = vel < -0.05
+    moving_forward = vel > 0.05
     
     # Check if we just started (less than 20 steps) to prevent spawn resets
     is_spawn = env.episode_length_buf < 20
@@ -78,13 +77,39 @@ def height_termination(env: ManagerBasedRLEnv, threshold: float = -0.05, max_hei
     return (~is_spawn) & ((z_pos < threshold) | (z_pos > max_height))
 
 def stagnation_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Terminates if the robot is crawling or stuck (speed < 0.1 m/s)."""
-    asset = env.scene[asset_cfg.name]
-    # Use absolute speed magnitude in the XY plane to avoid axis polarity issues
-    vel = torch.norm(asset.data.root_lin_vel_b[:, :2], dim=1)
-    # Reset if speed is less than 0.1 m/s for more than 1000 steps (~20.0s)
-    # Relaxed to allow the agent to explore longer paths without being killed by the timer.
-    return (vel < 0.1) & (env.episode_length_buf > 1000)
+    """Terminates if the robot is crawling or stuck, measured by waypoint progress."""
+    past_grace = env.episode_length_buf > 300
+    
+    cum_wp = env.extras.get("cumulative_wp_index", None)
+    if cum_wp is None:
+        return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+        
+    if "stagnation_term_snapshot" not in env.extras:
+        env.extras["stagnation_term_snapshot"] = cum_wp.clone()
+        env.extras["stagnation_term_timer"] = torch.zeros(env.num_envs, dtype=torch.long, device=env.device)
+        
+    timer = env.extras["stagnation_term_timer"]
+    snapshot = env.extras["stagnation_term_snapshot"]
+    
+    timer += 1
+    
+    # Every 300 steps (6 seconds), it MUST have progressed at least 10 waypoints (~1 meter)
+    check_now = timer >= 300
+    progress = cum_wp - snapshot
+    
+    stagnated = (progress < 10.0) & check_now & past_grace
+    
+    # Reset snapshot for envs that were checked
+    env.extras["stagnation_term_snapshot"] = torch.where(check_now, cum_wp, snapshot)
+    env.extras["stagnation_term_timer"] = torch.where(check_now, torch.zeros_like(timer), timer)
+    
+    # Also reset on episode reset
+    if hasattr(env, 'episode_length_buf'):
+        just_reset = env.episode_length_buf <= 1
+        env.extras["stagnation_term_snapshot"] = torch.where(just_reset, cum_wp, env.extras["stagnation_term_snapshot"])
+        env.extras["stagnation_term_timer"] = torch.where(just_reset, torch.zeros_like(timer), env.extras["stagnation_term_timer"])
+        
+    return stagnated
 
 def fov_visibility_termination(env: ManagerBasedRLEnv, horizontal_aperture: float, focal_length: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Terminates if the track centerline heading error exceeds half the camera FOV (driving blind)."""

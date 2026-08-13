@@ -79,7 +79,7 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             # Spawn point: right lane heading toward junction_18 intersection.
             # Exactly on the path center (X=-16.197) at safe drop height
             pos=(-16.197, 5.50, 0.5),
-            rot=(0.7071, 0.0, 0.0, 0.7071), # Upright & Face North (WXYZ)
+            rot=(0.7071, 0.0, 0.0, -0.7071), # Upright & Face South (WXYZ)
             # No kickstart — proper tire friction + drive torque is sufficient.
             # Kickstart was masking physics issues (bouncing, height terminations).
         ),
@@ -173,23 +173,27 @@ class ActionCfg:
 
 @configclass
 class RewardCfg:
-    # Survival Bonus: Reduced to 1.0. We rely mostly on bounded progress reward now.
-    survival_bonus = RewTerm(func=lambda env: torch.ones(env.num_envs, device=env.device), weight=1.0)
+    # Survival Bonus: Disabled completely (weight 0.0). We rely entirely on bounded progress reward.
+    # A positive survival bonus caused the agent to spin in circles to farm "living time" without making progress.
+    survival_bonus = RewTerm(func=lambda env: torch.ones(env.num_envs, device=env.device), weight=0.0)
 
-    # Anti-Suicide: Reduced from extreme 100.0 (-5000) to 10.0 (-500) to allow value function to learn smoothly and overcome stagnation fear.
+    # Anti-Suicide: Restored to 10.0 (-500) because weak penalties (-100) caused the agent to lazily crash without learning to steer.
     termination_penalty = RewTerm(func=mdp_rew.termination_penalty, weight=10.0)
     
-    # Fix E: Bound the waypoint progress reward with tanh and boost weight to 50.0.
-    # At 0.5 m/s (~1.7 WPs), tanh(1.7) = 0.93 * 50 = ~46 pts/step.
-    # At 1.5 m/s (~5.1 WPs), tanh(5.1) = 0.99 * 50 = ~49 pts/step.
-    # This massive reward bootstraps the learning of cornering (surviving 500 steps = 23k points),
-    # but the tanh bound prevents the endless runner exploit because sprinting 3x faster only yields 6% more points!
-    progress_reward = RewTerm(func=lambda env: torch.tanh(mdp_rew.waypoint_progress_reward(env)), weight=50.0)
+    # Bound the waypoint progress reward with tanh.
+    # At 0.5 m/s (~1.7 WPs), tanh(1.7) = 0.93.
+    # At 1.5 m/s (~5.1 WPs), tanh(5.1) = 0.99.
+    # This bootstraps the learning of cornering while the tanh bound
+    # prevents the endless runner exploit because sprinting faster yields minimal extra points.
+    progress_reward = RewTerm(func=lambda env: torch.tanh(mdp_rew.waypoint_progress_reward(env)), weight=200.0)
     
     # Exploration: Tiny reward for applying any throttle/drive action to break out of stagnation
-    # Phase 1: Re-enabled steering penalty (weight=0.5) to prevent erratic swerving into walls
-    action_steer_penalty = RewTerm(func=lambda env: torch.square(env.action_manager.action[:, 0]), weight=-0.5)
+    # Increased steering penalty (-2.0) to prevent the agent from exploiting spinning in circles (Spinning Top exploit).
+    # Spinning for 400 steps will now cost -800 points, which is worse than crashing (-500), forcing forward progress!
+    action_steer_penalty = RewTerm(func=lambda env: torch.square(env.action_manager.action[:, 0]), weight=-2.0)
 
+    # Re-enabled (weight=0.5) to give the agent a hint to press the gas. 
+    # The new 6-second stagnation termination prevents this from being farmed infinitely.
     action_drive_reward = RewTerm(
         func=lambda env: env.action_manager.action[:, 1],
         weight=0.5
@@ -199,30 +203,29 @@ class RewardCfg:
     lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=0.0)
     
     # Force movement: Penalty forces it to move!
-    # Fix Bug 5: Use torch.abs() so reverse driving doesn't spuriously trigger penalty.
-    # Requires min speed of 0.5 m/s, UNLESS the traffic light (go_signal) says to stop!
-    stationary = RewTerm(func=mdp_rew.stationary_penalty, weight=15.0)
+    # Uses absolute speed so reverse driving doesn't spuriously trigger penalty.
+    # Requires min speed of 0.5 m/s, UNLESS the traffic light (go_signal) says to stop.
+    # Heavily penalized to prevent the Stationary Min-Max Trap.
+    stationary = RewTerm(func=mdp_rew.stationary_penalty, weight=100.0)
     
     # Phase 2: Waypoint Tracking
-    heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=2.0)
+    # Increased heading weight to 10.0. This acts as a 'Conditional Survival Bonus'.
+    # It densely rewards the agent for facing forward (+10/step) and heavily penalizes facing backward (-10/step).
+    # This prevents spin-outs and backwards driving without explicitly penalizing the steering action itself.
+    heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=10.0)
     smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=2.0)
     
     # Jitter Suppression (Disabled for Phase 1)
     jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.0)
     
     # Boundary Penalty: (Enabled: Risk-aware shaping to smoothly steer away from walls)
-    # Note: Native func returns -100.0. We use weight=0.4 so the penalty is -40.0.
-    # This ensures a net positive score (+50 progress - 40 penalty = +10) in the warning track,
-    # preventing 'Penalty Over-Saturation' for a newborn vision agent while still preferring the center.
-    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.4)
+    # Restored to 0.6 (-60.0) to provide a dense negative gradient pushing the agent away from walls.
+    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.6)
 
 
 @configclass
 class TerminationCfg:
     roadmark_contact = DoneTerm(func=mdp_done.white_line_contact, params={"threshold": 0.15})
-    # height termination: Catch flying robots (falling into void)
-    # Disabled entirely! We are relying fully on ground_contact_term to detect falling off the track.
-    # height = DoneTerm(func=mdp_done.height_termination, params={"threshold": 0.01})
     # Physical USD Contact: Terminate if any part of the robot touches the physical ground plane.
     # NOTE FOR USER: Threshold MUST be > 50.0! The track mesh is thin and rests 5cm above the ground plane.
     # The car's wheels slightly clip through the track mesh and constantly touch the ground plane beneath it,
@@ -232,11 +235,6 @@ class TerminationCfg:
     ground_contact_term = DoneTerm(func=mdp_done.ground_contact_termination, params={"sensor_cfg": SceneEntityCfg("ground_contact"), "threshold": 150.0})
     # Stagnation: Reset if stuck against a wall
     stagnation = DoneTerm(func=mdp_done.stagnation_termination)
-    # FOV Driving: Reset if driving into areas not visible to the camera
-    # driving_blind = DoneTerm(
-    #     func=mdp_done.fov_visibility_termination,
-    #     params={"horizontal_aperture": 3.86, "focal_length": 1.93}
-    # )
 
 @configclass
 class ARCProEnvCfg(ManagerBasedRLEnvCfg):

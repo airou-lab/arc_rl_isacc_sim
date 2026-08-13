@@ -9,7 +9,7 @@ import isaaclab.sim as sim_utils
 import isaaclab.sim.schemas as schemas
 from isaaclab.sim.utils import clone, get_current_stage
 import re
-from pxr import Usd, UsdGeom
+from pxr import UsdGeom
 
 @clone
 def spawn_guide_cone(
@@ -44,7 +44,6 @@ def spawn_f1tenth(
         # Apply overrides recursively to all descendants
         for child in Usd.PrimRange(prim):
             child_name = child.GetName()
-            # print(f"[Spawner] Checking child: {child_name}")
             for pattern, mass in mass_overrides.items():
                 if re.match(pattern, child_name):
                     # Apply mass override
@@ -58,17 +57,27 @@ def spawn_f1tenth(
                         # Move CoM down by 1cm (0.01m) relative to the prim origin only for the Chassis
                         mass_api.CreateCenterOfMassAttr().Set(Gf.Vec3f(0.0, 0.0, -0.01))
                     
-                    # print(f"[Spawner] SUCCESS: Applied mass {mass} and lowered CoM for {child.GetPath()}")
                     break
 
     # 2. RC Car Tire Friction — applied to all Wheel_* prims
-    # Rubber-on-asphalt: high grip, near-zero bounce.
-    # static_friction  = 1.2  → resists initial slip (planted launches)
-    # dynamic_friction = 0.8  → rolling grip during cornering
-    # restitution      = 0.0  → no bounce on road contact
+    # Realistic rubber-on-asphalt: static 1.0, dynamic 0.8
     _apply_tire_friction(prim, stage)
+    _apply_steering_limits(prim, stage)
                     
     return prim
+
+def _apply_steering_limits(robot_prim: Usd.Prim, stage) -> None:
+    from pxr import UsdPhysics
+    import math
+    
+    for child in Usd.PrimRange(robot_prim):
+        child_name = child.GetName()
+        if child_name in ["Joint_Steer_L", "Joint_Steer_R"]:
+            if child.IsA(UsdPhysics.RevoluteJoint):
+                joint = UsdPhysics.RevoluteJoint(child)
+                # Set hard limits to +/- 35 degrees (0.61 radians) so they can never spin 360
+                joint.CreateLowerLimitAttr().Set(-35.0)
+                joint.CreateUpperLimitAttr().Set(35.0)
 
 
 def _apply_tire_friction(robot_prim: Usd.Prim, stage) -> None:

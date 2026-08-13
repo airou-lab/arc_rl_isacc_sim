@@ -7,26 +7,14 @@ import torch
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
-def progress_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """
-    DEPRECATED: Rewards local body velocity. Can be gamed by spinning in circles.
-    Kept for backward compatibility. Use waypoint_progress_reward instead.
-    """
-    asset = env.scene[asset_cfg.name]
-    local_vel = asset.data.root_lin_vel_b
-    forward_speed = local_vel[:, 0]
-    return forward_speed
-
 def waypoint_progress_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """
     Rewards the agent ONLY for advancing along the track's centerline waypoints.
 
-    Fix C: Displacement gate — reward only fires if robot physically moved >= 2cm
-    since the last step. This prevents jitter farming via windowed-search index
-    oscillation (the nearest WP can snap ±1 even when the robot is spinning in place).
-
-    Fix B: Stores per-step reward delta in env.extras["reward_wp_delta_step"] so
-    train_skrl.py can log the actual reward signal, not the unrelated cumulative obs var.
+    Displacement gate ensures reward only fires if the robot physically moved >= 2cm
+    since the last step, preventing jitter farming.
+    Stores per-step reward delta in env.extras["reward_wp_delta_step"] to allow
+    accurate reward signal logging.
 
     At 0.5 m/s, 50Hz: ~10mm/step / 6mm per WP = ~1.7 WPs/step → reward ~34/step.
     """
@@ -53,6 +41,13 @@ def waypoint_progress_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg =
     # Compute true step delta (handles wrap-around)
     delta = (current_idx - prev_idx) % num_wps
     delta_real = torch.where(delta > num_wps // 2, delta - num_wps, delta).float()
+
+    # BI-DIRECTIONAL FIX: Apply track direction so forward movement is always positive
+    if "track_dir" in env.extras:
+        delta_real = delta_real * env.extras["track_dir"].float()
+
+    # CLAMP FIX: Prevent massive progress spikes if TrackManager snaps to a distant waypoint
+    delta_real = torch.clamp(delta_real, min=-10.0, max=10.0)
 
     # Update cumulative progress
     env.extras["cumulative_wp_index"] += delta_real
@@ -127,7 +122,9 @@ def action_rate_smoothness_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
 
 def heading_alignment_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     head_err = env.extras.get("head_err", torch.zeros(env.num_envs, device=env.device))
-    return torch.cos(head_err)
+    speed = torch.norm(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1)
+    # Multiply by speed so the agent cannot farm heading points while sitting still.
+    return speed * torch.cos(head_err)
 
 def boundary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
@@ -140,7 +137,41 @@ def boundary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     return torch.where(is_near, torch.tensor(-100.0, device=env.device), torch.tensor(0.0, device=env.device))
 
 def stationary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
-    """Penalizes the robot for sitting still, with a 50-step grace period for spawning."""
-    speed = torch.norm(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1)
-    is_stationary = (speed < 0.2) & (env.episode_length_buf > 50)
-    return torch.where(is_stationary, torch.tensor(-1.0, device=env.device), torch.tensor(0.0, device=env.device))
+    """Penalizes the robot for not advancing waypoints, preventing spinning-in-place exploits."""
+    if "cumulative_wp_index" not in env.extras:
+        return torch.zeros(env.num_envs, device=env.device)
+        
+    current_wp = env.extras["cumulative_wp_index"]
+    
+    # Initialize the tracker on first call
+    if "last_wp_check" not in env.extras:
+        env.extras["last_wp_check"] = current_wp.clone()
+        return torch.zeros(env.num_envs, device=env.device)
+        
+    # Check every 10 steps
+    check_step = (env.episode_length_buf % 10 == 0)
+    
+    # Calculate progress since last check
+    progress = current_wp - env.extras["last_wp_check"]
+    
+    # Grace period: don't penalize during first 50 steps (spawning/settling)
+    # Stagnant if progress is less than 5.0 waypoints
+    is_stagnant = (progress < 5.0) & check_step & (env.episode_length_buf > 50)
+    
+    # Update the tracker for the environments that are checking this step
+    env.extras["last_wp_check"] = torch.where(
+        check_step, 
+        current_wp.clone(), 
+        env.extras["last_wp_check"]
+    )
+    
+    # Reset tracking for environments that just reset
+    just_reset = env.episode_length_buf <= 1
+    env.extras["last_wp_check"] = torch.where(
+        just_reset, 
+        current_wp.clone(), 
+        env.extras["last_wp_check"]
+    )
+    
+    return torch.where(is_stagnant, torch.tensor(-5.0, device=env.device), torch.tensor(0.0, device=env.device))
+

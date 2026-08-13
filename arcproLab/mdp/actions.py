@@ -81,6 +81,8 @@ class GroupedJointAction(ActionTerm):
                     actions = torch.clamp(actions, val[0], val[1])
             elif isinstance(self.cfg.clip, tuple):
                 actions = torch.clamp(actions, self.cfg.clip[0], self.cfg.clip[1])
+        # FORCE clamp raw actions to [-1.0, 1.0] to protect physics
+        actions = torch.clamp(actions, min=-1.0, max=1.0)
 
         # Broadcast and apply scale/offset
         self._processed_actions[:] = self._offset + self._scale * actions.repeat(1, self._num_joints)
@@ -155,8 +157,11 @@ class AckermannSteeringAction(ActionTerm):
         # actions is (num_envs, 1) in range [-1, 1]
         self._raw_actions[:] = actions
         
+        # Clamp raw network actions to [-1.0, 1.0] in case the policy outputs out-of-bound values
+        clamped_actions = torch.clamp(actions.squeeze(1), min=-1.0, max=1.0)
+        
         # Convert normalized action to target steering angle (rad) and apply offset
-        steering_angle = actions.squeeze(1) * self.cfg.max_steering_angle + self.cfg.offset
+        steering_angle = clamped_actions * self.cfg.max_steering_angle + self.cfg.offset
         
         # Handle Straight case (to avoid division by zero)
         is_straight = torch.abs(steering_angle) < 1e-4
@@ -198,18 +203,6 @@ class GroupedJointVelocityActionCfg(GroupedJointActionCfg):
 class GroupedJointVelocityAction(GroupedJointAction):
     def process_actions(self, actions: torch.Tensor):
         super().process_actions(actions)
-        
-        # T3.3 go_signal action gate. When the GoSignalManager places this
-        # env in STOP (bar detected within stop_distance_threshold),
-        # env.extras["go_signal"] is 0 and we force velocity to 0.0 here at
-        # the env boundary regardless of what the network commanded.
-        # try:
-        #     go_signal = self._env.extras.get("go_signal", None)
-        #     if go_signal is not None:
-        #         # Force velocity target to 0.0 if go_signal is 0
-        #         self._processed_actions[:] = self._processed_actions * go_signal.unsqueeze(-1).to(self._processed_actions.dtype)
-        # except Exception:
-        #     pass
 
     def apply_actions(self):
         self._asset.set_joint_velocity_target(self._processed_actions, joint_ids=self._joint_ids)
@@ -243,16 +236,6 @@ class CombinedDriveAction(GroupedJointAction):
         self._raw_actions[:] = actions
         throttle = torch.clamp(actions[:, 0:1], 0.0, 1.0)
         brake    = torch.clamp(actions[:, 1:2], 0.0, 1.0)
-        # T3.3 go_signal action gate. When the GoSignalManager places this
-        # env in STOP (bar detected within stop_distance_threshold),
-        # env.extras["go_signal"] is 0 and we force throttle to 0 here at
-        # the env boundary regardless of what the network commanded.
-        # try:
-        #     go_signal = self._env.extras.get("go_signal", None)
-        #     if go_signal is not None:
-        #         throttle = throttle * go_signal.unsqueeze(-1).to(throttle.dtype)
-        # except Exception:
-        #     pass
         
         drive = throttle * (1.0 - brake)
         
