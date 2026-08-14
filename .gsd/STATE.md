@@ -45,5 +45,10 @@
 - **D032:** **Checkpoint Mismatch**: Discovered `train_skrl.py` hardcodes the SKRL run class name as `TelemetryPPO` regardless of whether the agent is actually using the 524-input Vision network. Viewers MUST always use `--enable_cameras` to properly load the main branch checkpoints since they are actually Vision models despite the folder name.
 - **D033:** **Deleted git worktree**: Removed the `v1.0-working` worktree. The current `main` branch physics are fully verified with `test_physics_rule_based.py`.
 
+## Recent Decisions (Session 2026-08-14)
+- **D034:** **180-Degree USD Flip Bug Resolved**: Fixed a critical physics bug where the `track_dir` math penalized forward movement because the visual nose pointed +X while the physics root pointed -X. Set `b_drive` scale to `+20.0`, flipped distance accumulation, and added `+ pi` to yaw in observations. `WPs_cum` now correctly rockets up positively.
+- **D035:** **Clean Slate Training**: Due to heavy waypoint poisoning and stationary trap exploitation in old checkpoints, we purged `logs/ppo_skrl` and `skrl_phase1*.log` and restarted `./start_tmux_training.sh` from **Step 0**.
+- **D036:** **Submodule Commit & Push**: Resolved Git detached HEAD conflicts in `policy_stack` submodule by forcing `main` to the newest commits and dropping deleted files. Pushed both the submodule and the root repository to `origin/main`.
+
 ## Next Action
-- Resume training in the main branch using `./start_tmux_training.sh` and monitor the agent's adaptation to the new `-5000` stationary penalty.
+- Monitor the fresh training phase (from Step 0) in the `training` tmux session to ensure the agent correctly learns forward momentum without finding new exploits.

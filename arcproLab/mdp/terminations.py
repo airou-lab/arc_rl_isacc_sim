@@ -24,7 +24,16 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     # so that the Reward Manager has the current step's data, not the previous step's!
     q = asset.data.root_quat_w
     yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
-    lat_err, head_err, kappa = tm.compute_errors(local_pos, yaw)
+    yaw = yaw + 3.14159265
+    yaw = torch.atan2(torch.sin(yaw), torch.cos(yaw))
+    
+    lat_err, raw_head_err, kappa = tm.compute_errors(local_pos, yaw)
+    if "track_dir" not in env.extras:
+        env.extras["track_dir"] = torch.where(torch.abs(raw_head_err) > 1.5708, -1.0, 1.0).to(env.device)
+    is_reverse = env.extras["track_dir"] < 0
+    head_err = torch.where(is_reverse, raw_head_err - 3.14159 * torch.sign(raw_head_err), raw_head_err)
+    lat_err = torch.where(is_reverse, -lat_err, lat_err)
+    
     env.extras["lat_err"] = lat_err
     env.extras["head_err"] = head_err
     
@@ -51,8 +60,8 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     aligned_long = torch.abs(head_err) < 0.8  # ~45 deg
     
     # Also check if moving forward (Grace period for spawn)
-    # The car was flipped to drive in +X (v1.0-working), so visually forward is positive.
-    vel = asset.data.root_lin_vel_b[:, 0]
+    # The car was flipped to drive in +X (v1.0-working), but root X points backward!
+    vel = -asset.data.root_lin_vel_b[:, 0]
     # Allow 0 velocity if aligned or if it's the first few steps of the episode
     moving_forward = vel > 0.05
     

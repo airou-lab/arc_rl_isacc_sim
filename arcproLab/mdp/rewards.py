@@ -124,7 +124,7 @@ def heading_alignment_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     head_err = env.extras.get("head_err", torch.zeros(env.num_envs, device=env.device))
     speed = torch.norm(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1)
     # Multiply by speed so the agent cannot farm heading points while sitting still.
-    return speed * torch.cos(head_err)
+    return speed * torch.clamp(torch.cos(head_err), min=0.0)
 
 def boundary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
@@ -133,7 +133,7 @@ def boundary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     from .terminations import white_line_contact
     # Mastery Logic: Penalize if within 0.40m (was 0.15m), but wait for termination logic to reset (at 0.12m).
     # This provides a 0.28m wide "warning track" of dense negative feedback before the -1000 crash penalty.
-    is_near = white_line_contact(env, threshold=0.40)
+    is_near = white_line_contact(env, threshold=0.20)
     return torch.where(is_near, torch.tensor(-100.0, device=env.device), torch.tensor(0.0, device=env.device))
 
 def stationary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:

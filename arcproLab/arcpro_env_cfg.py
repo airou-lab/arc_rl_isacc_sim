@@ -177,8 +177,8 @@ class RewardCfg:
     # A positive survival bonus caused the agent to spin in circles to farm "living time" without making progress.
     survival_bonus = RewTerm(func=lambda env: torch.ones(env.num_envs, device=env.device), weight=0.0)
 
-    # Anti-Suicide: Restored to 10.0 (-500) because weak penalties (-100) caused the agent to lazily crash without learning to steer.
-    termination_penalty = RewTerm(func=mdp_rew.termination_penalty, weight=10.0)
+    # Anti-Suicide: Increased to 500.0 so that after the dt multiplier (0.02), a -50.0 crash yields a true -500 penalty.
+    termination_penalty = RewTerm(func=mdp_rew.termination_penalty, weight=500.0)
     
     # Bound the waypoint progress reward with tanh.
     # At 0.5 m/s (~1.7 WPs), tanh(1.7) = 0.93.
@@ -189,14 +189,12 @@ class RewardCfg:
     
     # Exploration: Tiny reward for applying any throttle/drive action to break out of stagnation
     # Increased steering penalty (-2.0) to prevent the agent from exploiting spinning in circles (Spinning Top exploit).
-    # Spinning for 400 steps will now cost -800 points, which is worse than crashing (-500), forcing forward progress!
-    action_steer_penalty = RewTerm(func=lambda env: torch.square(env.action_manager.action[:, 0]), weight=0.0) # Disabled for Phase 1
-
-    # Re-enabled (weight=0.5) to give the agent a hint to press the gas. 
-    # The new 6-second stagnation termination prevents this from being farmed infinitely.
+    action_steer_penalty = RewTerm(func=lambda env: torch.square(env.action_manager.action[:, 0]), weight=-0.5)
+    # Disabled (weight=0.0) to completely prevent the 'Gas Pedal Exploit'.
+    # The agent must learn to press the gas naturally from the heading reward.
     action_drive_reward = RewTerm(
         func=lambda env: env.action_manager.action[:, 1],
-        weight=0.5
+        weight=0.0
     )
     
     # Precision: Lane centering (Disabled for Phase 1 Curriculum)
@@ -212,7 +210,7 @@ class RewardCfg:
     # Increased heading weight to 10.0. This acts as a 'Conditional Survival Bonus'.
     # It densely rewards the agent for facing forward (+10/step) and heavily penalizes facing backward (-10/step).
     # This prevents spin-outs and backwards driving without explicitly penalizing the steering action itself.
-    heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=10.0)
+    heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=100.0)
     smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=2.0)
     
     # Jitter Suppression (Disabled for Phase 1)
@@ -220,7 +218,7 @@ class RewardCfg:
     
     # Boundary Penalty: (Enabled: Risk-aware shaping to smoothly steer away from walls)
     # Set to 0.4 (Issue 33) to perfectly balance against stagnation without over-saturation.
-    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.4)
+    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.0)
 
 
 @configclass
