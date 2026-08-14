@@ -82,8 +82,7 @@ try:
     sys.stdout.flush()
     env_cfg = ARCProEnvCfg()
     env_cfg.scene.num_envs = args_cli.num_envs
-    if args_cli.enable_cameras:
-        env_cfg.enable_cameras = True
+    env_cfg.enable_cameras = args_cli.enable_cameras
     env_cfg.__post_init__()
 
     print("Instantiating ManagerBasedRLEnv...")

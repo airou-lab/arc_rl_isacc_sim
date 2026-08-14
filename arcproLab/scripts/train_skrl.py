@@ -130,8 +130,8 @@ def main():
     # 3.5 Flatten for SKRL RandomMemory limitation
     env = SKRLFlattenWrapper(env)
     
-    # 4. Define Memory (reduce size to prevent OOM)
-    memory = RandomMemory(memory_size=128, num_envs=env.num_envs, device="cuda:0")
+    # 4. Define Memory (Increased to 1024 to prevent catastrophic forgetting - Issue 42)
+    memory = RandomMemory(memory_size=1024, num_envs=env.num_envs, device="cuda:0")
     
     # 5. Define Models
     models = {}
@@ -143,8 +143,8 @@ def main():
     
     # 6. Configure Agent
     cfg_ppo = PPO_DEFAULT_CONFIG.copy()
-    cfg_ppo["rollouts"] = 128
-    cfg_ppo["mini_batches"] = 16  # Small mini-batch size (128*4/16 = 32 images per backprop)
+    cfg_ppo["rollouts"] = 1024
+    cfg_ppo["mini_batches"] = 4  # Larger mini-batch size (1024*10/4 = 2560 transitions per backprop)
     cfg_ppo["learning_rate"] = 3e-5  # Reduced from 1e-4 to prevent policy collapse after 241k peak
     cfg_ppo["random_timesteps"] = 0
     cfg_ppo["learning_starts"] = 0
@@ -157,7 +157,7 @@ def main():
     log_dir = os.path.join("logs", "ppo_skrl", datetime.now().strftime("%Y%m%d-%H%M%S"))
     cfg_ppo["experiment"]["directory"] = log_dir
     cfg_ppo["experiment"]["write_interval"] = 100
-    cfg_ppo["experiment"]["checkpoint_interval"] = 250  # Save every 250 rollouts (approx 32k steps)
+    cfg_ppo["experiment"]["checkpoint_interval"] = 50  # Save every 50 rollouts (approx 6.5k steps)
     
     agent = TelemetryPPO(models=models, memory=memory, cfg=cfg_ppo, observation_space=env.observation_space, action_space=env.action_space, device="cuda:0")
     

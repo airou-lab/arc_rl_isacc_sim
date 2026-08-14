@@ -31,9 +31,19 @@
 - **D025:** Fixed "Blind Training". Discovered `--enable_cameras` was missing from `start_tmux_training.sh`. The agent was training completely blind with a 12-dim input instead of the 524-dim ResNet-18 vision system. Added the flag and completely wiped all old blind checkpoints to start fresh. Added strict RGB-only directive to monitor agent.
 
 ## Blockers
-- None
+- None active. Monitor subagent was killed (API quota exhausted). Needs re-launch manually.
+
+## Recent Decisions (Session 2026-07-31)
+- **D026:** Fixed **Issue 49** — Last commit (`dac8074`) re-enabled Phase 2 penalties (`heading=2.0`, `smoothness=2.0`) causing penalty over-saturation on a newborn vision agent. Reverted both to `0.0` to restore Phase 1 curriculum.
+- **D027:** Fixed **Issue 50 (ROOT CAUSE)** — New `waypoint_progress_reward` in `dac8074` used a high-water-mark that silently returned `0.0` reward for all short episodes (~100 steps). Agent learned from survival/drive rewards only — zero progress gradient — causing a locked ~100-step plateau at 145k steps with consistent `WPΔ_rew: 0.0`. Reverted to simple per-step forward delta in `rewards.py`. Also bumped `termination_penalty` weight to 20.0 (-1000 crash). WPΔ_rew now confirmed firing at ~0.5–0.8.
+- **D028:** Camera pose from `dac8074` confirmed working via debug frames — clear view of yellow centerline and white boundaries at `pos=(-0.5, 0.0, 0.35)` with 15° downward pitch. Kept.
+- **D029:** Investigated continuous physics explosions and 'snowplow' steering bugs. Discovered the USD model has perfectly symmetric and un-mirrored joints/knuckles, meaning `invert_right_joint` was mathematically incorrect and actively causing the snowplow. Removed `invert_right_joint`. Fixed physical 'toe-in' under load by setting steering actuator stiffness to `400.0` (with `effort_limit_sim=100.0`) and clamping the joints natively in USD to `+/- 35` degrees to prevent 360-degree glitched spinning. Also lowered CoM to `-0.05` and normalized tire friction to `1.0/0.8` (down from `3.0`) to stop the RC car from violently tipping over under extreme lateral grip.
+
+## Recent Decisions (Session 2026-08-12)
+- **D030:** **Stationary Min-Max Trap Verified**: Identified that the RL agent mathematically learned to hold throttle at `0.0` because the stagnation penalty (`-550`) was far cheaper than the crash penalty (`-1100`). Applied a massive `15.0` weight to the stationary penalty in `arcpro_env_cfg.py` to fix this.
+- **D031:** **play_skrl.py Crash Fix**: Fixed a bug where omitting `--enable_cameras` in the CLI failed to disable cameras in `play_skrl.py`, causing Isaac Sim to crash when loading the environment.
+- **D032:** **Checkpoint Mismatch**: Discovered `train_skrl.py` hardcodes the SKRL run class name as `TelemetryPPO` regardless of whether the agent is actually using the 524-input Vision network. Viewers MUST always use `--enable_cameras` to properly load the main branch checkpoints since they are actually Vision models despite the folder name.
+- **D033:** **Deleted git worktree**: Removed the `v1.0-working` worktree. The current `main` branch physics are fully verified with `test_physics_rule_based.py`.
 
 ## Next Action
-- The true RGB-only **SKRL** training session (with cameras enabled) is running in `tmux`.
-- Background `strict_monitor_agent` is actively checking logs every 15 minutes, doing full evaluations at every 500k milestone.
-- **Debugging Target:** Wait for 500k steps to verify visual navigation recovery (steering to avoid walls).
+- Resume training in the main branch using `./start_tmux_training.sh` and monitor the agent's adaptation to the new `-5000` stationary penalty.

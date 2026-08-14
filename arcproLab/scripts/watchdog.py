@@ -19,6 +19,7 @@ def get_latest_metrics():
         timesteps = re.findall(r"Step (\d+)", tail)
         ep_len = re.findall(r"Len: (\d+)", tail)
         speed = re.findall(r"Spd: ([-\d\.]+)", tail)
+        wps_cum = re.findall(r"WPs_cum: (\d+)", tail)
         # We don't have std and fps in the custom print, so default to None
         std = []
         fps = []
@@ -28,7 +29,8 @@ def get_latest_metrics():
             "ep_len": float(ep_len[-1]) if ep_len else 0,
             "std": float(std[-1]) if std else None,
             "fps": float(fps[-1]) if fps else None,
-            "speed": float(speed[-1]) if speed else 0
+            "speed": float(speed[-1]) if speed else 0,
+            "wps_cum": float(wps_cum[-1]) if wps_cum else 0
         }
     except Exception as e:
         raise ValueError(f"Watchdog failed to parse log: {e}")
@@ -79,6 +81,10 @@ def main():
             # 3. Crash Check (Resource Lock - only checked when FPS metric exists)
             elif f is not None and t > 10000 and f < 2:
                 failure = f"SYSTEM CRASH: FPS dropped to {f}. Simulation is likely frozen or OOM."
+            
+            # 4. Logic Bug Check (Teleportation or Maths Exploit)
+            elif metrics["wps_cum"] > 50:
+                failure = f"LOGIC BUG: WPs_cum ({metrics['wps_cum']}) is impossibly high! The agent has likely found a teleportation or wrap-around maths exploit."
 
             if failure:
                 print(f"!!! CRITICAL FAILURE DETECTED: {failure}")
@@ -112,8 +118,8 @@ def main():
                 os.system(f"nohup agy run --prompt '{prompt}' > /dev/null 2>&1 &")
                 last_reported_milestone = current_milestone
 
-        # Check every 15 minutes
-        time.sleep(900)
+        # Check every 2 hours
+        time.sleep(7200)
 
 if __name__ == "__main__":
     main()

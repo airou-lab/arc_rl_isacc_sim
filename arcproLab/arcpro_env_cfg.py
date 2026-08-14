@@ -190,7 +190,7 @@ class RewardCfg:
     # Exploration: Tiny reward for applying any throttle/drive action to break out of stagnation
     # Increased steering penalty (-2.0) to prevent the agent from exploiting spinning in circles (Spinning Top exploit).
     # Spinning for 400 steps will now cost -800 points, which is worse than crashing (-500), forcing forward progress!
-    action_steer_penalty = RewTerm(func=lambda env: torch.square(env.action_manager.action[:, 0]), weight=-2.0)
+    action_steer_penalty = RewTerm(func=lambda env: torch.square(env.action_manager.action[:, 0]), weight=0.0) # Disabled for Phase 1
 
     # Re-enabled (weight=0.5) to give the agent a hint to press the gas. 
     # The new 6-second stagnation termination prevents this from being farmed infinitely.
@@ -219,8 +219,8 @@ class RewardCfg:
     jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.0)
     
     # Boundary Penalty: (Enabled: Risk-aware shaping to smoothly steer away from walls)
-    # Restored to 0.6 (-60.0) to provide a dense negative gradient pushing the agent away from walls.
-    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.6)
+    # Set to 0.4 (Issue 33) to perfectly balance against stagnation without over-saturation.
+    boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.4)
 
 
 @configclass
@@ -262,7 +262,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
             enable_ccd=True, 
             enable_stabilization=True,
             gpu_max_rigid_contact_count=2**16, # 64k contacts
-            gpu_max_rigid_patch_count=2**11,
+            gpu_max_rigid_patch_count=2**13, # 8k patches (increased from 2**11 due to patch buffer overflow)
             gpu_heap_capacity=2**26, # 64MB heap
             gpu_found_lost_pairs_capacity=2**13,
         ),
