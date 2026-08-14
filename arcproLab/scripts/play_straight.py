@@ -66,7 +66,7 @@ try:
     obs, info = env.reset()
 
     print("Entering simulation loop...")
-    print(f"{'Step':>6} | {'Speed(m/s)':>10} | {'Reward':>8} | {'MaxSpd':>8} | {'Done'}")
+    print(f"{'Step':>6} | {'Speed(m/s)':>10} | {'Reward':>8} | {'WPs_cum':>8} | {'Done'}")
     print("-" * 55)
     sys.stdout.flush()
 
@@ -89,11 +89,24 @@ try:
         # Speed is index 3 in the telemetry obs vector (fwd velocity m/s)
         speed = float(obs[0, 3].item()) if obs.shape[-1] > 3 else float(obs[0, 0].item())
         rew_val = float(reward[0].item())
+        
+        # Get WPs_cum if available
+        wps_cum = 0.0
+        track_dir = 0.0
+        current_idx = 0
+        if hasattr(env.unwrapped, "extras"):
+            if "cumulative_wp_index" in env.unwrapped.extras:
+                wps_cum = float(env.unwrapped.extras["cumulative_wp_index"][0].item())
+            if "track_dir" in env.unwrapped.extras:
+                track_dir = float(env.unwrapped.extras["track_dir"][0].item())
+            if "prev_wp_idx_reward" in env.unwrapped.extras:
+                current_idx = int(env.unwrapped.extras["prev_wp_idx_reward"][0].item())
+            
         done = bool((terminated | truncated)[0].item())
         max_speed = max(max_speed, abs(speed))
 
-        if step_count % 50 == 0 or done:
-            print(f"{step_count:>6} | {speed:>10.3f} | {rew_val:>8.2f} | {max_speed:>8.3f} | {'YES' if done else 'no'}")
+        if step_count % 10 == 0 or done:
+            print(f"{step_count:>6} | {speed:>10.3f} | {rew_val:>8.2f} | {wps_cum:>8.2f} | dir:{track_dir} idx:{current_idx} | {'YES' if done else 'no'}")
             sys.stdout.flush()
 
         if done:

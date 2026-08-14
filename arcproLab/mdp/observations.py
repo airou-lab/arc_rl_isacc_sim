@@ -27,6 +27,12 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     q = asset.data.root_quat_w
     # yaw = atan2(2(qw*qz + qx*qy), 1 - 2(qy^2 + qz^2))
     yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
+    
+    # FIX: The F1Tenth USD model's physics root X-axis points towards the rear wing.
+    # We must rotate the yaw by 180 degrees (pi) so it aligns with the visual nose, 
+    # preventing track_dir from evaluating backwards.
+    yaw = yaw + 3.14159265
+    yaw = torch.atan2(torch.sin(yaw), torch.cos(yaw))
 
     # Get environment origins to convert world pos to local track pos
     env_origins = env.scene.env_origins
@@ -140,8 +146,8 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
 
     # Calculate distance moved in this step (only update once per step)
     if masked:
-        # Local X points forwards on the mesh
-        env.extras["distance"] += asset.data.root_lin_vel_b[:, 0] * 0.02
+        # Local X points to the rear wing (flipped), so we negate to accumulate forward distance
+        env.extras["distance"] -= asset.data.root_lin_vel_b[:, 0] * 0.02
     
     # Store raw values in extras for Reward/Termination (Unmasked)
     env.extras["lat_err"] = lat_err
