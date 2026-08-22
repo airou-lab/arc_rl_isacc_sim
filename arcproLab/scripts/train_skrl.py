@@ -157,7 +157,7 @@ def main():
     log_dir = os.path.join("logs", "ppo_skrl", datetime.now().strftime("%Y%m%d-%H%M%S"))
     cfg_ppo["experiment"]["directory"] = log_dir
     cfg_ppo["experiment"]["write_interval"] = 100
-    cfg_ppo["experiment"]["checkpoint_interval"] = 50  # Save every 50 rollouts (approx 6.5k steps)
+    cfg_ppo["experiment"]["checkpoint_interval"] = 500  # Save every 500 rollouts (~65k steps) to prevent disk runaway
     
     agent = TelemetryPPO(models=models, memory=memory, cfg=cfg_ppo, observation_space=env.observation_space, action_space=env.action_space, device="cuda:0")
     
