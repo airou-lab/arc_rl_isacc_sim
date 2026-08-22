@@ -190,15 +190,14 @@ class RewardCfg:
     # Exploration: Tiny reward for applying any throttle/drive action to break out of stagnation
     # Increased steering penalty (-2.0) to prevent the agent from exploiting spinning in circles (Spinning Top exploit).
     action_steer_penalty = RewTerm(func=lambda env: torch.square(env.action_manager.action[:, 0]), weight=-0.5)
-    # Disabled (weight=0.0) to completely prevent the 'Gas Pedal Exploit'.
-    # The agent must learn to press the gas naturally from the heading reward.
+    # Forward Drive Incentive: Encourages positive throttle to break out of crawling trap.
     action_drive_reward = RewTerm(
         func=lambda env: env.action_manager.action[:, 1],
-        weight=0.0
+        weight=20.0
     )
     
-    # Precision: Lane centering (Disabled for Phase 1 Curriculum)
-    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=0.0)
+    # Precision: Lane centering (Provides dense feedback to steer toward centerline)
+    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=2.5)
     
     # Force movement: Penalty forces it to move!
     # Uses absolute speed so reverse driving doesn't spuriously trigger penalty.
@@ -213,8 +212,8 @@ class RewardCfg:
     heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=100.0)
     smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=2.0)
     
-    # Jitter Suppression (Disabled for Phase 1)
-    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.0)
+    # Jitter Suppression (Straightaway Stability Tuning - Issue 88)
+    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.05)
     
     # Boundary Penalty: (Enabled: Risk-aware shaping to smoothly steer away from walls)
     # Set to 0.4 (Issue 33) to perfectly balance against stagnation without over-saturation.

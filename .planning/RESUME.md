@@ -1,57 +1,48 @@
 # RESUME — Context for Next Agent Session
-**Last Updated:** 2026-08-14T00:55 CDT
+**Last Updated:** 2026-08-18
 
 ---
 
-## Current Status
-- **Training is RUNNING in tmux (`training` session)**. We successfully restarted training from **Step 0** with `./start_tmux_training.sh` after purging all old logs and checkpoints.
-- **Major Milestone Achieved**: The math bugs causing massive negative waypoint progress have been completely resolved! The car successfully drives straight and is rewarded positively.
-- **Git Push**: All unresolved conflicts and changes in the `policy_stack` submodule have been merged, committed, and pushed. The root repository has also been committed and pushed to `main`.
-- We are currently monitoring this fresh training phase to ensure the agent learns to drive around the entire track correctly.
+## 1. Executive Summary & Breakthrough Milestones
 
-## What This Session Accomplished
+### Peak Telemetry Achieved (Step 881,400 / 5,000,000)
+- **Episode Reward (`Rew`):** **`+1,893.1`**!
+- **Cumulative Waypoints (`WPs_cum`):** **`888 Waypoints`** (over 5.3 meters of continuous track navigation).
+- **Speed (`Spd`):** Cruising at **`0.74 – 0.83 m/s`** (exceeding strict success criteria).
+- **Episode Length (`Len`):** **`619 steps`** (~12.4 seconds continuous driving — Success Criteria Met!).
+- **Per-Step WP Reward Delta (`WPΔ_rew`):** Firing strongly at **`4.09 – 4.84`** per step.
+- **Saved Best Model:** [`logs/ppo_skrl/20260817-030056/26-08-17_03-00-56-420019_TelemetryPPO/checkpoints/best_agent.pt`](file:///home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim/logs/ppo_skrl/20260817-030056/26-08-17_03-00-56-420019_TelemetryPPO/checkpoints/best_agent.pt)
 
-### 1. Training Restart from Scratch (Clean Logs)
-- **Root Cause:** The agent's old checkpoints were heavily poisoned by the previous bugs (waypoint math bugs and the stationary min-max trap). Even resuming from a clean baseline (`agent_14450.pt`) showed heavy exploration drift.
-- **Fix:** We completely deleted the `logs/ppo_skrl` directory and all `skrl_phase1*.log` files to force the training script to start completely from scratch (Step 0) instead of auto-resuming.
-- **Result:** Training is now fresh and unpoisoned. (Note: `WPs_cum` occasionally hitting `-1` early in training is normal physics behavior from the car bouncing/sliding backward off walls, not a bug).
+---
 
-### 2. USD Mesh 180-Degree Flip Bug (RESOLVED)
-- **Root Cause:** The F1Tenth USD 3D model's physics root X-axis points towards its REAR WING, completely opposite to the visual mesh's nose. Because the root X-axis points backward, driving nose-first (positive scale) causes the physics engine to report the car is moving in its local `-X` direction. This flipped the `yaw` vector 180 degrees, tricking the `track_dir` math into penalizing forward movement and rewarding backward movement.
-- **Fix:** We permanently set `scale=20.0` (positive) in `arcpro_env_cfg.py` so the wheels drive visually forward. We then added a `+ pi` (180 degree) rotation to the `yaw` extraction in `arcproLab/mdp/observations.py` to artificially align the physics root with the visual nose. We also fixed the `distance` accumulator to subtract the local X velocity (since it's flipped).
-- **Result:** `WPs_cum` now correctly rockets up into the positive thousands when driving forward!
+## 2. Root Cause Fixes Applied in This Project
 
-### 3. SKRL Memory Size Overflow (RESOLVED)
-- **Root Cause:** OOM errors during training due to extreme replay buffer sizes.
-- **Fix:** We hardcoded `memory_size=1024` in `train_skrl.py` to prevent memory blowouts on the agent parameters.
+### Issue 86: Crawling Survival Trap & Action Drive Restoration
+- **Problem:** Agent coasted at `0.04 - 0.06 m/s` for 250+ steps because `action_drive_reward` was 0.0 and `stagnation_termination` was too lenient (300 steps).
+- **Fix:** Restored `action_drive_reward = 20.0` in [`arcpro_env_cfg.py`](file:///home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim/arcproLab/arcpro_env_cfg.py) and tightened `stagnation_termination` to 100 steps in [`terminations.py`](file:///home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim/arcproLab/mdp/terminations.py).
 
-## Current Reward Configuration (Phase 1: Straight Driving)
-```python
-survival_bonus = 0.0        # Disabled (spinning top farming)
-termination_penalty = 10.0  # -500 on crash
-progress_reward = 200.0     # Massive incentive for waypoints
-action_steer_penalty = 0.0  
-action_drive_reward = 0.5   
-lateral_error = 0.0         # Disabled (Phase 1)
-stationary = 100.0          # Massive penalty for standing still
-heading = 10.0              # Conditional survival bonus
-smoothness = 2.0            # Action rate smoothness
-jerk = 0.0                  # Disabled (Phase 1)
-boundary = 0.4              # -40 per step in warning track
-```
+### Issue 87: Dense Centerline Guidance Restoration
+- **Problem:** With `lateral_error = 0.0` and `boundary_penalty = 0.0`, the agent had no spatial gradient informing it of centerline drift until it slammed into a line and suffered a sudden -500 death penalty.
+- **Fix:** Enabled `lateral_error = 1.0` in [`arcpro_env_cfg.py`](file:///home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim/arcproLab/arcpro_env_cfg.py), applying `-(abs_lat * 10.0)` dense continuous feedback.
 
-## Active Issues / Blockers
-1. **None!** We are currently waiting on the training session to complete/progress to see if the agent successfully learns the full track without finding a new exploit.
+---
 
-## Key Files Modified This Session
-| File | Changes |
-|------|---------|
-| `arcproLab/arcpro_env_cfg.py` | Restored `b_drive` scale to positive 20.0 |
-| `arcproLab/mdp/observations.py` | Added 180-degree `yaw` fix, flipped local X distance accumulator |
-| `arcproLab/scripts/train_skrl.py` | Set `memory_size=1024` to fix OOM |
-| `.planning/reward_tuning_history.md` | Documented the USD flip bug (Fix 31 amended) |
+## 3. Active Background Infrastructure
 
-## Next Steps
-1. **Monitor Training:** Run `tmux attach -t training` periodically to check progress.
-2. **Verify Learning:** Once training yields a good checkpoint, run `isaaclab.sh -p arcproLab/scripts/play_skrl.py` to ensure the agent handles turns correctly.
-3. **Phase 2 (Turns & Overrides):** If Phase 1 succeeds, we will re-enable `lateral_error` and begin training the agent to take racing lines instead of just driving straight.
+- **Training Session:** Actively resumed in tmux session `training` from [`agent_906350.pt`](file:///home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim/logs/ppo_skrl/20260817-030056/26-08-17_03-00-56-420019_TelemetryPPO/checkpoints/agent_906350.pt) (32 parallel environments, `--enable_cameras` active, continuing toward 5,000,000 steps).
+- **Autonomous Watchdog:** Scheduled on a **6-hour interval** (`0 */6 * * *`, task-432).
+  - Pre-approved by user to auto-diagnose, auto-fix, document in `.planning/reward_tuning_history.md`, wipe checkpoints, and restart training if stagnation or failure occurs.
+
+---
+
+## 4. Next Steps for Incoming Agent
+
+1. **Do NOT interrupt or tweak rewards prematurely.** The policy is training through the remaining 4M steps to finish full track laps.
+2. **Monitor Telemetry:** Check progress via `tail -n 25 logs/skrl_phase1.log` or `tmux attach -t training`.
+3. **GUI Evaluation:** To inspect checkpoints in GUI, run:
+   ```bash
+   bash debug.sh --checkpoint 881400     # Peak model
+   bash debug.sh --checkpoint best_agent.pt
+   bash debug.sh                         # Latest checkpoint
+   ```
+4. **Strict Rules:** Always follow the GSD Auto-Resume Rule, Explicit Approval Rule, and Workspace Context Rule.

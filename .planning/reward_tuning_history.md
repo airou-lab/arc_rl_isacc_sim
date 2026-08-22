@@ -553,3 +553,27 @@ At the 500k milestone, the agent's episode lengths reached up to ~723, but the e
 * **Root Cause**: While crawling is now punished, the agent is still terrified of the `-10.0` termination penalty from crashing. If it presses the gas (`action=1.0`), it accelerates and crashes in just 5-10 steps. With `action_drive_reward` at `10.0`, pressing the gas only yields `+0.2` points per step. Over 10 steps, this is `+2.0` points, which fails to offset the `-10.0` crash penalty (net `-8.0`). Thus, the agent views pressing the gas as a guaranteed way to lose points, so it continues to randomly wiggle and die slowly.
 * **Fix**: Increased `action_drive_reward` weight from `10.0` to a massive `100.0`. Pressing the gas now yields an unconditional `+2.0` points per step! Even if the agent crashes in just 6 steps, the drive reward (`+12.0`) completely offsets the termination penalty (`-10.0`), making pressing the gas a net-positive action regardless of the outcome. This guarantees the agent will permanently slam the gas pedal. Once the agent is moving fast, the `heading_alignment_reward` (`+8.0` points per step at `4.0 m/s`) will overwhelmingly dominate and naturally teach it to keep the wheels straight to maximize survival time.
 * **Result**: Wiped checkpoints and restarted training.
+
+### Issue 86: The Crawling Survival Trap & Action Drive Restoration
+* **Problem**: At Step 84k+, the agent learned to crawl at `Spd: 0.04 - 0.06 m/s`, staying alive for 250+ steps with `WPs_cum = 1` and accumulating -700 penalty.
+* **Root Cause**: Because `action_drive_reward` was set to 0.0, the agent discovered that fast driving caused rapid line collision (-500 crash penalty within 80 steps), whereas coasting/crawling avoided the white line for 250+ steps before the generous 300-step stagnation timer terminated it.
+* **Fix**:
+  1. Restored `action_drive_reward` with weight `20.0` in `arcpro_env_cfg.py` to give continuous positive reinforcement for pressing the throttle.
+  2. Tightened `stagnation_termination` in `terminations.py` from 300 steps down to 100 steps (2 seconds), requiring at least 5 waypoints progress every 100 steps past grace period.
+* **Result**: Wiping poisoned checkpoints and restarting training.
+
+### Issue 87: Sparse Death Cliff & Lateral Error Dense Guidance Restoration
+* **Problem**: At Step 58k+, `WPs_cum` remained stuck at 0 with episodes dying in ~75 steps despite active throttle.
+* **Root Cause**: `lateral_error` and `boundary_penalty` were both set to weight 0.0. The agent was navigating in a completely binary reward landscape (flat reward until sudden -500 termination cliff upon touching the line). Without any continuous spatial gradient signaling that it was drifting off-center, visual credit assignment failed to associate micro-steering adjustments with safety.
+* **Fix**: Enabled `lateral_error` in `arcpro_env_cfg.py` with weight `1.0` (delivering `-(abs_lat * 10.0)` penalty). This provides a smooth, dense gradient that directly rewards staying on the centerline and penalizes drift well before hitting the boundary lines.
+* **Result**: Wiped checkpoints and restarted training.
+
+
+
+### Issue 88: Straightaway High-Speed Weaving & Edge-Hugging
+- **Problem:** After reaching speeds of 0.84 m/s and 1,300+ waypoints, the agent frequently clipped the white lines on long straightaways. This occurred due to two reward loopholes: 
+  1. No `jerk_penalty` allowed high-frequency steering oscillations (micro-weaving) to build lateral momentum until a crash.
+  2. `heading_alignment_reward` provided +100 reward for driving parallel to the road, overpowering the weak `lateral_error` (-1.0), meaning the agent was mathematically happy to drive 20cm off-center hugging the edge of the lane until it crashed.
+- **Fix (Straightaway Stability Tuning):** 
+  - Increased `lateral_error` weight from 1.0 to 2.5 to overpower the heading reward and force the agent strictly to the geometric center.
+  - Enabled `jerk_penalty` at weight 0.05 to punish micro-weaving and enforce smooth turning arcs.

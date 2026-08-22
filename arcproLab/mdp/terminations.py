@@ -87,7 +87,7 @@ def height_termination(env: ManagerBasedRLEnv, threshold: float = -0.05, max_hei
 
 def stagnation_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Terminates if the robot is crawling or stuck, measured by waypoint progress."""
-    past_grace = env.episode_length_buf > 300
+    past_grace = env.episode_length_buf > 100
     
     cum_wp = env.extras.get("cumulative_wp_index", None)
     if cum_wp is None:
@@ -102,11 +102,11 @@ def stagnation_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = S
     
     timer += 1
     
-    # Every 300 steps (6 seconds), it MUST have progressed at least 10 waypoints (~1 meter)
-    check_now = timer >= 300
+    # Every 100 steps (2 seconds), it MUST have progressed at least 5 waypoints (~0.3m)
+    check_now = timer >= 100
     progress = cum_wp - snapshot
     
-    stagnated = (progress < 10.0) & check_now & past_grace
+    stagnated = (progress < 5.0) & check_now & past_grace
     
     # Reset snapshot for envs that were checked
     env.extras["stagnation_term_snapshot"] = torch.where(check_now, cum_wp, snapshot)

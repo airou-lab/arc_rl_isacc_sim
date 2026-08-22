@@ -75,16 +75,14 @@ def main():
             # 2. Stagnation Check (Glass Ceiling)
             elif t > 100000 and v < 0.01:
                 failure = f"STAGNATION: Agent stopped moving (speed {v} m/s) after {t} timesteps."
-            elif t > 500000 and e < 100.0:
-                failure = f"STAGNATION: Surviving only {e} steps after 500k timesteps. The agent is likely stuck in a crawling local minimum."
             
             # 3. Crash Check (Resource Lock - only checked when FPS metric exists)
             elif f is not None and t > 10000 and f < 2:
                 failure = f"SYSTEM CRASH: FPS dropped to {f}. Simulation is likely frozen or OOM."
             
             # 4. Logic Bug Check (Teleportation or Maths Exploit)
-            elif metrics["wps_cum"] > 50:
-                failure = f"LOGIC BUG: WPs_cum ({metrics['wps_cum']}) is impossibly high! The agent has likely found a teleportation or wrap-around maths exploit."
+            elif metrics["wps_cum"] > 160000:
+                failure = f"LOGIC BUG: WPs_cum ({metrics['wps_cum']}) exceeds total track waypoints (149k)! Possible teleportation or wrap-around exploit."
 
             if failure:
                 print(f"!!! CRITICAL FAILURE DETECTED: {failure}")

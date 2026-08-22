@@ -93,7 +93,7 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     # Indices 5-6: Last Actions (Steer, Drive)
     try:
         if env.action_manager.action is not None and env.action_manager.action.shape[1] >= 2:
-            obs[:, 5:7] = env.action_manager.action[:, :2] 
+            obs[:, 5:7] = torch.clamp(env.action_manager.action[:, :2], min=-1.0, max=1.0)
     except:
         pass
 

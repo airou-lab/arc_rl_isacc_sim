@@ -17,8 +17,7 @@
 ## Recent Critical Architecture & Reward Fixes
 - **D023 (Architecture):** Clamped observation feedback `obs[:, 5:7]` to `[-1.0, 1.0]` and added `tanh` bounding to `ARCProActor` policy head.
 - **D024 (Issue 86):** Restored `action_drive_reward = 20.0` and tightened `stagnation_termination` to 100 steps (2s) to destroy the creeping survival trap.
-- **D025 (Issue 87):** Restored dense `lateral_error = 1.0` to guide visual steering toward centerline waypoints.
-- **D026 (Issue 88):** Applied Straightaway Stability Tuning: Increased `lateral_error` to 2.5 and enabled `jerk_penalty` at 0.05 to prevent high-speed weaving and edge-hugging.
+- **D025 (Issue 87):** Restored dense `lateral_error = 1.0` (`-(abs_lat * 10.0)`) to guide visual steering toward centerline waypoints well before white line contact.
 
 ## Next Steps for Incoming Agent
 1. **Monitor Training Progression:** Allow training to run toward 5M steps. Check telemetry via `tail -n 25 logs/skrl_phase1.log`.

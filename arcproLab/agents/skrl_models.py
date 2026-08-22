@@ -33,7 +33,7 @@ class ARCProActor(GaussianMixin, Model):
         # The SKRLFlattenWrapper has already run the frozen ResNet
         # so `inputs["states"]` is perfectly sized at (N, 524)
         obs = inputs["states"]
-        return self.actor_head(obs), self.log_std_parameter, {}
+        return torch.tanh(self.actor_head(obs)), self.log_std_parameter, {}
 
 
 class ARCProCritic(DeterministicMixin, Model):
