@@ -103,21 +103,46 @@ def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
 def jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
     Penalizes high-frequency steering oscillations (Jitter).
-    Weight: -100.0
+    Returns -100.0 * (steer_t - steer_{t-1})^2.
     """
+    if env.action_manager.action is None or env.action_manager.action.shape[1] < 1:
+        return torch.zeros(env.num_envs, device=env.device)
+        
+    current_steer = env.action_manager.action[:, 0]
     if "prev_action" not in env.extras:
+        env.extras["prev_action"] = env.action_manager.action.clone()
         return torch.zeros(env.num_envs, device=env.device)
     
-    # Action index 0 is Steering
-    steer_delta = env.action_manager.action[:, 0] - env.extras["prev_action"][:, 0]
+    prev_steer = env.extras["prev_action"][:, 0]
+    steer_delta = current_steer - prev_steer
+    
+    # Zero out penalty for envs that just reset
+    if hasattr(env, "episode_length_buf"):
+        just_reset = env.episode_length_buf <= 1
+        steer_delta = torch.where(just_reset, torch.zeros_like(steer_delta), steer_delta)
+    
+    # Update prev_action for the next step
+    env.extras["prev_action"] = env.action_manager.action.clone()
+    
     return -100.0 * torch.square(steer_delta)
 
 def action_rate_smoothness_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+    if env.action_manager.action is None or env.action_manager.action.shape[1] < 1:
+        return torch.zeros(env.num_envs, device=env.device)
+        
     current_action = env.action_manager.action
     if "prev_action" not in env.extras:
+        env.extras["prev_action"] = current_action.clone()
         return torch.zeros(env.num_envs, device=env.device)
+        
     prev_action = env.extras["prev_action"]
-    reward = -1.0 * torch.square(current_action[:, 0] - prev_action[:, 0])
+    steer_delta = current_action[:, 0] - prev_action[:, 0]
+    
+    if hasattr(env, "episode_length_buf"):
+        just_reset = env.episode_length_buf <= 1
+        steer_delta = torch.where(just_reset, torch.zeros_like(steer_delta), steer_delta)
+        
+    reward = -1.0 * torch.square(steer_delta)
     return reward
 
 def heading_alignment_reward(env: ManagerBasedRLEnv) -> torch.Tensor:

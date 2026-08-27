@@ -162,7 +162,7 @@ class ActionCfg:
         wheelbase=0.33, 
         track_width=0.28, 
         max_steering_angle=0.5,
-        offset=-0.005
+        offset=0.0
     )
     b_drive = arcpro_actions.GroupedJointVelocityActionCfg(
         asset_name="robot", 
@@ -197,7 +197,7 @@ class RewardCfg:
     )
     
     # Precision: Lane centering (Provides dense feedback to steer toward centerline)
-    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=2.5)
+    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=10.0)
     
     # Force movement: Penalty forces it to move!
     # Uses absolute speed so reverse driving doesn't spuriously trigger penalty.
@@ -210,10 +210,10 @@ class RewardCfg:
     # It densely rewards the agent for facing forward (+10/step) and heavily penalizes facing backward (-10/step).
     # This prevents spin-outs and backwards driving without explicitly penalizing the steering action itself.
     heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=100.0)
-    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=2.0)
+    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=1.0)
     
-    # Jitter Suppression (Straightaway Stability Tuning - Issue 88)
-    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.05)
+    # Jitter Suppression (Straightaway Stability Tuning - Active Jerk Penalty)
+    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.5)
     
     # Boundary Penalty: (Enabled: Risk-aware shaping to smoothly steer away from walls)
     # Set to 0.4 (Issue 33) to perfectly balance against stagnation without over-saturation.

@@ -78,6 +78,9 @@ def reset_robot_to_fixed_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, as
     if "distance" in env.extras:
         env.extras["distance"][env_ids] = 0.0
 
+    if "prev_action" in env.extras:
+        env.extras["prev_action"][env_ids] = 0.0
+
     # Reset the go_signal FSM for these envs (T3.2). On reset the robot is
     # placed behind the same stop bar it had been past; without a reset,
     # the FSM would still be in DEPART or STOP state from the prior episode
