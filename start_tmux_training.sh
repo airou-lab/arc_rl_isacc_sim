@@ -13,8 +13,11 @@ fi
 # Create a new tmux session named 'training' in the background
 tmux new-session -d -s training
 
-# Auto-find the absolute most recently modified checkpoint
-LATEST_CKPT=$(find logs/ppo_skrl -name "agent_*.pt" -printf "%T@ %p\n" | sort -n | tail -n 1 | awk '{print $2}')
+# Auto-find the highest performing checkpoint (best_agent.pt), fallback to latest agent_*.pt
+LATEST_CKPT=$(find logs/ppo_skrl -name "best_agent.pt" -printf "%T@ %p\n" | sort -n | tail -n 1 | awk '{print $2}')
+if [ -z "$LATEST_CKPT" ]; then
+    LATEST_CKPT=$(find logs/ppo_skrl -name "agent_*.pt" -printf "%T@ %p\n" | sort -n | tail -n 1 | awk '{print $2}')
+fi
 RESUME_FLAG=""
 if [ ! -z "$LATEST_CKPT" ]; then
     RESUME_FLAG="--resume $LATEST_CKPT"
