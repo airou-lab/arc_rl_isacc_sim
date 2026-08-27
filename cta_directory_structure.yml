@@ -1,0 +1,206 @@
+# CTA Codebase Directory Structure & Architectural Layout
+cta_version: '1.0'
+last_updated: '2026-08-27T03:23:10.921211+00:00Z'
+root: '.'
+
+directories:
+  archive:
+    layer: 'testing'
+    tags: ["testing", "config"]
+    primary_files: ["archive/fix_track.py", "archive/scratch_test_rew.py", "archive/test_env_launcher.py", "archive/track_centerline_corrupted_150k.npy", "archive/requirements.txt"]
+  archive/logs/ppo_legacy/20260523-205605:
+    layer: 'general'
+    tags: []
+    primary_files: ["archive/logs/ppo_legacy/20260523-205605/vec_normalize.pkl"]
+  archive/logs/ppo_legacy/20260523-205605/tb/RecurrentPPO_1:
+    layer: 'general'
+    tags: []
+    primary_files: ["archive/logs/ppo_legacy/20260523-205605/tb/RecurrentPPO_1/events.out.tfevents.1779587765.airou-alienware.2833614.0"]
+  archive/logs/ppo_legacy/20260524-054924/tb/RecurrentPPO_1:
+    layer: 'general'
+    tags: []
+    primary_files: ["archive/logs/ppo_legacy/20260524-054924/tb/RecurrentPPO_1/events.out.tfevents.1779619765.airou-alienware.2023122.0"]
+  archive/logs/ppo_legacy/20260524-060434/tb/RecurrentPPO_1:
+    layer: 'general'
+    tags: []
+    primary_files: ["archive/logs/ppo_legacy/20260524-060434/tb/RecurrentPPO_1/events.out.tfevents.1779620675.airou-alienware.2349943.0"]
+  archive/logs/ppo_legacy/20260524-155509/tb/RecurrentPPO_1:
+    layer: 'general'
+    tags: []
+    primary_files: ["archive/logs/ppo_legacy/20260524-155509/tb/RecurrentPPO_1/events.out.tfevents.1779656110.airou-alienware.2894067.0"]
+  archive/logs/ppo_legacy/20260524-173039/tb/RecurrentPPO_1:
+    layer: 'general'
+    tags: []
+    primary_files: ["archive/logs/ppo_legacy/20260524-173039/tb/RecurrentPPO_1/events.out.tfevents.1779661840.airou-alienware.754517.0"]
+  archive/logs/ppo_legacy/20260524-174328/tb/RecurrentPPO_1:
+    layer: 'general'
+    tags: []
+    primary_files: ["archive/logs/ppo_legacy/20260524-174328/tb/RecurrentPPO_1/events.out.tfevents.1779662609.airou-alienware.1034554.0"]
+  archive/logs/ppo_legacy/20260525-000632:
+    layer: 'general'
+    tags: []
+    primary_files: ["archive/logs/ppo_legacy/20260525-000632/vec_normalize.pkl"]
+  archive/logs/ppo_legacy/20260525-000632/tb/RecurrentPPO_1:
+    layer: 'general'
+    tags: []
+    primary_files: ["archive/logs/ppo_legacy/20260525-000632/tb/RecurrentPPO_1/events.out.tfevents.1779685593.airou-alienware.508798.0"]
+  archive/logs/ppo_legacy/20260525-031708:
+    layer: 'general'
+    tags: []
+    primary_files: ["archive/logs/ppo_legacy/20260525-031708/vec_normalize.pkl"]
+  archive/logs/ppo_legacy/20260525-031708/tb/RecurrentPPO_1:
+    layer: 'general'
+    tags: []
+    primary_files: ["archive/logs/ppo_legacy/20260525-031708/tb/RecurrentPPO_1/events.out.tfevents.1779697028.airou-alienware.697341.0"]
+  archive/logs/ppo_legacy/20260525-032525/tb/RecurrentPPO_1:
+    layer: 'general'
+    tags: []
+    primary_files: ["archive/logs/ppo_legacy/20260525-032525/tb/RecurrentPPO_1/events.out.tfevents.1779697526.airou-alienware.891363.0"]
+  archive/logs/ppo_legacy/20260525-032942:
+    layer: 'general'
+    tags: []
+    primary_files: ["archive/logs/ppo_legacy/20260525-032942/vec_normalize.pkl"]
+  archive/logs/ppo_legacy/20260525-032942/tb/RecurrentPPO_1:
+    layer: 'general'
+    tags: []
+    primary_files: ["archive/logs/ppo_legacy/20260525-032942/tb/RecurrentPPO_1/events.out.tfevents.1779697782.airou-alienware.992739.0"]
+  archive/logs/ppo_legacy/20260525-050433/tb/RecurrentPPO_1:
+    layer: 'general'
+    tags: []
+    primary_files: ["archive/logs/ppo_legacy/20260525-050433/tb/RecurrentPPO_1/events.out.tfevents.1779703474.airou-alienware.3195231.0"]
+  archive/logs/ppo_legacy/20260525-050742/tb/RecurrentPPO_1:
+    layer: 'general'
+    tags: []
+    primary_files: ["archive/logs/ppo_legacy/20260525-050742/tb/RecurrentPPO_1/events.out.tfevents.1779703663.airou-alienware.3265538.0"]
+  archive/scratch_debug:
+    layer: 'testing'
+    tags: ["testing"]
+    primary_files: ["archive/scratch_debug/check_geom.py", "archive/scratch_debug/check_geom2.py", "archive/scratch_debug/check_meshes.py", "archive/scratch_debug/parse_rew.py", "archive/scratch_debug/dump_joints.py"]
+  arcpro-rl-course:
+    layer: 'general'
+    tags: []
+    primary_files: ["arcpro-rl-course/build.sh", "arcpro-rl-course/index.html", "arcpro-rl-course/main.js", "arcpro-rl-course/_base.html", "arcpro-rl-course/styles.css"]
+  arcpro-rl-course/modules:
+    layer: 'config'
+    tags: ["config"]
+    primary_files: ["arcpro-rl-course/modules/09-aac-code.html", "arcpro-rl-course/modules/07-freeze-code.html", "arcpro-rl-course/modules/02-env-cfg.html", "arcpro-rl-course/modules/14-bicycle-theory.html", "arcpro-rl-course/modules/11-geometry-theory.html"]
+  arcproLab:
+    layer: 'testing'
+    tags: ["testing", "robotics", "config"]
+    primary_files: ["arcproLab/test_rewards.py", "arcproLab/verify.py", "arcproLab/arcpro_robot_cfg.py", "arcproLab/arcpro_env_cfg.py", "arcproLab/README.md"]
+  arcproLab/agents:
+    layer: 'database'
+    tags: ["database"]
+    primary_files: ["arcproLab/agents/skrl_models.py", "arcproLab/agents/README.md", "arcproLab/agents/skrl_wrappers.py"]
+  arcproLab/assets/robot:
+    layer: 'robotics'
+    tags: ["robotics"]
+    primary_files: ["arcproLab/assets/robot/F1Tenth_Generated.usd", "arcproLab/assets/robot/F1Tenth_Metric.usd", "arcproLab/assets/robot/F1Tenth_Metric_Fixed.usd"]
+  arcproLab/mdp:
+    layer: 'general'
+    tags: []
+    primary_files: ["arcproLab/mdp/debug_terminations.py", "arcproLab/mdp/spawner.py", "arcproLab/mdp/actions.py", "arcproLab/mdp/rewards.py", "arcproLab/mdp/events.py"]
+  arcproLab/models:
+    layer: 'database'
+    tags: ["database"]
+    primary_files: ["arcproLab/models/road_following_model.pth"]
+  arcproLab/policy_stack:
+    layer: 'testing'
+    tags: ["testing"]
+    primary_files: ["arcproLab/policy_stack/README_REWARDS.md", "arcproLab/policy_stack/pytest.ini", "arcproLab/policy_stack/lane_detector.py"]
+  arcproLab/policy_stack/agent:
+    layer: 'config'
+    tags: ["config"]
+    primary_files: ["arcproLab/policy_stack/agent/intersection_graph.py", "arcproLab/policy_stack/agent/agent_env_wrapper.py", "arcproLab/policy_stack/agent/config.py", "arcproLab/policy_stack/agent/scheduler_core.py", "arcproLab/policy_stack/agent/main_node.py"]
+  arcproLab/policy_stack/baselines/dave2:
+    layer: 'database'
+    tags: ["database"]
+    primary_files: ["arcproLab/policy_stack/baselines/dave2/data_collector.py", "arcproLab/policy_stack/baselines/dave2/model.py", "arcproLab/policy_stack/baselines/dave2/experts.py", "arcproLab/policy_stack/baselines/dave2/train.py", "arcproLab/policy_stack/baselines/dave2/dataset.py"]
+  arcproLab/policy_stack/config:
+    layer: 'config'
+    tags: ["config"]
+    primary_files: ["arcproLab/policy_stack/config/intersection_topology.json", "arcproLab/policy_stack/config/__init__.py", "arcproLab/policy_stack/config/experiment.py"]
+  arcproLab/policy_stack/envs:
+    layer: 'config'
+    tags: ["config"]
+    primary_files: ["arcproLab/policy_stack/envs/registry.py", "arcproLab/policy_stack/envs/__init__.py"]
+  arcproLab/policy_stack/losses:
+    layer: 'general'
+    tags: []
+    primary_files: ["arcproLab/policy_stack/losses/waypoint_losses.py", "arcproLab/policy_stack/losses/__init__.py"]
+  arcproLab/policy_stack/policies:
+    layer: 'general'
+    tags: []
+    primary_files: ["arcproLab/policy_stack/policies/fusion_policy.py", "arcproLab/policy_stack/policies/hierarchical_policy.py", "arcproLab/policy_stack/policies/__init__.py"]
+  arcproLab/policy_stack/tests:
+    layer: 'testing'
+    tags: ["testing", "config"]
+    primary_files: ["arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/tests/test_intersection_worker.py", "arcproLab/policy_stack/tests/test_intersection_node_server.py", "arcproLab/policy_stack/tests/test_intersection_full.py", "arcproLab/policy_stack/tests/conftest.py"]
+  arcproLab/policy_stack/wrappers:
+    layer: 'general'
+    tags: []
+    primary_files: ["arcproLab/policy_stack/wrappers/waypoint_tracking_wrapper.py", "arcproLab/policy_stack/wrappers/intersection_reward_wrapper.py", "arcproLab/policy_stack/wrappers/__init__.py"]
+  arcproLab/scripts:
+    layer: 'testing'
+    tags: ["testing", "robotics", "config", "database"]
+    primary_files: ["arcproLab/scripts/verify_markers.py", "arcproLab/scripts/deep_verify.py", "arcproLab/scripts/debug_kinematics.py", "arcproLab/scripts/test_terminations.py", "arcproLab/scripts/audit_assets.py"]
+  logs:
+    layer: 'general'
+    tags: []
+    primary_files: ["logs/skrl_phase1_20260826_114700.log", "logs/skrl_phase1_20260822_120022.log", "logs/skrl_phase1_20260825_162918.log", "logs/pipeline.log", "logs/skrl_phase1_20260819_214319.log"]
+  logs/archive_pre_11fix_20260731_163227:
+    layer: 'general'
+    tags: []
+    primary_files: ["logs/archive_pre_11fix_20260731_163227/skrl_phase1.log"]
+  logs/archive_pre_11fix_20260731_163227/ppo_skrl/20260731-104443/26-07-31_10-44-43-988179_TelemetryPPO:
+    layer: 'general'
+    tags: []
+    primary_files: ["logs/archive_pre_11fix_20260731_163227/ppo_skrl/20260731-104443/26-07-31_10-44-43-988179_TelemetryPPO/events.out.tfevents.1785512683.airou-alienware.2000050.0"]
+  logs/archive_pre_11fix_20260731_163227/ppo_skrl/20260731-104443/26-07-31_10-44-43-988179_TelemetryPPO/checkpoints:
+    layer: 'general'
+    tags: []
+    primary_files: ["logs/archive_pre_11fix_20260731_163227/ppo_skrl/20260731-104443/26-07-31_10-44-43-988179_TelemetryPPO/checkpoints/agent_1500.pt", "logs/archive_pre_11fix_20260731_163227/ppo_skrl/20260731-104443/26-07-31_10-44-43-988179_TelemetryPPO/checkpoints/agent_50000.pt", "logs/archive_pre_11fix_20260731_163227/ppo_skrl/20260731-104443/26-07-31_10-44-43-988179_TelemetryPPO/checkpoints/agent_23500.pt", "logs/archive_pre_11fix_20260731_163227/ppo_skrl/20260731-104443/26-07-31_10-44-43-988179_TelemetryPPO/checkpoints/agent_11750.pt", "logs/archive_pre_11fix_20260731_163227/ppo_skrl/20260731-104443/26-07-31_10-44-43-988179_TelemetryPPO/checkpoints/agent_10500.pt"]
+  logs/debug_output:
+    layer: 'testing'
+    tags: ["testing"]
+    primary_files: ["logs/debug_output/joint_dump.log", "logs/debug_output/play_debug.log", "logs/debug_output/debug_vision.log", "logs/debug_output/crash_test.log", "logs/debug_output/output.log"]
+  logs/ppo_skrl/20260819-214341/26-08-19_21-43-41-085534_TelemetryPPO:
+    layer: 'general'
+    tags: []
+    primary_files: ["logs/ppo_skrl/20260819-214341/26-08-19_21-43-41-085534_TelemetryPPO/events.out.tfevents.1787193821.airou-alienware.599171.0"]
+  logs/ppo_skrl/20260819-214341/26-08-19_21-43-41-085534_TelemetryPPO/checkpoints:
+    layer: 'general'
+    tags: []
+    primary_files: ["logs/ppo_skrl/20260819-214341/26-08-19_21-43-41-085534_TelemetryPPO/checkpoints/best_agent.pt", "logs/ppo_skrl/20260819-214341/26-08-19_21-43-41-085534_TelemetryPPO/checkpoints/agent_1000000.pt", "logs/ppo_skrl/20260819-214341/26-08-19_21-43-41-085534_TelemetryPPO/checkpoints/agent_800000.pt", "logs/ppo_skrl/20260819-214341/26-08-19_21-43-41-085534_TelemetryPPO/checkpoints/agent_400000.pt", "logs/ppo_skrl/20260819-214341/26-08-19_21-43-41-085534_TelemetryPPO/checkpoints/agent_100000.pt"]
+  logs/ppo_skrl/20260825-162938/26-08-25_16-29-38-245311_TelemetryPPO:
+    layer: 'general'
+    tags: []
+    primary_files: ["logs/ppo_skrl/20260825-162938/26-08-25_16-29-38-245311_TelemetryPPO/events.out.tfevents.1787693378.airou-alienware.360587.0"]
+  logs/ppo_skrl/20260825-162938/26-08-25_16-29-38-245311_TelemetryPPO/checkpoints:
+    layer: 'general'
+    tags: []
+    primary_files: ["logs/ppo_skrl/20260825-162938/26-08-25_16-29-38-245311_TelemetryPPO/checkpoints/agent_307000.pt", "logs/ppo_skrl/20260825-162938/26-08-25_16-29-38-245311_TelemetryPPO/checkpoints/agent_108000.pt", "logs/ppo_skrl/20260825-162938/26-08-25_16-29-38-245311_TelemetryPPO/checkpoints/agent_1500.pt", "logs/ppo_skrl/20260825-162938/26-08-25_16-29-38-245311_TelemetryPPO/checkpoints/agent_384500.pt", "logs/ppo_skrl/20260825-162938/26-08-25_16-29-38-245311_TelemetryPPO/checkpoints/agent_340000.pt"]
+  logs/ppo_skrl/20260826-114727/26-08-26_11-47-27-745038_TelemetryPPO:
+    layer: 'general'
+    tags: []
+    primary_files: ["logs/ppo_skrl/20260826-114727/26-08-26_11-47-27-745038_TelemetryPPO/events.out.tfevents.1787762847.airou-alienware.4077533.0"]
+  logs/ppo_skrl/20260826-114727/26-08-26_11-47-27-745038_TelemetryPPO/checkpoints:
+    layer: 'general'
+    tags: []
+    primary_files: ["logs/ppo_skrl/20260826-114727/26-08-26_11-47-27-745038_TelemetryPPO/checkpoints/agent_108000.pt", "logs/ppo_skrl/20260826-114727/26-08-26_11-47-27-745038_TelemetryPPO/checkpoints/agent_1500.pt", "logs/ppo_skrl/20260826-114727/26-08-26_11-47-27-745038_TelemetryPPO/checkpoints/agent_169500.pt", "logs/ppo_skrl/20260826-114727/26-08-26_11-47-27-745038_TelemetryPPO/checkpoints/agent_161000.pt", "logs/ppo_skrl/20260826-114727/26-08-26_11-47-27-745038_TelemetryPPO/checkpoints/agent_50000.pt"]
+  logs/ppo_skrl/tuned_resume/checkpoints:
+    layer: 'general'
+    tags: []
+    primary_files: ["logs/ppo_skrl/tuned_resume/checkpoints/agent_999999.pt"]
+  openStreetUSD:
+    layer: 'general'
+    tags: []
+    primary_files: ["openStreetUSD/track_1x_wrapper.usda", "openStreetUSD/no_graph_sim_clean_1x.usda"]
+  tensorboard_view_docker:
+    layer: 'general'
+    tags: []
+    primary_files: ["tensorboard_view_docker/Dockerfile", "tensorboard_view_docker/docker-compose.yml"]
+  tests:
+    layer: 'testing'
+    tags: ["testing"]
+    primary_files: ["tests/test_track_dir.py", "tests/test_wp_math.py", "tests/test_physics_rule_based.py"]

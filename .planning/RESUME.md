@@ -29,6 +29,10 @@
 - **Problem:** At 0.85 m/s, no jerk penalty allowed high-frequency micro-weaving, and weak lateral error allowed edge-hugging.
 - **Fix:** Increased `lateral_error` to `2.5` and enabled `jerk_penalty = 0.05` in [`arcpro_env_cfg.py`](file:///home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim/arcproLab/arcpro_env_cfg.py).
 
+### Issue 89: Jerk Penalty Activation & Steering Stabilization
+- **Problem:** Bang-bang steering oscillations (+1.25 -> -1.74 -> +1.16) in GUI evaluation caused resets at Step 238 due to silent `prev_action` no-op bug in `rewards.py`.
+- **Fix:** Wired active `prev_action` tracking in `mdp/rewards.py`, activated `jerk_penalty` (weight 0.5), centered `AckermannSteeringActionCfg` (`offset = 0.0`), and scaled `lateral_error` to 10.0 in [`arcpro_env_cfg.py`](file:///home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim/arcproLab/arcpro_env_cfg.py).
+
 ---
 
 ## 3. Active Background Infrastructure

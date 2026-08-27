@@ -577,3 +577,15 @@ At the 500k milestone, the agent's episode lengths reached up to ~723, but the e
 - **Fix (Straightaway Stability Tuning):** 
   - Increased `lateral_error` weight from 1.0 to 2.5 to overpower the heading reward and force the agent strictly to the geometric center.
   - Enabled `jerk_penalty` at weight 0.05 to punish micro-weaving and enforce smooth turning arcs.
+
+### Issue 89: Silent Jerk Penalty No-Op Bug & Bang-Bang Fishtailing Resolution
+- **Problem:** In GUI evaluation (`play_skrl.py`), the policy displayed violent bang-bang steering oscillations (+1.25 left -> -1.74 right -> +1.16 left -> -1.76 right), culminating in boundary collision resets at Step ~238 despite high forward velocity (0.93 m/s).
+- **Root Cause:** 
+  1. `jerk_penalty` and `action_rate_smoothness_reward` in `mdp/rewards.py` checked `if "prev_action" not in env.extras: return zeros`, but `env.extras["prev_action"]` was NEVER written or updated anywhere in the codebase. Both jitter suppression penalties were completely silent 0.0 no-ops during the entire training history.
+  2. `AckermannSteeringActionCfg` had a hardcoded `offset = -0.005` physical right bias.
+  3. `lateral_error` weight (2.5) was too weak to overpower the heading alignment reward (100.0), allowing large off-center oscillations.
+- **Fix:**
+  1. Implemented active `env.extras["prev_action"] = env.action_manager.action.clone()` tracking and reset clearing in `mdp/rewards.py` and `mdp/events.py`.
+  2. Activated `jerk_penalty` with weight `0.5` (penalizing large rapid steering delta $(-100 \times \Delta a^2)$).
+  3. Removed the hardcoded right steering bias (`offset = 0.0` in `AckermannSteeringActionCfg`).
+  4. Scaled `lateral_error` weight from `2.5` to `10.0` in `arcpro_env_cfg.py` for continuous, assertive centerline tracking.

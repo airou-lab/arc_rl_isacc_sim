@@ -1,0 +1,33 @@
+# CTA Codebase Map & RAG Query Guide
+cta_version: '1.0'
+database: '.cta/cta_codebase.db'
+last_updated: '2026-08-27T03:23:10.920322+00:00Z'
+git_commit: '19e0898d67dd5f560131ba718ee2ace1e22b8168'
+stats:
+  total_indexed_files: 1799
+  total_symbols: 673
+
+domain_tags:
+  config:
+    category: 'config'
+    matching_entities: 14
+    sample_targets: ["arcproLab/arcpro_env_cfg.py", "arcproLab/policy_stack/agent/agent_env_wrapper.py", "arcproLab/policy_stack/agent/config.py", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/envs/registry.py"]
+  database:
+    category: 'layer'
+    matching_entities: 4
+    sample_targets: ["arcproLab/agents/skrl_models.py", "arcproLab/policy_stack/baselines/dave2/model.py", "arcproLab/scripts/init_gsd_db.py", "arcproLab/models/road_following_model.pth"]
+  robotics:
+    category: 'domain'
+    matching_entities: 6
+    sample_targets: ["arcproLab/arcpro_robot_cfg.py", "arcproLab/assets/robot/F1Tenth_Generated.usd", "arcproLab/assets/robot/F1Tenth_Metric.usd", "arcproLab/assets/robot/F1Tenth_Metric_Fixed.usd", "arcproLab/scripts/test_intersection_crossing.py"]
+  testing:
+    category: 'layer'
+    matching_entities: 45
+    sample_targets: ["arcproLab/test_rewards.py", "arcproLab/policy_stack/pytest.ini", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/tests/test_intersection_worker.py", "arcproLab/policy_stack/tests/test_intersection_node_server.py"]
+
+query_templates:
+  find_symbol: "SELECT file_path, name, kind, signature, line_start FROM symbols WHERE name LIKE '%{SYMBOL}%';"
+  find_callers: "SELECT source_id, relation_type, details FROM relationships WHERE target_id = '{SYMBOL}' AND relation_type = 'calls';"
+  find_imports: "SELECT target_id, relation_type, details FROM relationships WHERE source_id = '{FILE}' AND relation_type = 'imports';"
+  search_fts: "SELECT file_path, symbol_name, kind, signature FROM codebase_fts WHERE codebase_fts MATCH '{KEYWORD}' LIMIT 20;"
+  find_by_tag: "SELECT target_id, target_type, category FROM tags WHERE tag_name = '{TAG}';"

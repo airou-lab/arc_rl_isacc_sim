@@ -19,6 +19,7 @@
 - **D024 (Issue 86):** Restored `action_drive_reward = 20.0` and tightened `stagnation_termination` to 100 steps (2s) to destroy the creeping survival trap.
 - **D025 (Issue 87):** Restored dense `lateral_error = 1.0` to guide visual steering toward centerline waypoints.
 - **D026 (Issue 88):** Applied Straightaway Stability Tuning: Increased `lateral_error` to 2.5 and enabled `jerk_penalty` at 0.05 to prevent high-speed weaving.
+- **D027 (Issue 89):** Fixed silent `prev_action` no-op bug in `rewards.py`, activated `jerk_penalty = 0.5` to eliminate bang-bang oscillation, set steering `offset = 0.0`, and boosted `lateral_error = 10.0` for solid centerline tracking.
 - **Codebase Quality & Disk Cleanup (2026-08-22):** Pruned 24,000+ intermediate checkpoints (reclaimed 68 GB), cleaned legacy USDs, and moved root tests to `tests/`.
 
 ## Next Steps for Incoming Agent

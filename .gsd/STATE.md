@@ -15,7 +15,11 @@
 4. **Straightaway Stability Tuning (D026 / Issue 88):**
    - Increased `lateral_error` to `2.5` and enabled `jerk_penalty` at `0.05` in `arcpro_env_cfg.py`.
    - Completely resolved high-speed straightaway micro-weaving and lane-edge hugging.
-5. **Record Performance Telemetry (>1.2M Steps):**
+5. **Jerk Penalty Activation & Steering Stabilization (D027 / Issue 89):**
+   - Fixed silent `prev_action` no-op bug in `mdp/rewards.py` and `mdp/events.py`.
+   - Scaled `jerk_penalty` weight to `0.5` to eliminate bang-bang fishtailing at >0.9 m/s.
+   - Centered `AckermannSteeringActionCfg` (`offset = 0.0`) and boosted `lateral_error` weight to `10.0`.
+6. **Record Performance Telemetry (>1.2M Steps):**
    - **Episode Length (`Len`):** Consistently peaking at **`705 steps`** (~14.1s continuous driving).
    - **Cumulative Waypoints (`WPs_cum`):** Reached **`1,457 Waypoints`** (~14.6m continuous track navigation).
    - **Speed (`Spd`):** Cruising at **`0.75 – 0.86 m/s`**.
