@@ -1,8 +1,8 @@
 # CTA Codebase Map & RAG Query Guide
 cta_version: '1.0'
 database: '.cta/cta_codebase.db'
-last_updated: '2026-08-27T03:23:10.920322+00:00Z'
-git_commit: '19e0898d67dd5f560131ba718ee2ace1e22b8168'
+last_updated: '2026-08-27T03:27:33.494284+00:00Z'
+git_commit: 'a7968e919a91352677e2f945dc5f8ffb6ce22af1'
 stats:
   total_indexed_files: 1799
   total_symbols: 673
@@ -11,7 +11,7 @@ domain_tags:
   config:
     category: 'config'
     matching_entities: 14
-    sample_targets: ["arcproLab/arcpro_env_cfg.py", "arcproLab/policy_stack/agent/agent_env_wrapper.py", "arcproLab/policy_stack/agent/config.py", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/envs/registry.py"]
+    sample_targets: ["arcproLab/policy_stack/agent/agent_env_wrapper.py", "arcproLab/policy_stack/agent/config.py", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/envs/registry.py", "arcproLab/policy_stack/envs/__init__.py"]
   database:
     category: 'layer'
     matching_entities: 4

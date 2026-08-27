@@ -1,6 +1,6 @@
 # CTA Codebase Directory Structure & Architectural Layout
 cta_version: '1.0'
-last_updated: '2026-08-27T03:23:10.921211+00:00Z'
+last_updated: '2026-08-27T03:27:33.495161+00:00Z'
 root: '.'
 
 directories:
@@ -87,7 +87,7 @@ directories:
   arcproLab:
     layer: 'testing'
     tags: ["testing", "robotics", "config"]
-    primary_files: ["arcproLab/test_rewards.py", "arcproLab/verify.py", "arcproLab/arcpro_robot_cfg.py", "arcproLab/arcpro_env_cfg.py", "arcproLab/README.md"]
+    primary_files: ["arcproLab/test_rewards.py", "arcproLab/verify.py", "arcproLab/arcpro_robot_cfg.py", "arcproLab/README.md", "arcproLab/generate_track.py"]
   arcproLab/agents:
     layer: 'database'
     tags: ["database"]
@@ -99,7 +99,7 @@ directories:
   arcproLab/mdp:
     layer: 'general'
     tags: []
-    primary_files: ["arcproLab/mdp/debug_terminations.py", "arcproLab/mdp/spawner.py", "arcproLab/mdp/actions.py", "arcproLab/mdp/rewards.py", "arcproLab/mdp/events.py"]
+    primary_files: ["arcproLab/mdp/debug_terminations.py", "arcproLab/mdp/spawner.py", "arcproLab/mdp/actions.py", "arcproLab/mdp/terminations.py", "arcproLab/mdp/road_manager.py"]
   arcproLab/models:
     layer: 'database'
     tags: ["database"]
