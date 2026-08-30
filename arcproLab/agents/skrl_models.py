@@ -10,7 +10,7 @@ class ARCProActor(GaussianMixin, Model):
         GaussianMixin.__init__(self, clip_actions, clip_log_std, min_log_std, max_log_std, reduction)
         
         # Actor Head (Vision 512 + Telemetry 12)
-        # The input is already pre-computed by the Environment Wrapper using ResNet!
+        # The input is pre-computed by the Environment Wrapper using ResNet-18!
         self.actor_head = nn.Sequential(
             nn.Linear(self.num_observations, 256),
             nn.ReLU(),
@@ -29,9 +29,11 @@ class ARCProActor(GaussianMixin, Model):
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
 
+        # Standard PPO Continuous Control initialization: Small initial action logits
+        nn.init.orthogonal_(self.actor_head[-1].weight, gain=0.01)
+        nn.init.constant_(self.actor_head[-1].bias, 0.0)
+
     def compute(self, inputs, role=""):
-        # The SKRLFlattenWrapper has already run the frozen ResNet
-        # so `inputs["states"]` is perfectly sized at (N, 524)
         obs = inputs["states"]
         return torch.tanh(self.actor_head(obs)), self.log_std_parameter, {}
 
@@ -41,7 +43,7 @@ class ARCProCritic(DeterministicMixin, Model):
         Model.__init__(self, observation_space, action_space, device)
         DeterministicMixin.__init__(self, clip_actions)
         
-        # 1. Privileged Critic Head (MLP only, no vision)
+        # 1. Privileged Critic Head (MLP only, 12 telemetry features)
         self.critic_head = nn.Sequential(
             nn.Linear(12, 256),
             nn.ReLU(),
@@ -57,9 +59,7 @@ class ARCProCritic(DeterministicMixin, Model):
                     nn.init.constant_(m.bias, 0)
 
     def compute(self, inputs, role=""):
-        # The SKRL agent will pass the unmasked privileged state here
         state = inputs["states"]
-        
         if isinstance(state, dict):
             if "critic" in state:
                 vec = state["critic"]
@@ -71,7 +71,6 @@ class ARCProCritic(DeterministicMixin, Model):
             if state.dim() == 2 and state.shape[1] == 150540:
                 vec = state[:, :12]
             elif state.dim() == 2 and state.shape[1] == 524:
-                # SKRLFlattenWrapper returns [visual_feats (512), telemetry (12)]
                 vec = state[:, -12:]
             else:
                 vec = state

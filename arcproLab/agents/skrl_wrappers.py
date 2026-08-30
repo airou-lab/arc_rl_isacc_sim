@@ -27,24 +27,20 @@ class SKRLFlattenWrapper(Wrapper):
     def step(self, actions):
         obs, reward, terminated, truncated, info = self._env.step(actions)
         
-        # Inject telemetry into info for SKRL logger
         try:
             base_env = self._env.unwrapped
             robot_asset = base_env.scene["robot"]
             speed = torch.norm(robot_asset.data.root_lin_vel_b[:, :2], dim=1)
             info["speed_mps"] = speed.clone()
             
-            # Extract boundary distances if available in extras
             if "dist_w" in base_env.extras:
                 info["dist_white"] = base_env.extras["dist_w"].clone()
             if "dist_y" in base_env.extras:
                 info["dist_yellow"] = base_env.extras["dist_y"].clone()
-            # Track progress telemetry
             if "track_progress_pct" in base_env.extras:
                 info["track_progress_pct"] = base_env.extras["track_progress_pct"].clone()
             if "track_wp_delta" in base_env.extras:
                 info["track_wp_delta"] = base_env.extras["track_wp_delta"].clone()
-            # Expose the per-step reward WP delta
             if "reward_wp_delta_step" in base_env.extras:
                 info["reward_wp_delta_step"] = base_env.extras["reward_wp_delta_step"].clone()
         except Exception:

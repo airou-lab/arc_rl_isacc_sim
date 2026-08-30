@@ -1,81 +1,9 @@
 # CTA Codebase Directory Structure & Architectural Layout
 cta_version: '1.0'
-last_updated: '2026-08-27T03:27:33.495161+00:00Z'
+last_updated: '2026-08-30T23:53:38.769225+00:00Z'
 root: '.'
 
 directories:
-  archive:
-    layer: 'testing'
-    tags: ["testing", "config"]
-    primary_files: ["archive/fix_track.py", "archive/scratch_test_rew.py", "archive/test_env_launcher.py", "archive/track_centerline_corrupted_150k.npy", "archive/requirements.txt"]
-  archive/logs/ppo_legacy/20260523-205605:
-    layer: 'general'
-    tags: []
-    primary_files: ["archive/logs/ppo_legacy/20260523-205605/vec_normalize.pkl"]
-  archive/logs/ppo_legacy/20260523-205605/tb/RecurrentPPO_1:
-    layer: 'general'
-    tags: []
-    primary_files: ["archive/logs/ppo_legacy/20260523-205605/tb/RecurrentPPO_1/events.out.tfevents.1779587765.airou-alienware.2833614.0"]
-  archive/logs/ppo_legacy/20260524-054924/tb/RecurrentPPO_1:
-    layer: 'general'
-    tags: []
-    primary_files: ["archive/logs/ppo_legacy/20260524-054924/tb/RecurrentPPO_1/events.out.tfevents.1779619765.airou-alienware.2023122.0"]
-  archive/logs/ppo_legacy/20260524-060434/tb/RecurrentPPO_1:
-    layer: 'general'
-    tags: []
-    primary_files: ["archive/logs/ppo_legacy/20260524-060434/tb/RecurrentPPO_1/events.out.tfevents.1779620675.airou-alienware.2349943.0"]
-  archive/logs/ppo_legacy/20260524-155509/tb/RecurrentPPO_1:
-    layer: 'general'
-    tags: []
-    primary_files: ["archive/logs/ppo_legacy/20260524-155509/tb/RecurrentPPO_1/events.out.tfevents.1779656110.airou-alienware.2894067.0"]
-  archive/logs/ppo_legacy/20260524-173039/tb/RecurrentPPO_1:
-    layer: 'general'
-    tags: []
-    primary_files: ["archive/logs/ppo_legacy/20260524-173039/tb/RecurrentPPO_1/events.out.tfevents.1779661840.airou-alienware.754517.0"]
-  archive/logs/ppo_legacy/20260524-174328/tb/RecurrentPPO_1:
-    layer: 'general'
-    tags: []
-    primary_files: ["archive/logs/ppo_legacy/20260524-174328/tb/RecurrentPPO_1/events.out.tfevents.1779662609.airou-alienware.1034554.0"]
-  archive/logs/ppo_legacy/20260525-000632:
-    layer: 'general'
-    tags: []
-    primary_files: ["archive/logs/ppo_legacy/20260525-000632/vec_normalize.pkl"]
-  archive/logs/ppo_legacy/20260525-000632/tb/RecurrentPPO_1:
-    layer: 'general'
-    tags: []
-    primary_files: ["archive/logs/ppo_legacy/20260525-000632/tb/RecurrentPPO_1/events.out.tfevents.1779685593.airou-alienware.508798.0"]
-  archive/logs/ppo_legacy/20260525-031708:
-    layer: 'general'
-    tags: []
-    primary_files: ["archive/logs/ppo_legacy/20260525-031708/vec_normalize.pkl"]
-  archive/logs/ppo_legacy/20260525-031708/tb/RecurrentPPO_1:
-    layer: 'general'
-    tags: []
-    primary_files: ["archive/logs/ppo_legacy/20260525-031708/tb/RecurrentPPO_1/events.out.tfevents.1779697028.airou-alienware.697341.0"]
-  archive/logs/ppo_legacy/20260525-032525/tb/RecurrentPPO_1:
-    layer: 'general'
-    tags: []
-    primary_files: ["archive/logs/ppo_legacy/20260525-032525/tb/RecurrentPPO_1/events.out.tfevents.1779697526.airou-alienware.891363.0"]
-  archive/logs/ppo_legacy/20260525-032942:
-    layer: 'general'
-    tags: []
-    primary_files: ["archive/logs/ppo_legacy/20260525-032942/vec_normalize.pkl"]
-  archive/logs/ppo_legacy/20260525-032942/tb/RecurrentPPO_1:
-    layer: 'general'
-    tags: []
-    primary_files: ["archive/logs/ppo_legacy/20260525-032942/tb/RecurrentPPO_1/events.out.tfevents.1779697782.airou-alienware.992739.0"]
-  archive/logs/ppo_legacy/20260525-050433/tb/RecurrentPPO_1:
-    layer: 'general'
-    tags: []
-    primary_files: ["archive/logs/ppo_legacy/20260525-050433/tb/RecurrentPPO_1/events.out.tfevents.1779703474.airou-alienware.3195231.0"]
-  archive/logs/ppo_legacy/20260525-050742/tb/RecurrentPPO_1:
-    layer: 'general'
-    tags: []
-    primary_files: ["archive/logs/ppo_legacy/20260525-050742/tb/RecurrentPPO_1/events.out.tfevents.1779703663.airou-alienware.3265538.0"]
-  archive/scratch_debug:
-    layer: 'testing'
-    tags: ["testing"]
-    primary_files: ["archive/scratch_debug/check_geom.py", "archive/scratch_debug/check_geom2.py", "archive/scratch_debug/check_meshes.py", "archive/scratch_debug/parse_rew.py", "archive/scratch_debug/dump_joints.py"]
   arcpro-rl-course:
     layer: 'general'
     tags: []
@@ -91,11 +19,7 @@ directories:
   arcproLab/agents:
     layer: 'database'
     tags: ["database"]
-    primary_files: ["arcproLab/agents/skrl_models.py", "arcproLab/agents/README.md", "arcproLab/agents/skrl_wrappers.py"]
-  arcproLab/assets/robot:
-    layer: 'robotics'
-    tags: ["robotics"]
-    primary_files: ["arcproLab/assets/robot/F1Tenth_Generated.usd", "arcproLab/assets/robot/F1Tenth_Metric.usd", "arcproLab/assets/robot/F1Tenth_Metric_Fixed.usd"]
+    primary_files: ["arcproLab/agents/README.md", "arcproLab/agents/skrl_models.py", "arcproLab/agents/skrl_wrappers.py"]
   arcproLab/mdp:
     layer: 'general'
     tags: []
@@ -144,58 +68,6 @@ directories:
     layer: 'testing'
     tags: ["testing", "robotics", "config", "database"]
     primary_files: ["arcproLab/scripts/verify_markers.py", "arcproLab/scripts/deep_verify.py", "arcproLab/scripts/debug_kinematics.py", "arcproLab/scripts/test_terminations.py", "arcproLab/scripts/audit_assets.py"]
-  logs:
-    layer: 'general'
-    tags: []
-    primary_files: ["logs/skrl_phase1_20260826_114700.log", "logs/skrl_phase1_20260822_120022.log", "logs/skrl_phase1_20260825_162918.log", "logs/pipeline.log", "logs/skrl_phase1_20260819_214319.log"]
-  logs/archive_pre_11fix_20260731_163227:
-    layer: 'general'
-    tags: []
-    primary_files: ["logs/archive_pre_11fix_20260731_163227/skrl_phase1.log"]
-  logs/archive_pre_11fix_20260731_163227/ppo_skrl/20260731-104443/26-07-31_10-44-43-988179_TelemetryPPO:
-    layer: 'general'
-    tags: []
-    primary_files: ["logs/archive_pre_11fix_20260731_163227/ppo_skrl/20260731-104443/26-07-31_10-44-43-988179_TelemetryPPO/events.out.tfevents.1785512683.airou-alienware.2000050.0"]
-  logs/archive_pre_11fix_20260731_163227/ppo_skrl/20260731-104443/26-07-31_10-44-43-988179_TelemetryPPO/checkpoints:
-    layer: 'general'
-    tags: []
-    primary_files: ["logs/archive_pre_11fix_20260731_163227/ppo_skrl/20260731-104443/26-07-31_10-44-43-988179_TelemetryPPO/checkpoints/agent_1500.pt", "logs/archive_pre_11fix_20260731_163227/ppo_skrl/20260731-104443/26-07-31_10-44-43-988179_TelemetryPPO/checkpoints/agent_50000.pt", "logs/archive_pre_11fix_20260731_163227/ppo_skrl/20260731-104443/26-07-31_10-44-43-988179_TelemetryPPO/checkpoints/agent_23500.pt", "logs/archive_pre_11fix_20260731_163227/ppo_skrl/20260731-104443/26-07-31_10-44-43-988179_TelemetryPPO/checkpoints/agent_11750.pt", "logs/archive_pre_11fix_20260731_163227/ppo_skrl/20260731-104443/26-07-31_10-44-43-988179_TelemetryPPO/checkpoints/agent_10500.pt"]
-  logs/debug_output:
-    layer: 'testing'
-    tags: ["testing"]
-    primary_files: ["logs/debug_output/joint_dump.log", "logs/debug_output/play_debug.log", "logs/debug_output/debug_vision.log", "logs/debug_output/crash_test.log", "logs/debug_output/output.log"]
-  logs/ppo_skrl/20260819-214341/26-08-19_21-43-41-085534_TelemetryPPO:
-    layer: 'general'
-    tags: []
-    primary_files: ["logs/ppo_skrl/20260819-214341/26-08-19_21-43-41-085534_TelemetryPPO/events.out.tfevents.1787193821.airou-alienware.599171.0"]
-  logs/ppo_skrl/20260819-214341/26-08-19_21-43-41-085534_TelemetryPPO/checkpoints:
-    layer: 'general'
-    tags: []
-    primary_files: ["logs/ppo_skrl/20260819-214341/26-08-19_21-43-41-085534_TelemetryPPO/checkpoints/best_agent.pt", "logs/ppo_skrl/20260819-214341/26-08-19_21-43-41-085534_TelemetryPPO/checkpoints/agent_1000000.pt", "logs/ppo_skrl/20260819-214341/26-08-19_21-43-41-085534_TelemetryPPO/checkpoints/agent_800000.pt", "logs/ppo_skrl/20260819-214341/26-08-19_21-43-41-085534_TelemetryPPO/checkpoints/agent_400000.pt", "logs/ppo_skrl/20260819-214341/26-08-19_21-43-41-085534_TelemetryPPO/checkpoints/agent_100000.pt"]
-  logs/ppo_skrl/20260825-162938/26-08-25_16-29-38-245311_TelemetryPPO:
-    layer: 'general'
-    tags: []
-    primary_files: ["logs/ppo_skrl/20260825-162938/26-08-25_16-29-38-245311_TelemetryPPO/events.out.tfevents.1787693378.airou-alienware.360587.0"]
-  logs/ppo_skrl/20260825-162938/26-08-25_16-29-38-245311_TelemetryPPO/checkpoints:
-    layer: 'general'
-    tags: []
-    primary_files: ["logs/ppo_skrl/20260825-162938/26-08-25_16-29-38-245311_TelemetryPPO/checkpoints/agent_307000.pt", "logs/ppo_skrl/20260825-162938/26-08-25_16-29-38-245311_TelemetryPPO/checkpoints/agent_108000.pt", "logs/ppo_skrl/20260825-162938/26-08-25_16-29-38-245311_TelemetryPPO/checkpoints/agent_1500.pt", "logs/ppo_skrl/20260825-162938/26-08-25_16-29-38-245311_TelemetryPPO/checkpoints/agent_384500.pt", "logs/ppo_skrl/20260825-162938/26-08-25_16-29-38-245311_TelemetryPPO/checkpoints/agent_340000.pt"]
-  logs/ppo_skrl/20260826-114727/26-08-26_11-47-27-745038_TelemetryPPO:
-    layer: 'general'
-    tags: []
-    primary_files: ["logs/ppo_skrl/20260826-114727/26-08-26_11-47-27-745038_TelemetryPPO/events.out.tfevents.1787762847.airou-alienware.4077533.0"]
-  logs/ppo_skrl/20260826-114727/26-08-26_11-47-27-745038_TelemetryPPO/checkpoints:
-    layer: 'general'
-    tags: []
-    primary_files: ["logs/ppo_skrl/20260826-114727/26-08-26_11-47-27-745038_TelemetryPPO/checkpoints/agent_108000.pt", "logs/ppo_skrl/20260826-114727/26-08-26_11-47-27-745038_TelemetryPPO/checkpoints/agent_1500.pt", "logs/ppo_skrl/20260826-114727/26-08-26_11-47-27-745038_TelemetryPPO/checkpoints/agent_169500.pt", "logs/ppo_skrl/20260826-114727/26-08-26_11-47-27-745038_TelemetryPPO/checkpoints/agent_161000.pt", "logs/ppo_skrl/20260826-114727/26-08-26_11-47-27-745038_TelemetryPPO/checkpoints/agent_50000.pt"]
-  logs/ppo_skrl/tuned_resume/checkpoints:
-    layer: 'general'
-    tags: []
-    primary_files: ["logs/ppo_skrl/tuned_resume/checkpoints/agent_999999.pt"]
-  openStreetUSD:
-    layer: 'general'
-    tags: []
-    primary_files: ["openStreetUSD/track_1x_wrapper.usda", "openStreetUSD/no_graph_sim_clean_1x.usda"]
   tensorboard_view_docker:
     layer: 'general'
     tags: []

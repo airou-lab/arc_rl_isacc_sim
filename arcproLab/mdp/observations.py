@@ -156,15 +156,17 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     env.extras["dist_y"] = dist_y
     env.extras["dist_w"] = dist_w
     
-    # Index 8 & 9: Lateral and Heading Error
-    # MASKED for Actor (forces RGB learning), UNMASKED for Critic (allows accurate value prediction)
+    # Index 8: Lateral Error (Zeroed for Actor, Unmasked for Critic)
     if not masked:
         obs[:, 8] = env.extras["lat_err"] 
-        obs[:, 9] = env.extras["head_err"]
+    else:
+        obs[:, 8] = 0.0
+        
+    # Index 9: Heading Alignment Error (Unmasked: tells policy the orientation of the road curve)
+    obs[:, 9] = env.extras["head_err"]
     
-    # Index 10: Path Curvature (Kappa)
-    if not masked:
-        obs[:, 10] = kappa
+    # Index 10: Path Curvature Kappa (Unmasked: tells policy the radius/sharpness of the upcoming turn)
+    obs[:, 10] = kappa
 
     # Index 11: Total Distance (Accumulated)
     if "distance" in env.extras:

@@ -6,6 +6,7 @@ parser.add_argument("--num_envs", type=int, default=16, help="Number of parallel
 parser.add_argument("--seed", type=int, default=42, help="Seed for the environment.")
 parser.add_argument("--total_timesteps", type=int, default=5000000, help="Total timesteps to train.")
 parser.add_argument("--resume", type=str, default="", help="Path to checkpoint to resume from.")
+parser.add_argument("--initial_step", type=int, default=None, help="Initial step offset for cumulative step tracking.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -14,6 +15,7 @@ simulation_app = app_launcher.app
 
 import os
 import sys
+import re
 import torch
 import warnings
 from datetime import datetime
@@ -46,14 +48,30 @@ from agents.skrl_wrappers import SKRLFlattenWrapper
 from agents.skrl_models import ARCProActor, ARCProCritic
 
 class TelemetryPPO(PPO):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, initial_step: int = 0, num_envs: int = 16, **kwargs):
         super().__init__(*args, **kwargs)
+        self.initial_step = initial_step
+        self.num_envs = num_envs
         self._print_counter = 0
         self._last_ep_len = 0.0
+        self._last_ep_len_max = 0.0
         self._last_ep_rew = 0.0
+        self._last_ep_rew_max = 0.0
+
+    def write_tracking_data(self, timestep: int, timesteps: int) -> None:
+        cum_timestep = (timestep + self.initial_step) if timestep is not None else None
+        cum_timesteps = (timesteps + self.initial_step) if timesteps is not None else None
+        super().write_tracking_data(cum_timestep, cum_timesteps)
+
+    def write_checkpoint(self, timestep: int, timesteps: int) -> None:
+        cum_timestep = (timestep + self.initial_step) if timestep is not None else None
+        cum_timesteps = (timesteps + self.initial_step) if timesteps is not None else None
+        super().write_checkpoint(cum_timestep, cum_timesteps)
 
     def record_transition(self, states, actions, rewards, next_states, terminated, truncated, infos, timestep, timesteps):
-        super().record_transition(states, actions, rewards, next_states, terminated, truncated, infos, timestep, timesteps)
+        cum_timestep = (timestep + self.initial_step) if timestep is not None else None
+        cum_timesteps = (timesteps + self.initial_step) if timesteps is not None else None
+        super().record_transition(states, actions, rewards, next_states, terminated, truncated, infos, cum_timestep, cum_timesteps)
         
         speed = 0.0
         track_pct = 0.0
@@ -82,17 +100,23 @@ class TelemetryPPO(PPO):
         self._print_counter += states.shape[0] if states is not None else 1
         if self._print_counter >= 10000:
             ep_len_list = self.tracking_data.get("Episode / Total timesteps (mean)", [])
+            ep_len_max_list = self.tracking_data.get("Episode / Total timesteps (max)", [])
             ep_rew_list = self.tracking_data.get("Reward / Total reward (mean)", [])
+            ep_rew_max_list = self.tracking_data.get("Reward / Total reward (max)", [])
             
             if len(ep_len_list) > 0 and ep_len_list[-1] != 0:
                 self._last_ep_len = ep_len_list[-1]
+            if len(ep_len_max_list) > 0 and ep_len_max_list[-1] != 0:
+                self._last_ep_len_max = ep_len_max_list[-1]
             if len(ep_rew_list) > 0 and ep_rew_list[-1] != 0:
                 self._last_ep_rew = ep_rew_list[-1]
+            if len(ep_rew_max_list) > 0 and ep_rew_max_list[-1] != 0:
+                self._last_ep_rew_max = ep_rew_max_list[-1]
                 
-            # FIX A: Trk% is always 0.0% with 149k WPs — useless. Log raw cumulative WP count
-            # and the per-step reward delta instead.
-            # Trk% = 0.01% needs 1499 WPs traversed (9m of track), rounds to 0.0 with :.1f
-            print(f"Step {timestep} | Rew: {self._last_ep_rew:.1f} | Len: {self._last_ep_len:.0f} | "
+            cum_step = timestep + self.initial_step
+            total_env_samples = cum_step * self.num_envs
+            print(f"Step {cum_step:7d} ({total_env_samples/1e6:5.1f}M env) | Rew: {self._last_ep_rew:6.1f} (max {self._last_ep_rew_max:6.1f}) | "
+                  f"Len: {self._last_ep_len:3.0f} (max {self._last_ep_len_max:3.0f}) | "
                   f"Spd: {speed:.2f} | WPs_cum: {wp_delta:.0f} | WPΔ_rew: {wp_step:.2f}")
             sys.stdout.flush()
             self._print_counter = 0
@@ -130,7 +154,7 @@ def main():
     # 3.5 Flatten for SKRL RandomMemory limitation
     env = SKRLFlattenWrapper(env)
     
-    # 4. Define Memory (Increased to 1024 to prevent catastrophic forgetting - Issue 42)
+    # 4. Define Memory (1024 rollouts with frozen ResNet-18)
     memory = RandomMemory(memory_size=1024, num_envs=env.num_envs, device="cuda:0")
     
     # 5. Define Models
@@ -144,8 +168,8 @@ def main():
     # 6. Configure Agent
     cfg_ppo = PPO_DEFAULT_CONFIG.copy()
     cfg_ppo["rollouts"] = 1024
-    cfg_ppo["mini_batches"] = 4  # Larger mini-batch size (1024*10/4 = 2560 transitions per backprop)
-    cfg_ppo["learning_rate"] = 3e-5  # Reduced from 1e-4 to prevent policy collapse after 241k peak
+    cfg_ppo["mini_batches"] = 8  # Mini-batch size = (1024 * 64 / 8) = 8,192 transitions per backprop
+    cfg_ppo["learning_rate"] = 3e-5  # Stable learning rate for fine-tuning 700-step baseline
     cfg_ppo["random_timesteps"] = 0
     cfg_ppo["learning_starts"] = 0
     cfg_ppo["state_preprocessor"] = None
@@ -158,8 +182,29 @@ def main():
     cfg_ppo["experiment"]["directory"] = log_dir
     cfg_ppo["experiment"]["write_interval"] = 100
     cfg_ppo["experiment"]["checkpoint_interval"] = 500  # Save every 500 rollouts (~65k steps) to prevent disk runaway
+
+    # Auto-detect initial_step from resume checkpoint if not explicitly provided
+    initial_step = args_cli.initial_step
+    if initial_step is None and args_cli.resume:
+        match = re.search(r'agent_(\d+)\.pt', args_cli.resume)
+        if match:
+            initial_step = int(match.group(1))
+            print(f"[Train] Auto-detected initial step offset from checkpoint: {initial_step}")
+        else:
+            initial_step = 0
+    elif initial_step is None:
+        initial_step = 0
     
-    agent = TelemetryPPO(models=models, memory=memory, cfg=cfg_ppo, observation_space=env.observation_space, action_space=env.action_space, device="cuda:0")
+    agent = TelemetryPPO(
+        models=models,
+        memory=memory,
+        cfg=cfg_ppo,
+        observation_space=env.observation_space,
+        action_space=env.action_space,
+        device="cuda:0",
+        initial_step=initial_step,
+        num_envs=args_cli.num_envs
+    )
     
     if args_cli.resume:
         print(f"Resuming from checkpoint: {args_cli.resume}")

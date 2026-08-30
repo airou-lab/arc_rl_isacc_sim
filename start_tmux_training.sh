@@ -13,10 +13,15 @@ fi
 # Create a new tmux session named 'training' in the background
 tmux new-session -d -s training
 
-# Auto-find the highest performing checkpoint (best_agent.pt), fallback to latest agent_*.pt
-LATEST_CKPT=$(find logs/ppo_skrl -name "best_agent.pt" -printf "%T@ %p\n" | sort -n | tail -n 1 | awk '{print $2}')
-if [ -z "$LATEST_CKPT" ]; then
-    LATEST_CKPT=$(find logs/ppo_skrl -name "agent_*.pt" -printf "%T@ %p\n" | sort -n | tail -n 1 | awk '{print $2}')
+# Target the peak 707-step checkpoint (agent_274500.pt), fallback to latest best_agent.pt or agent_*.pt
+TARGET_CKPT="logs/ppo_skrl/20260827-051346/26-08-27_05-13-46-947056_TelemetryPPO/checkpoints/agent_274500.pt"
+if [ -f "$TARGET_CKPT" ]; then
+    LATEST_CKPT="$TARGET_CKPT"
+else
+    LATEST_CKPT=$(find logs/ppo_skrl -name "best_agent.pt" -printf "%T@ %p\n" | sort -n | tail -n 1 | awk '{print $2}')
+    if [ -z "$LATEST_CKPT" ]; then
+        LATEST_CKPT=$(find logs/ppo_skrl -name "agent_*.pt" -printf "%T@ %p\n" | sort -n | tail -n 1 | awk '{print $2}')
+    fi
 fi
 RESUME_FLAG=""
 if [ ! -z "$LATEST_CKPT" ]; then

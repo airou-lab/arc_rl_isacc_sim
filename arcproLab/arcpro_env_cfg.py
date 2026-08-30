@@ -31,9 +31,8 @@ from mdp.debug_terminations import debug_termination
 @configclass
 class EventCfg:
     """Configuration for events."""
-    # Snapped spawn: Uses raycasting to find the road height
-    reset_robot_to_fixed_spawn = EventTermCfg(
-        func=mdp_events.reset_robot_to_fixed_spawn,
+    reset_robot_spawn = EventTermCfg(
+        func=mdp_events.reset_robot_curriculum_spawn,
         mode="reset",
         params={"asset_cfg": SceneEntityCfg("robot")},
     )
@@ -162,7 +161,7 @@ class ActionCfg:
         wheelbase=0.33, 
         track_width=0.28, 
         max_steering_angle=0.5,
-        offset=0.0
+        offset=-0.005
     )
     b_drive = arcpro_actions.GroupedJointVelocityActionCfg(
         asset_name="robot", 
@@ -177,8 +176,8 @@ class RewardCfg:
     # A positive survival bonus caused the agent to spin in circles to farm "living time" without making progress.
     survival_bonus = RewTerm(func=lambda env: torch.ones(env.num_envs, device=env.device), weight=0.0)
 
-    # Anti-Suicide: Increased to 500.0 so that after the dt multiplier (0.02), a -50.0 crash yields a true -500 penalty.
-    termination_penalty = RewTerm(func=mdp_rew.termination_penalty, weight=500.0)
+    # Anti-Suicide: Balanced at 100.0 (true -100 penalty after dt 0.02) to prevent Critic value loss explosion
+    termination_penalty = RewTerm(func=mdp_rew.termination_penalty, weight=100.0)
     
     # Bound the waypoint progress reward with tanh.
     # At 0.5 m/s (~1.7 WPs), tanh(1.7) = 0.93.
@@ -190,14 +189,14 @@ class RewardCfg:
     # Exploration: Tiny reward for applying any throttle/drive action to break out of stagnation
     # Increased steering penalty (-2.0) to prevent the agent from exploiting spinning in circles (Spinning Top exploit).
     action_steer_penalty = RewTerm(func=lambda env: torch.square(env.action_manager.action[:, 0]), weight=-0.5)
-    # Forward Drive Incentive: Encourages positive throttle to break out of crawling trap.
+    # Forward Drive Incentive: Balanced to 5.0 so forward motion is encouraged without barrelling into corners
     action_drive_reward = RewTerm(
         func=lambda env: env.action_manager.action[:, 1],
-        weight=20.0
+        weight=5.0
     )
     
     # Precision: Lane centering (Provides dense feedback to steer toward centerline)
-    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=10.0)
+    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=2.5)
     
     # Force movement: Penalty forces it to move!
     # Uses absolute speed so reverse driving doesn't spuriously trigger penalty.
@@ -210,14 +209,17 @@ class RewardCfg:
     # It densely rewards the agent for facing forward (+10/step) and heavily penalizes facing backward (-10/step).
     # This prevents spin-outs and backwards driving without explicitly penalizing the steering action itself.
     heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=100.0)
-    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=1.0)
+    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=2.0)
     
-    # Jitter Suppression (Straightaway Stability Tuning - Active Jerk Penalty)
-    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.5)
+    # Jitter Suppression (Straightaway Stability Tuning - Issue 88)
+    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.05)
     
     # Boundary Penalty: (Enabled: Risk-aware shaping to smoothly steer away from walls)
     # Set to 0.4 (Issue 33) to perfectly balance against stagnation without over-saturation.
     boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.0)
+
+    # Curvature-Adaptive Target Speed Tracking (Incentivizes braking before sharp turn apexes)
+    speed_tracking = RewTerm(func=mdp_rew.curvature_speed_reward, weight=30.0)
 
 
 @configclass

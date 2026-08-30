@@ -1,28 +1,28 @@
 # CTA Codebase Map & RAG Query Guide
 cta_version: '1.0'
 database: '.cta/cta_codebase.db'
-last_updated: '2026-08-27T03:27:33.494284+00:00Z'
-git_commit: 'a7968e919a91352677e2f945dc5f8ffb6ce22af1'
+last_updated: '2026-08-30T23:53:38.768986+00:00Z'
+git_commit: '61152ac0d4453fd98e7e88dbc2e0e9a485718ae8'
 stats:
-  total_indexed_files: 1799
+  total_indexed_files: 161
   total_symbols: 673
 
 domain_tags:
   config:
     category: 'config'
-    matching_entities: 14
+    matching_entities: 12
     sample_targets: ["arcproLab/policy_stack/agent/agent_env_wrapper.py", "arcproLab/policy_stack/agent/config.py", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/envs/registry.py", "arcproLab/policy_stack/envs/__init__.py"]
   database:
     category: 'layer'
     matching_entities: 4
-    sample_targets: ["arcproLab/agents/skrl_models.py", "arcproLab/policy_stack/baselines/dave2/model.py", "arcproLab/scripts/init_gsd_db.py", "arcproLab/models/road_following_model.pth"]
+    sample_targets: ["arcproLab/policy_stack/baselines/dave2/model.py", "arcproLab/scripts/init_gsd_db.py", "arcproLab/models/road_following_model.pth", "arcproLab/agents/skrl_models.py"]
   robotics:
     category: 'domain'
-    matching_entities: 6
-    sample_targets: ["arcproLab/arcpro_robot_cfg.py", "arcproLab/assets/robot/F1Tenth_Generated.usd", "arcproLab/assets/robot/F1Tenth_Metric.usd", "arcproLab/assets/robot/F1Tenth_Metric_Fixed.usd", "arcproLab/scripts/test_intersection_crossing.py"]
+    matching_entities: 3
+    sample_targets: ["arcproLab/arcpro_robot_cfg.py", "arcproLab/scripts/test_intersection_crossing.py", "arcproLab/scripts/list_robot_joints.py"]
   testing:
     category: 'layer'
-    matching_entities: 45
+    matching_entities: 24
     sample_targets: ["arcproLab/test_rewards.py", "arcproLab/policy_stack/pytest.ini", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/tests/test_intersection_worker.py", "arcproLab/policy_stack/tests/test_intersection_node_server.py"]
 
 query_templates:

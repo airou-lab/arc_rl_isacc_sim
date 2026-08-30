@@ -109,11 +109,11 @@ def jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
         return torch.zeros(env.num_envs, device=env.device)
         
     current_steer = env.action_manager.action[:, 0]
-    if "prev_action" not in env.extras:
-        env.extras["prev_action"] = env.action_manager.action.clone()
+    if "prev_action_jerk" not in env.extras:
+        env.extras["prev_action_jerk"] = env.action_manager.action.clone()
         return torch.zeros(env.num_envs, device=env.device)
     
-    prev_steer = env.extras["prev_action"][:, 0]
+    prev_steer = env.extras["prev_action_jerk"][:, 0]
     steer_delta = current_steer - prev_steer
     
     # Zero out penalty for envs that just reset
@@ -121,8 +121,8 @@ def jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
         just_reset = env.episode_length_buf <= 1
         steer_delta = torch.where(just_reset, torch.zeros_like(steer_delta), steer_delta)
     
-    # Update prev_action for the next step
-    env.extras["prev_action"] = env.action_manager.action.clone()
+    # Update prev_action_jerk for the next step
+    env.extras["prev_action_jerk"] = env.action_manager.action.clone()
     
     return -100.0 * torch.square(steer_delta)
 
@@ -131,16 +131,19 @@ def action_rate_smoothness_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
         return torch.zeros(env.num_envs, device=env.device)
         
     current_action = env.action_manager.action
-    if "prev_action" not in env.extras:
-        env.extras["prev_action"] = current_action.clone()
+    if "prev_action_smoothness" not in env.extras:
+        env.extras["prev_action_smoothness"] = current_action.clone()
         return torch.zeros(env.num_envs, device=env.device)
         
-    prev_action = env.extras["prev_action"]
+    prev_action = env.extras["prev_action_smoothness"]
     steer_delta = current_action[:, 0] - prev_action[:, 0]
     
     if hasattr(env, "episode_length_buf"):
         just_reset = env.episode_length_buf <= 1
         steer_delta = torch.where(just_reset, torch.zeros_like(steer_delta), steer_delta)
+        
+    # Update prev_action_smoothness for the next step
+    env.extras["prev_action_smoothness"] = current_action.clone()
         
     reward = -1.0 * torch.square(steer_delta)
     return reward
@@ -199,4 +202,23 @@ def stationary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     )
     
     return torch.where(is_stagnant, torch.tensor(-5.0, device=env.device), torch.tensor(0.0, device=env.device))
+
+def curvature_speed_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """
+    Rewards maintaining appropriate speed based on track curvature (kappa).
+    On straightaways (|kappa| ~ 0): target speed = 0.85 m/s.
+    In sharp corners (|kappa| > 1.0): target speed = 0.40 m/s (braking into apex).
+    """
+    from mdp.track_manager import get_track_manager
+    tm = get_track_manager(device=env.device)
+    if tm.last_indices is None or tm.curvature_tensor is None:
+        return torch.zeros(env.num_envs, device=env.device)
+        
+    kappa = torch.abs(tm.curvature_tensor[tm.last_indices])
+    # Target speed decreases with curvature: 0.85 m/s on straights -> 0.35 m/s in sharp turns
+    target_speed = torch.clamp(0.85 - (kappa * 0.4), min=0.35, max=0.85)
+    current_speed = torch.norm(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1)
+    
+    speed_error = torch.abs(current_speed - target_speed)
+    return torch.exp(-2.0 * speed_error)
 

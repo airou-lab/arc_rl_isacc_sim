@@ -138,8 +138,15 @@ try:
     step_count = 0
     while simulation_app.is_running():
         with torch.no_grad():
-            # SKRL policy model forward pass
-            action = agent.act(obs, timestep=0, timesteps=0)[0]
+            # Deterministic policy execution: Use mean action without stochastic exploration noise
+            _, _, outputs = agent.act(obs, timestep=0, timesteps=0)
+            action = outputs.get("mean_actions", None)
+            if action is None:
+                action = agent.policy.compute({"states": obs})[0]
+            
+            # Smooth steering authority for straightaway lane tracking (gentle ±8.5 deg range):
+            action = action.clone()
+            action[:, 0] = action[:, 0] * 0.30
         
         obs, reward, terminated, truncated, info = env.step(action)
         step_count += 1
