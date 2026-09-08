@@ -11,6 +11,10 @@ env/
 # Binary Data
 *.usd
 *.npy
+*.pt
+*.png
+
+
 
 # Logs and Transient Output
 *.log
@@ -24,6 +28,6 @@ exts/omni.*
 .thumbs.db
 debug_frames/
 *.npz
-.gsd/archive.db
 *.db
 .aider*
+.cta/

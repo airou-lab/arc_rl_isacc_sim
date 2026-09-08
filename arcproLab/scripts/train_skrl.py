@@ -16,7 +16,6 @@ simulation_app = app_launcher.app
 import os
 import sys
 import re
-import torch
 import warnings
 from datetime import datetime
 
@@ -33,14 +32,11 @@ if ARCPRO_LAB_DIR not in sys.path:
 from isaaclab.envs import ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
 
-from skrl.envs.wrappers.torch import IsaacLabWrapper, Wrapper
+from skrl.envs.wrappers.torch import IsaacLabWrapper
 from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
 from skrl.trainers.torch import SequentialTrainer
 from skrl.memories.torch import RandomMemory
-import numpy as np
 import gymnasium as gym
-
-from torchvision.models import resnet18, ResNet18_Weights
 
 from agents.skrl_wrappers import SKRLFlattenWrapper
 
@@ -181,7 +177,7 @@ def main():
     log_dir = os.path.join("logs", "ppo_skrl", datetime.now().strftime("%Y%m%d-%H%M%S"))
     cfg_ppo["experiment"]["directory"] = log_dir
     cfg_ppo["experiment"]["write_interval"] = 100
-    cfg_ppo["experiment"]["checkpoint_interval"] = 500  # Save every 500 rollouts (~65k steps) to prevent disk runaway
+    cfg_ppo["experiment"]["checkpoint_interval"] = 250000  # Save every 0.25M (250k) timesteps to prevent disk bloat
 
     # Auto-detect initial_step from resume checkpoint if not explicitly provided
     initial_step = args_cli.initial_step

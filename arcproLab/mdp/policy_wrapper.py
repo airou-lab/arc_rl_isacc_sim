@@ -169,6 +169,6 @@ if __name__ == "__main__":
 
     except FileNotFoundError as e:
         print(f"Error: {e}")
-    except Exception as e:
+    except Exception:
         import traceback
         traceback.print_exc()

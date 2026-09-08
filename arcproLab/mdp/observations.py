@@ -6,6 +6,7 @@
 import torch
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
+from mdp.curriculum_config import get_lookahead_distance
 
 def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     return _compute_telemetry(env, asset_cfg, masked=True)
@@ -135,42 +136,48 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
         env.extras["track_progress_pct"] = track_progress_pct
         env.extras["track_wp_delta"] = delta_wp  # raw waypoints traversed
     
-    # Reset distance and spawn_wp for environments that just reset
+    # Reset distance and track_dir for environments that just reset
     reset_buf = getattr(env, "reset_buf", None)
     if reset_buf is not None and masked:
         env.extras["distance"] = torch.where(reset_buf, torch.zeros_like(env.extras["distance"]), env.extras["distance"])
-        if "spawn_wp_idx" in env.extras and tm.last_indices is not None:
-            env.extras["spawn_wp_idx"] = torch.where(reset_buf, tm.last_indices, env.extras["spawn_wp_idx"])
-            new_dir = torch.where(torch.abs(raw_head_err) > 1.5708, -1.0, 1.0).to(env.device)
-            env.extras["track_dir"] = torch.where(reset_buf, new_dir, env.extras["track_dir"])
+        new_dir = torch.where(torch.abs(raw_head_err) > 1.5708, -1.0, 1.0).to(env.device)
+        env.extras["track_dir"] = torch.where(reset_buf, new_dir, env.extras["track_dir"])
 
     # Calculate distance moved in this step (only update once per step)
     if masked:
         # Local X points to the rear wing (flipped), so we negate to accumulate forward distance
         env.extras["distance"] -= asset.data.root_lin_vel_b[:, 0] * 0.02
     
+    # Sample Lookahead Curvature for Pre-Braking and Curriculum Navigation
+    env.extras["lookahead_kappa"] = tm.get_lookahead_curvature(
+        lookahead_distance=get_lookahead_distance(), 
+        track_dir=env.extras.get("track_dir")
+    )
+    
     # Store raw values in extras for Reward/Termination (Unmasked)
     env.extras["lat_err"] = lat_err
     env.extras["head_err"] = head_err
+    env.extras["kappa"] = kappa
     env.extras["dist_g"] = dist_g # Masking signal for gate crossing
     env.extras["dist_y"] = dist_y
     env.extras["dist_w"] = dist_w
     
-    # Index 8: Lateral Error (Zeroed for Actor, Unmasked for Critic)
+    # Asymmetric Actor-Critic (AAC) Routing:
+    # Slot 10 provides Lookahead Route Curvature (Pre-Braking Architecture), accessible to BOTH Actor and Critic.
+    # Slots 8, 9, 11 (lat_err, head_err, distance) remain privileged coordinates:
+    # - Actor receives strictly 0.0 (forces vision-only lane following via camera).
+    # - Critic receives unmasked values (provides low-variance value function baseline).
     if not masked:
-        obs[:, 8] = env.extras["lat_err"] 
+        obs[:, 8] = env.extras["lat_err"]
+        obs[:, 9] = env.extras["head_err"]
+        obs[:, 10] = env.extras["lookahead_kappa"]
+        if "distance" in env.extras:
+            obs[:, 11] = env.extras["distance"]
     else:
         obs[:, 8] = 0.0
-        
-    # Index 9: Heading Alignment Error (Unmasked: tells policy the orientation of the road curve)
-    obs[:, 9] = env.extras["head_err"]
-    
-    # Index 10: Path Curvature Kappa (Unmasked: tells policy the radius/sharpness of the upcoming turn)
-    obs[:, 10] = kappa
-
-    # Index 11: Total Distance (Accumulated)
-    if "distance" in env.extras:
-        obs[:, 11] = env.extras["distance"]
+        obs[:, 9] = 0.0
+        obs[:, 10] = env.extras["lookahead_kappa"]
+        obs[:, 11] = 0.0
         
     # Final verification for NaNs
     nan_mask = torch.isnan(obs)

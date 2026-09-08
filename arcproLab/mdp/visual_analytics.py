@@ -1,5 +1,4 @@
 import omni.ui as ui
-import torch
 
 class TelemetryWindow:
     def __init__(self, window_name="Robot Telemetry"):

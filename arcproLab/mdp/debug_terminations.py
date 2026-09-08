@@ -1,5 +1,4 @@
 import torch
-from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
 def debug_termination(env: ManagerBasedRLEnv) -> torch.Tensor:

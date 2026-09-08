@@ -227,7 +227,7 @@ class TrackManager:
 
     def collect_raw_marker_points(self):
         import omni.usd
-        from pxr import Usd, UsdGeom, UsdShade, Gf
+        from pxr import Usd, UsdGeom, UsdShade
         stage = omni.usd.get_context().get_stage()
         root_prim = stage.GetPrimAtPath("/World/envs/env_0")
         if not root_prim.IsValid(): root_prim = stage.GetPseudoRoot()
@@ -524,6 +524,77 @@ class TrackManager:
         
         # Flatten: [wp1_x, wp1_y, wp2_x, wp2_y, ...]
         return torch.stack((local_x, local_y), dim=-1).view(num_envs, -1)
+
+    def get_lookahead_curvature(self, lookahead_distance: float = 1.2, track_dir: torch.Tensor | None = None) -> torch.Tensor:
+        """
+        Calculates lookahead track curvature in the vehicle's ego frame.
+
+        Args:
+            lookahead_distance: Forward distance along the track in meters (default: 1.2m).
+            track_dir: Direction of travel relative to waypoint sequence (+1.0 forward, -1.0 reverse).
+                      Can be None, a float/int, or a 1D Tensor of shape (B,).
+
+        Returns:
+            Signed ego-frame curvature tensor of shape (B,) clamped to [-3.0, 3.0] on self.device.
+        """
+        # Defensive guards for uninitialized state or missing waypoints
+        if (
+            self.last_indices is None
+            or self.curvature_tensor is None
+            or self.waypoints is None
+            or len(self.waypoints) == 0
+        ):
+            if track_dir is not None and isinstance(track_dir, torch.Tensor):
+                batch_size = track_dir.shape[0] if track_dir.ndim > 0 else 1
+            elif self.last_indices is not None:
+                batch_size = self.last_indices.shape[0] if self.last_indices.ndim > 0 else 1
+            else:
+                batch_size = 1
+            return torch.zeros(batch_size, device=self.device, dtype=torch.float32)
+
+        if self.last_indices.numel() == 0:
+            return torch.empty(0, device=self.device, dtype=torch.float32)
+
+        num_envs = self.last_indices.shape[0]
+        num_wps = self.curvature_tensor.shape[0]
+
+        if num_wps == 0:
+            return torch.zeros(num_envs, device=self.device, dtype=torch.float32)
+
+        # Calculate waypoint offset using 0.010m (1cm) step spacing (~120 steps for 1.2m)
+        step_offset = int(round(lookahead_distance / 0.010))
+
+        # Align with vehicle driving direction via track_dir
+        if track_dir is None:
+            dir_sign = torch.ones(num_envs, device=self.device, dtype=torch.long)
+            dir_float = torch.ones(num_envs, device=self.device, dtype=torch.float32)
+        elif isinstance(track_dir, torch.Tensor):
+            td = track_dir.to(device=self.device, dtype=torch.float32)
+            if td.ndim == 0:
+                td = td.unsqueeze(0).expand(num_envs)
+            elif td.ndim > 1:
+                td = td.view(-1)
+            if td.shape[0] != num_envs:
+                td = td[:num_envs] if td.shape[0] > num_envs else torch.nn.functional.pad(td, (0, num_envs - td.shape[0]), value=1.0)
+            dir_sign = torch.where(td < 0.0, torch.tensor(-1, device=self.device, dtype=torch.long), torch.tensor(1, device=self.device, dtype=torch.long))
+            dir_float = dir_sign.to(dtype=torch.float32)
+        else:
+            val = -1 if float(track_dir) < 0 else 1
+            dir_sign = torch.full((num_envs,), val, device=self.device, dtype=torch.long)
+            dir_float = dir_sign.to(dtype=torch.float32)
+
+        # Advance along vehicle's driving direction with safe modulo wrap-around
+        lookahead_indices = (self.last_indices.to(device=self.device, dtype=torch.long) + dir_sign * step_offset) % num_wps
+        lookahead_indices = (lookahead_indices + num_wps) % num_wps
+
+        # Sample signed curvature in waypoint frame and convert to vehicle ego-frame (inverts sign when driving backwards)
+        kappa_wp = self.curvature_tensor[lookahead_indices].to(device=self.device, dtype=torch.float32)
+        signed_curvature = kappa_wp * dir_float
+
+        # Defensive NaN / Inf sanitization and clamp to [-3.0, 3.0]
+        signed_curvature = torch.nan_to_num(signed_curvature, nan=0.0, posinf=3.0, neginf=-3.0)
+        clamped_curvature = torch.clamp(signed_curvature, min=-3.0, max=3.0)
+        return clamped_curvature.to(device=self.device, dtype=torch.float32)
 
 _TRACK_MANAGER = None
 def get_track_manager(device: str = "cuda:0"):

@@ -3,7 +3,6 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-import torch
 from pxr import Usd
 import isaaclab.sim as sim_utils
 import isaaclab.sim.schemas as schemas
@@ -68,7 +67,6 @@ def spawn_f1tenth(
 
 def _apply_steering_limits(robot_prim: Usd.Prim, stage) -> None:
     from pxr import UsdPhysics
-    import math
     
     for child in Usd.PrimRange(robot_prim):
         child_name = child.GetName()
@@ -82,13 +80,11 @@ def _apply_steering_limits(robot_prim: Usd.Prim, stage) -> None:
 
 def _apply_tire_friction(robot_prim: Usd.Prim, stage) -> None:
     """Apply rubber-on-asphalt PhysX material to all Wheel_* child prims."""
-    from pxr import UsdPhysics, UsdShade, Gf, Sdf
+    from pxr import UsdPhysics, UsdShade
 
     STATIC_FRICTION  = 3.0
     DYNAMIC_FRICTION = 3.0
     RESTITUTION      = 0.0
-
-    robot_path = str(robot_prim.GetPath())
 
     for child in Usd.PrimRange(robot_prim):
         child_name = child.GetName()

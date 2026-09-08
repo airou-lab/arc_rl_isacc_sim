@@ -48,7 +48,6 @@ elif not os.path.exists(args_cli.checkpoint):
 print("Importing torch...")
 sys.stdout.flush()
 import torch
-import torch.nn as nn
 
 print("Importing IsaacLab...")
 sys.stdout.flush()
@@ -63,7 +62,6 @@ sys.stdout.flush()
 from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic
 from skrl.envs.wrappers.torch import IsaacLabWrapper
-import numpy as np
 import gymnasium as gym
 
 from agents.skrl_wrappers import SKRLFlattenWrapper
@@ -144,9 +142,8 @@ try:
             if action is None:
                 action = agent.policy.compute({"states": obs})[0]
             
-            # Smooth steering authority for straightaway lane tracking (gentle ±8.5 deg range):
+            # Full steering authority for cornering & lane following (matches training action space)
             action = action.clone()
-            action[:, 0] = action[:, 0] * 0.30
         
         obs, reward, terminated, truncated, info = env.step(action)
         step_count += 1
@@ -169,7 +166,7 @@ try:
     print("Simulation loop ended.")
     env.close()
 
-except Exception as e:
+except Exception:
     print("="*50)
     print("ERROR CAUGHT IN PLAY_SKRL.PY:")
     traceback.print_exc()

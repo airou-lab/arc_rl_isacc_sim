@@ -13,29 +13,28 @@ fi
 # Create a new tmux session named 'training' in the background
 tmux new-session -d -s training
 
-# Target the peak 707-step checkpoint (agent_274500.pt), fallback to latest best_agent.pt or agent_*.pt
-TARGET_CKPT="logs/ppo_skrl/20260827-051346/26-08-27_05-13-46-947056_TelemetryPPO/checkpoints/agent_274500.pt"
-if [ -f "$TARGET_CKPT" ]; then
-    LATEST_CKPT="$TARGET_CKPT"
+# Automatically resume from specified checkpoint or the newest saved checkpoint
+if [ -n "$1" ]; then
+    LATEST_CKPT="$1"
 else
-    LATEST_CKPT=$(find logs/ppo_skrl -name "best_agent.pt" -printf "%T@ %p\n" | sort -n | tail -n 1 | awk '{print $2}')
+    LATEST_CKPT=$(find logs/ppo_skrl -name "agent_*.pt" -printf "%T@ %p\n" 2>/dev/null | sort -n | tail -n 1 | awk '{print $2}')
     if [ -z "$LATEST_CKPT" ]; then
-        LATEST_CKPT=$(find logs/ppo_skrl -name "agent_*.pt" -printf "%T@ %p\n" | sort -n | tail -n 1 | awk '{print $2}')
+        LATEST_CKPT=$(find logs/ppo_skrl -name "best_agent.pt" -printf "%T@ %p\n" 2>/dev/null | sort -n | tail -n 1 | awk '{print $2}')
     fi
 fi
 RESUME_FLAG=""
 if [ ! -z "$LATEST_CKPT" ]; then
     RESUME_FLAG="--resume $LATEST_CKPT"
-    echo "Found checkpoint to resume: $LATEST_CKPT"
+    echo "Resuming training from checkpoint: $LATEST_CKPT"
 fi
 
 # Pane 0: Start the actual training, pipe output to tee so it logs AND shows on screen
-tmux send-keys -t training:0.0 "export TORCH_USE_CUDA_DSA=1; export PYTHONUNBUFFERED=1; /home/arika/IsaacLab/isaaclab.sh -p arcproLab/scripts/train_skrl.py --num_envs 32 --headless --enable_cameras --total_timesteps 5000000 $RESUME_FLAG | tee logs/skrl_phase1.log" C-m
+tmux send-keys -t training:0.0 "export TORCH_USE_CUDA_DSA=1; export PYTHONUNBUFFERED=1; /home/arika/IsaacLab/isaaclab.sh -p arcproLab/scripts/train_skrl.py --num_envs 20 --headless --enable_cameras --total_timesteps 5000000 $RESUME_FLAG | tee logs/skrl_phase1.log" C-m
 
-# Pane 1: Split vertically and start the watchdog
+# Pane 1: Split vertically and start the autonomous self-healing sentinel
 tmux split-window -t training:0 -v
-# Give Isaac Sim 20 seconds to initialize simulation before starting the watchdog
-tmux send-keys -t training:0.1 'sleep 20 && tail -f logs/skrl_phase1.log | python arcproLab/scripts/watchdog.py' C-m
+# Give Isaac Sim 20 seconds to initialize simulation before starting the sentinel
+tmux send-keys -t training:0.1 'sleep 20 && python3 arcproLab/scripts/autonomous_sentinel.py --daemon --interval 15.0' C-m
 
-echo "Started 10-env SKRL training + watchdog in tmux."
+echo "Started 20-env SKRL training (~10GB VRAM) + autonomous sentinel in tmux."
 echo "Run 'tmux attach -t training' to view it live!"

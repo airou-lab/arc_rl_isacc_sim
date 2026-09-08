@@ -15,7 +15,7 @@ USD_DIR = os.path.join(ARCPRO_LAB_DIR, "..", "openStreetUSD")
 
 from isaaclab.utils import configclass
 from isaaclab.envs import ManagerBasedRLEnvCfg, ViewerCfg
-from isaaclab.managers import ObservationGroupCfg, ObservationTermCfg as ObsTerm, ActionTermCfg as ActionTerm, RewardTermCfg as RewTerm, TerminationTermCfg as DoneTerm, SceneEntityCfg, EventTermCfg
+from isaaclab.managers import ObservationGroupCfg, ObservationTermCfg as ObsTerm, RewardTermCfg as RewTerm, TerminationTermCfg as DoneTerm, SceneEntityCfg, EventTermCfg
 from isaaclab.assets import AssetBaseCfg
 from isaaclab.sensors import TiledCameraCfg, ContactSensorCfg
 from isaaclab.scene import InteractiveSceneCfg
@@ -25,8 +25,6 @@ import isaaclab.envs.mdp as mdp
 
 from arcpro_robot_cfg import ARCPRO_ROBOT_CFG
 import mdp.observations as mdp_obs, mdp.rewards as mdp_rew, mdp.terminations as mdp_done, mdp.events as mdp_events
-import mdp.spawner as arcpro_spawner
-from mdp.debug_terminations import debug_termination
 
 @configclass
 class EventCfg:
@@ -161,7 +159,7 @@ class ActionCfg:
         wheelbase=0.33, 
         track_width=0.28, 
         max_steering_angle=0.5,
-        offset=-0.005
+        offset=0.0
     )
     b_drive = arcpro_actions.GroupedJointVelocityActionCfg(
         asset_name="robot", 
@@ -219,12 +217,12 @@ class RewardCfg:
     boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.0)
 
     # Curvature-Adaptive Target Speed Tracking (Incentivizes braking before sharp turn apexes)
-    speed_tracking = RewTerm(func=mdp_rew.curvature_speed_reward, weight=30.0)
+    speed_tracking = RewTerm(func=mdp_rew.curvature_speed_reward, weight=60.0)
 
 
 @configclass
 class TerminationCfg:
-    roadmark_contact = DoneTerm(func=mdp_done.white_line_contact, params={"threshold": 0.15})
+    roadmark_contact = DoneTerm(func=mdp_done.white_line_contact)
     # Physical USD Contact: Terminate if any part of the robot touches the physical ground plane.
     # NOTE FOR USER: Threshold MUST be > 50.0! The track mesh is thin and rests 5cm above the ground plane.
     # The car's wheels slightly clip through the track mesh and constantly touch the ground plane beneath it,

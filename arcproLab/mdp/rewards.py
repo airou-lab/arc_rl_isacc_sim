@@ -6,6 +6,7 @@
 import torch
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
+from mdp.curriculum_config import get_lookahead_distance
 
 def waypoint_progress_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """
@@ -151,8 +152,10 @@ def action_rate_smoothness_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
 def heading_alignment_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     head_err = env.extras.get("head_err", torch.zeros(env.num_envs, device=env.device))
     speed = torch.norm(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1)
-    # Multiply by speed so the agent cannot farm heading points while sitting still.
-    return speed * torch.clamp(torch.cos(head_err), min=0.0)
+    # Gated by movement (>= 0.25 m/s) to prevent farming heading while stopped,
+    # without penalizing the agent for braking to 0.35 m/s into corners!
+    speed_gate = torch.clamp(speed / 0.25, max=1.0)
+    return speed_gate * torch.clamp(torch.cos(head_err), min=0.0)
 
 def boundary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
@@ -183,8 +186,10 @@ def stationary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     progress = current_wp - env.extras["last_wp_check"]
     
     # Grace period: don't penalize during first 50 steps (spawning/settling)
-    # Stagnant if progress is less than 5.0 waypoints
-    is_stagnant = (progress < 5.0) & check_step & (env.episode_length_buf > 50)
+    # Stagnant if progress is less than 3.0 waypoints (allows safe 0.30 m/s cornering)
+    # Stagnation penalty is suppressed when dwelling at a stop bar / red signal (go_signal == 0)
+    is_go = env.extras.get("go_signal", torch.ones(env.num_envs, device=env.device)) > 0.5
+    is_stagnant = (progress < 3.0) & check_step & (env.episode_length_buf > 50) & is_go
     
     # Update the tracker for the environments that are checking this step
     env.extras["last_wp_check"] = torch.where(
@@ -205,20 +210,34 @@ def stationary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
 
 def curvature_speed_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
-    Rewards maintaining appropriate speed based on track curvature (kappa).
-    On straightaways (|kappa| ~ 0): target speed = 0.85 m/s.
-    In sharp corners (|kappa| > 1.0): target speed = 0.40 m/s (braking into apex).
+    Rewards maintaining appropriate speed based on track curvature (kappa) and lookahead curvature.
+    On straightaways (|effective_kappa| ~ 0): target speed = 0.85 m/s.
+    In sharp corners (|effective_kappa| >= 1.25): target speed = 0.35 m/s (pre-braking into apex).
     """
     from mdp.track_manager import get_track_manager
     tm = get_track_manager(device=env.device)
     if tm.last_indices is None or tm.curvature_tensor is None:
         return torch.zeros(env.num_envs, device=env.device)
-        
-    kappa = torch.abs(tm.curvature_tensor[tm.last_indices])
-    # Target speed decreases with curvature: 0.85 m/s on straights -> 0.35 m/s in sharp turns
-    target_speed = torch.clamp(0.85 - (kappa * 0.4), min=0.35, max=0.85)
-    current_speed = torch.norm(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1)
+
+    current_kappa = tm.curvature_tensor[tm.last_indices].to(device=env.device, dtype=torch.float32)
+
+    # Fetch lookahead curvature from extras if available; fallback to computing from TrackManager
+    if "lookahead_kappa" in env.extras and env.extras["lookahead_kappa"] is not None:
+        lookahead_kappa = env.extras["lookahead_kappa"].to(device=env.device, dtype=torch.float32)
+    else:
+        lookahead_kappa = tm.get_lookahead_curvature(
+            lookahead_distance=get_lookahead_distance(), 
+            track_dir=env.extras.get("track_dir")
+        ).to(device=env.device, dtype=torch.float32)
+
+    if lookahead_kappa.shape != current_kappa.shape:
+        lookahead_kappa = lookahead_kappa.view_as(current_kappa)
+
+    effective_kappa = torch.maximum(torch.abs(current_kappa), torch.abs(lookahead_kappa))
+    # Target speed decreases with curvature: 0.85 m/s on straights -> 0.35 m/s in sharp turns (effective_kappa >= 0.70)
+    target_speed = torch.clamp(0.85 - (effective_kappa * 0.70), min=0.35, max=0.85).to(device=env.device)
+    current_speed = torch.norm(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1).to(device=env.device)
     
     speed_error = torch.abs(current_speed - target_speed)
-    return torch.exp(-2.0 * speed_error)
+    return torch.exp(-2.0 * speed_error).to(device=env.device)
 

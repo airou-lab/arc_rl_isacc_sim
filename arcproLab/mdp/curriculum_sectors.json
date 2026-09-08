@@ -1,0 +1,11 @@
+{
+  "sector_weights": [0.20, 0.20, 0.20, 0.20, 0.20],
+  "sectors": {
+    "1": "Start Line (11m straight)",
+    "2": "Corner 1 Runway Approach (2.5m runway)",
+    "3": "Leg 2 Post-C1 Exit (8m runway)",
+    "4": "Leg 2 Intersection Approach (4.15m runway)",
+    "5": "North Straight Return Corridor (10m runway)"
+  },
+  "updated_at": "2026-09-07T18:25:00Z"
+}

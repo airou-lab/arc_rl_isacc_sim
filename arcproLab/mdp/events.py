@@ -1,41 +1,59 @@
-# Copyright (c) 2022-2024, The Isaac Lab Project Developers.
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
-
+import math
 import torch
-import numpy as np
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
-import omni.physx
-from pxr import UsdGeom, Usd, Gf
-import math
+from mdp.curriculum_config import get_sector_thresholds
 
 def reset_robot_curriculum_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")):
     """
-    Curriculum Spawner:
-    50% fixed starting line, 50% uniformly sampled along the 5,000 track waypoints.
-    Trains the agent across all 4 corners and straightaways simultaneously.
+    5-Sector Certified Circuit Spawner (Configurable per sector):
+    Sector 1: Start Line (X = -16.197, Y = 5.50, yaw = -1.5708 [South])
+    Sector 2: Corner 1 Runway Approach (X = -16.197, Y = -3.50, yaw = -1.5708 [South])
+    Sector 3: Leg 2 Post-C1 Exit (X = -12.000, Y = -7.10, yaw = 0.0 [East])
+    Sector 4: Leg 2 Intersection Approach (X = -8.000, Y = -7.10, yaw = 0.0 [East])
+    Sector 5: North Straight Return Corridor (X = -6.082, Y = 6.377, yaw = 3.14159 [West])
+    Applies ±5cm lateral jitter and ±3° heading noise to prevent open-loop memorization.
     """
     if env_ids is None:
         env_ids = torch.arange(env.scene.num_envs, device=env.device)
     asset = env.scene[asset_cfg.name]
     num_resets = len(env_ids)
 
-    from mdp.track_manager import get_track_manager
-    tm = get_track_manager(device=env.device)
-    
-    base_spawn_x, base_spawn_y = -16.197, 5.50
-    base_spawn_yaw = -1.5708 # Face South
-
     env_origins = env.scene.env_origins[env_ids]
     final_pos = torch.zeros((num_resets, 3), device=env.device)
     quats = torch.zeros((num_resets, 4), device=env.device)
 
-    # 100% Fixed Start Line Baseline (Clean 707-step continuous full-lap run)
-    spawn_x = torch.full((num_resets,), base_spawn_x, device=env.device)
-    spawn_y = torch.full((num_resets,), base_spawn_y, device=env.device)
-    spawn_yaw = torch.full((num_resets,), base_spawn_yaw, device=env.device)
+    # 5-Sector Certified Circuit Spawner with Dynamic Curriculum Thresholds:
+    t1, t2, t3, t4 = get_sector_thresholds()
+    r = torch.rand(num_resets, device=env.device)
+    base_x = torch.where(r < t1, torch.tensor(-16.197, device=env.device),
+             torch.where(r < t2, torch.tensor(-16.197, device=env.device),
+             torch.where(r < t3, torch.tensor(-12.000, device=env.device),
+             torch.where(r < t4, torch.tensor(-8.000, device=env.device),
+                                  torch.tensor(-6.082, device=env.device)))))
+
+    base_y = torch.where(r < t1, torch.tensor(5.50, device=env.device),
+             torch.where(r < t2, torch.tensor(-3.50, device=env.device),
+             torch.where(r < t3, torch.tensor(-7.10, device=env.device),
+             torch.where(r < t4, torch.tensor(-7.10, device=env.device),
+                                  torch.tensor(6.377, device=env.device)))))
+
+    base_yaw = torch.where(r < t1, torch.tensor(-1.5708, device=env.device),
+               torch.where(r < t2, torch.tensor(-1.5708, device=env.device),
+               torch.where(r < t3, torch.tensor(0.0, device=env.device),
+               torch.where(r < t4, torch.tensor(0.0, device=env.device),
+                                    torch.tensor(3.14159265, device=env.device)))))
+
+    # Domain Randomization: Lateral Jitter (±5cm) & Heading Noise (±3 deg)
+    # Prevents fixed-trajectory memorization and forces active visual lane centering!
+    lat_jitter = (torch.rand(num_resets, device=env.device) * 2.0 - 1.0) * 0.05
+    head_noise = (torch.rand(num_resets, device=env.device) * 2.0 - 1.0) * (3.0 * math.pi / 180.0)
+
+    # Apply lateral jitter perpendicular to track heading
+    # Heading is South (-1.5708 rad): lateral normal is (-sin(yaw), cos(yaw)) = (1, 0)
+    spawn_x = base_x - torch.sin(base_yaw) * lat_jitter
+    spawn_y = base_y + torch.cos(base_yaw) * lat_jitter
+    spawn_yaw = base_yaw + head_noise
 
     final_pos[:, 0] = env_origins[:, 0] + spawn_x
     final_pos[:, 1] = env_origins[:, 1] + spawn_y

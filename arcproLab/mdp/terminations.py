@@ -7,11 +7,11 @@ import torch
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
-def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"), threshold: float = 0.15) -> torch.Tensor:
+def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"), threshold: float = 0.05) -> torch.Tensor:
     """
-    Terminates if the robot hits a white line boundary.
-    Mastery Logic: Relaxed margin (0.15m) to prevent physics-induced resets, 
-    but still resets if leaving the road.
+    Terminates if the robot hits a white or yellow line boundary.
+    Configured to 0.05m (5cm) to allow tight inner-curb apex clipping (8.3cm clearance)
+    while still immediately resetting if the vehicle departs the drivable road surface.
     """
     from mdp.track_manager import get_track_manager
     tm = get_track_manager(device=env.device)
@@ -40,42 +40,26 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     # Get boundary data
     dist_y, dist_w, dist_g = tm.compute_marker_distances(local_pos)
     
-    # 1. Boundary hit (White or Yellow line dist < threshold)
-    # Default: 0.15m (Provides buffer for 50Hz control loop)
-    # Also add a fallback: if lateral error > 3.5m, it is definitely off the road.
-    boundary_hit = (dist_w < threshold) | (dist_y < threshold) | (torch.abs(lat_err) > 3.5)
+    # 1. Boundary hit (Apex-safe thresholds for 1.0x scale):
+    # Outer white line: threshold 0.04m from chassis center.
+    # Inner yellow curb: threshold 0.02m from chassis center (allows apex clipping at WP 986 where centerline is 6.8cm).
+    # Shoulder departure: detects vehicle crossing outside white line (lat_err < -0.25m and farther from yellow than road width).
+    # Lane departure fallback: lateral error > 0.60m from track centerline.
+    threshold_w = 0.04
+    threshold_y = 0.02
+    off_road_shoulder = (lat_err < -0.25) & (dist_y > 0.38)
+    boundary_hit = (dist_w < threshold_w) | (dist_y < threshold_y) | off_road_shoulder | (torch.abs(lat_err) > 0.60)
 
-    
-    # 2. Gate permeability check (Phase 11-17)
-    # Mask the boundary reset if we are inside a gate zone (dist_g < 0.50m)
-    # This allows the robot to cross white lines that belong to gates
+    # 2. Gate permeability check:
+    # Mask boundary resets inside intersection gate zones (dist_g < 0.50m) where road markings cross path
     in_gate_zone = dist_g < 0.50
     masked_boundary_hit = boundary_hit & (~in_gate_zone)
-    
-    # 3. Gate contact logic: Still resets if entering gate with bad alignment
-    gate_contact = dist_g < 0.12
-    
-    # Check alignment (Heading error < 45 degrees)
-    head_err = env.extras.get("head_err", torch.zeros(env.num_envs, device=env.device))
-    aligned_long = torch.abs(head_err) < 0.8  # ~45 deg
-    
-    # Also check if moving forward (Grace period for spawn)
-    # The car was flipped to drive in +X (v1.0-working), but root X points backward!
-    vel = -asset.data.root_lin_vel_b[:, 0]
-    # Allow 0 velocity if aligned or if it's the first few steps of the episode
-    moving_forward = vel > 0.05
-    
+
     # Check if we just started (less than 20 steps) to prevent spawn resets
     is_spawn = env.episode_length_buf < 20
-    
-    # Gate intent logic: Alignment OK if looking straight OR if we just spawned
-    aligned_lat = torch.abs(torch.sin(head_err)) > 0.8 
-    alignment_ok = (aligned_long | aligned_lat | is_spawn) & (moving_forward | is_spawn)
-    
-    gate_hit = gate_contact & (~alignment_ok)
-    
-    # Apply grace period to both boundaries and gates
-    return (~is_spawn) & (masked_boundary_hit | gate_hit)
+
+    # Apply grace period
+    return (~is_spawn) & masked_boundary_hit
 
 def height_termination(env: ManagerBasedRLEnv, threshold: float = -0.05, max_height: float = 0.50, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Terminates if the robot flips, falls below a threshold, or flies too high."""
@@ -103,10 +87,12 @@ def stagnation_termination(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = S
     timer += 1
     
     # Every 100 steps (2 seconds), it MUST have progressed at least 5 waypoints (~0.3m)
+    # Stagnation is suppressed when dwelling at a stop bar / red signal (go_signal == 0)
     check_now = timer >= 100
     progress = cum_wp - snapshot
+    is_go = env.extras.get("go_signal", torch.ones(env.num_envs, device=env.device)) > 0.5
     
-    stagnated = (progress < 5.0) & check_now & past_grace
+    stagnated = (progress < 5.0) & check_now & past_grace & is_go
     
     # Reset snapshot for envs that were checked
     env.extras["stagnation_term_snapshot"] = torch.where(check_now, cum_wp, snapshot)

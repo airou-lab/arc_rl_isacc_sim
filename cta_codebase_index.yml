@@ -1,28 +1,28 @@
 # CTA Codebase Map & RAG Query Guide
 cta_version: '1.0'
 database: '.cta/cta_codebase.db'
-last_updated: '2026-08-30T23:53:38.768986+00:00Z'
-git_commit: '61152ac0d4453fd98e7e88dbc2e0e9a485718ae8'
+last_updated: '2026-09-07T23:27:06.261717+00:00Z'
+git_commit: 'af8b7278eb80932e758ba26aeb197f1dc653c849'
 stats:
-  total_indexed_files: 161
-  total_symbols: 673
+  total_indexed_files: 167
+  total_symbols: 697
 
 domain_tags:
   config:
     category: 'config'
-    matching_entities: 12
-    sample_targets: ["arcproLab/policy_stack/agent/agent_env_wrapper.py", "arcproLab/policy_stack/agent/config.py", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/envs/registry.py", "arcproLab/policy_stack/envs/__init__.py"]
+    matching_entities: 13
+    sample_targets: ["arcproLab/arcpro_env_cfg.py", "arcproLab/mdp/curriculum_config.py", "arcproLab/policy_stack/agent/agent_env_wrapper.py", "arcproLab/policy_stack/agent/config.py", "arcproLab/policy_stack/tests/mock_env_utils.py"]
   database:
     category: 'layer'
-    matching_entities: 4
-    sample_targets: ["arcproLab/policy_stack/baselines/dave2/model.py", "arcproLab/scripts/init_gsd_db.py", "arcproLab/models/road_following_model.pth", "arcproLab/agents/skrl_models.py"]
+    matching_entities: 5
+    sample_targets: ["cta_turns.db", "arcproLab/agents/skrl_models.py", "arcproLab/policy_stack/baselines/dave2/model.py", "arcproLab/scripts/init_gsd_db.py", "arcproLab/models/road_following_model.pth"]
   robotics:
     category: 'domain'
     matching_entities: 3
     sample_targets: ["arcproLab/arcpro_robot_cfg.py", "arcproLab/scripts/test_intersection_crossing.py", "arcproLab/scripts/list_robot_joints.py"]
   testing:
     category: 'layer'
-    matching_entities: 24
+    matching_entities: 25
     sample_targets: ["arcproLab/test_rewards.py", "arcproLab/policy_stack/pytest.ini", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/tests/test_intersection_worker.py", "arcproLab/policy_stack/tests/test_intersection_node_server.py"]
 
 query_templates:

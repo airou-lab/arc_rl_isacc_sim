@@ -9,19 +9,21 @@ class SKRLFlattenWrapper(Wrapper):
     def __init__(self, env):
         super().__init__(env)
         if self._env.cfg.enable_cameras:
-            self.resnet = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1).to("cuda:0")
-            self.resnet.eval()
-            for param in self.resnet.parameters():
+            base = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1).to("cuda:0")
+            for param in base.parameters():
                 param.requires_grad = False
-            self.resnet.fc = nn.Identity()
-            self.register_buffer = lambda name, tensor: setattr(self, name, tensor)
+            self.resnet_conv = nn.Sequential(
+                base.conv1, base.bn1, base.relu, base.maxpool,
+                base.layer1, base.layer2, base.layer3, base.layer4
+            ).to("cuda:0")
+            self.resnet_conv.eval()
             self.mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1).to("cuda:0")
             self.std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).to("cuda:0")
         
     @property
     def observation_space(self):
-        # 12 telemetry + 512 vision if camera is enabled
-        shape_dim = 524 if self._env.cfg.enable_cameras else 12
+        # 12 telemetry + 25088 (512x7x7 2D spatial feature map) if camera is enabled
+        shape_dim = 25100 if self._env.cfg.enable_cameras else 12
         return gym.spaces.Box(low=-np.inf, high=np.inf, shape=(shape_dim,))
         
     def step(self, actions):
@@ -63,8 +65,9 @@ class SKRLFlattenWrapper(Wrapper):
                 img = img / 255.0
             img = (img - self.mean) / self.std
             with torch.no_grad():
-                visual_feats = self.resnet(img)
-            return torch.cat([visual_feats, vec], dim=1)
+                feat_map = self.resnet_conv(img) # (B, 512, 7, 7)
+                visual_flat = feat_map.flatten(start_dim=1) # (B, 25088)
+            return torch.cat([visual_flat, vec], dim=1)
         return vec
         
     @property
