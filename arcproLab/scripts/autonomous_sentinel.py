@@ -349,6 +349,11 @@ class AutonomousSentinel:
             "wp_step": latest_batch.wp_step,
         }
 
+        # Guard: Only evaluate performance sentinels (1-4) when a NEW batch has arrived
+        is_new_batch = latest_batch.step != self.state.get("last_seen_step", -1)
+        if not is_new_batch:
+            return True, [], diagnostics
+
         # -------------------------------------------------------------
         # Sentinel 1: Crawling Trap Sentinel
         # -------------------------------------------------------------

@@ -194,7 +194,7 @@ def main():
     # Auto-detect initial_step from resume checkpoint if not explicitly provided
     initial_step = args_cli.initial_step
     if initial_step is None and args_cli.resume:
-        match = re.search(r'agent_(\d+)\.pt', args_cli.resume)
+        match = re.search(r'agent_(\d+)', args_cli.resume)
         if match:
             initial_step = int(match.group(1))
             print(f"[Train] Auto-detected initial step offset from checkpoint: {initial_step}")
