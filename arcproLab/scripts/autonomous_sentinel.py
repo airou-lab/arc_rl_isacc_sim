@@ -380,9 +380,9 @@ class AutonomousSentinel:
             )
 
         # -------------------------------------------------------------
-        # Sentinel 2: Corner 1 Apex Cliff Sentinel
+        # Sentinel 2: Corner 1 Apex Cliff / Understeer Lockup Sentinel
         # -------------------------------------------------------------
-        # Condition: Over 100,000 steps, max(Len) <= 860 steps (car unable to pass Corner 1)
+        # Condition: Over 50,000 steps, max(Len) <= 350 steps (car unable to pass Corner 1 / understeer)
         s2_triggered = False
         if self.state.get("apex_cliff_eval_start_step", 0) == 0:
             self.state["apex_cliff_eval_start_step"] = latest_batch.step
@@ -392,8 +392,8 @@ class AutonomousSentinel:
                 self.state.get("step_window_max_len", 0), max_len_seen
             )
             step_delta = latest_batch.step - self.state["apex_cliff_eval_start_step"]
-            if step_delta >= 100000:
-                if self.state["step_window_max_len"] <= 860:
+            if step_delta >= 50000:
+                if self.state["step_window_max_len"] <= 350:
                     s2_triggered = True
                 else:
                     # Reset window
@@ -407,7 +407,7 @@ class AutonomousSentinel:
         }
         if s2_triggered:
             triggered_failures.append(
-                f"CORNER1_APEX_CLIFF: max(Len)={self.state['step_window_max_len']} <= 860 across 100k steps"
+                f"CORNER1_APEX_CLIFF: max(Len)={self.state['step_window_max_len']} <= 350 across 50k steps"
             )
 
         # -------------------------------------------------------------
@@ -417,7 +417,7 @@ class AutonomousSentinel:
         s3_triggered = False
         if avg_ep_len < 150.0 and avg_speed >= 0.50 and avg_rew < 600.0:
             self.state["wall_hugging_consecutive_count"] += 1
-            if self.state["wall_hugging_consecutive_count"] >= 5:
+            if self.state["wall_hugging_consecutive_count"] >= 10:
                 s3_triggered = True
         else:
             self.state["wall_hugging_consecutive_count"] = max(
@@ -436,12 +436,18 @@ class AutonomousSentinel:
         # -------------------------------------------------------------
         # Sentinel 4: Policy Collapse & Divergence Sentinel
         # -------------------------------------------------------------
-        # Condition: Reward drops >50% below peak (+4.7k), Rew < 500 & Len < 150 for 3 checks
+        # Condition: NaN divergence or sustained negative reward (avg_rew < 0.0) over 10 intervals
         s4_triggered = False
-        if len(batches) >= 5 and avg_rew < 500.0 and avg_ep_len < 150.0:
+        import math
+        is_diverged = math.isnan(avg_rew) or math.isnan(avg_ep_len)
+        if is_diverged:
+            s4_triggered = True
+            triggered_failures.append("POLICY_COLLAPSE: Numerical NaN detected in reward or episode length")
+        elif len(batches) >= 20 and avg_rew < 0.0:
             self.state["collapse_consecutive_count"] += 1
-            if self.state["collapse_consecutive_count"] >= 3:
+            if self.state["collapse_consecutive_count"] >= 10:
                 s4_triggered = True
+                triggered_failures.append(f"POLICY_COLLAPSE: Sustained negative reward avg_rew={avg_rew:.1f} < 0.0 for 10 intervals")
         else:
             self.state["collapse_consecutive_count"] = max(
                 0, self.state["collapse_consecutive_count"] - 1
@@ -452,10 +458,6 @@ class AutonomousSentinel:
             "consecutive": self.state["collapse_consecutive_count"],
             "avg_rew": avg_rew,
         }
-        if s4_triggered:
-            triggered_failures.append(
-                f"POLICY_COLLAPSE: avg_rew={avg_rew:.1f} < 500 and avg_len={avg_ep_len:.1f} < 150 for 3 intervals"
-            )
 
         self.state["last_seen_step"] = latest_batch.step
         save_state(self.state)
@@ -504,18 +506,10 @@ class AutonomousSentinel:
             restart_cmd = ["bash", START_SCRIPT]
 
         elif "CORNER1" in f_upper or "APEX_CLIFF" in f_upper or "CLIFF" in f_upper:
-            action_summary = "Shifted curriculum spawner to flood Corner 1 runway (45%) and extended lookahead distance 1.2m -> 1.5m"
-            files_touched.append(CURRICULUM_CFG_PATH)
-            if not self.dry_run:
-                try:
-                    from mdp.curriculum_config import update_curriculum_config
-                    update_curriculum_config({
-                        "sector_weights": [0.10, 0.45, 0.15, 0.15, 0.15],
-                        "lookahead_distance": 1.5,
-                    })
-                except Exception as e:
-                    self.logger.error(f"Failed to update curriculum config: {e}")
-            restart_cmd = ["bash", START_SCRIPT]
+            target_ckpt = SECONDARY_LANDMARK
+            action_summary = f"Hierarchical Rollback to secondary landmark {os.path.basename(target_ckpt)} after persistent understeer (50k steps max_len <= 350)"
+            files_touched.append(target_ckpt)
+            restart_cmd = ["bash", START_SCRIPT, target_ckpt]
 
         elif "WALL_HUGGING" in f_upper or "HUGGING" in f_upper:
             action_summary = "Refreshed track direction symmetry and warm-restarted training to clear outer shoulder bias"

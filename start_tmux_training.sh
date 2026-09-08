@@ -1,4 +1,10 @@
 #!/bin/bash
+# If invoked from inside tmux session 'training', detach execution to prevent suicide
+if [ -n "$TMUX" ] && tmux display-message -p '#S' 2>/dev/null | grep -q "^training$"; then
+    nohup bash "$0" "$@" > /tmp/start_tmux.log 2>&1 &
+    exit 0
+fi
+
 # Kill any existing training session
 tmux kill-session -t training 2>/dev/null || true
 pkill -f train_policy.py 2>/dev/null || true
