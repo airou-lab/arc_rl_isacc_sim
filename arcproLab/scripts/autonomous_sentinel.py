@@ -438,7 +438,7 @@ class AutonomousSentinel:
         # -------------------------------------------------------------
         # Condition: Reward drops >50% below peak (+4.7k), Rew < 500 & Len < 150 for 3 checks
         s4_triggered = False
-        if avg_rew < 500.0 and avg_ep_len < 150.0:
+        if len(batches) >= 5 and avg_rew < 500.0 and avg_ep_len < 150.0:
             self.state["collapse_consecutive_count"] += 1
             if self.state["collapse_consecutive_count"] >= 3:
                 s4_triggered = True
@@ -480,13 +480,14 @@ class AutonomousSentinel:
         action_summary = ""
         files_touched = []
 
+        restart_cmd = None
         f_upper = failure_type.upper()
         if "PROCESS_HANG" in f_upper or "HANG" in f_upper:
             action_summary = "Killed hanging processes, verified GPU VRAM release, and restarted training via start_tmux_training.sh"
             if not self.dry_run:
                 subprocess.run("pkill -9 -f 'isaac-sim|train_skrl.py'", shell=True)
                 time.sleep(5)
-                subprocess.run(["bash", START_SCRIPT], cwd=WORKSPACE_ROOT)
+            restart_cmd = ["bash", START_SCRIPT]
 
         elif "CRAWLING" in f_upper:
             action_summary = "Elevated speed tracking weight from 60.0 to 90.0 and boosted lookahead pre-braking in curriculum config"
@@ -500,8 +501,7 @@ class AutonomousSentinel:
                     })
                 except Exception as e:
                     self.logger.error(f"Failed to update curriculum config: {e}")
-                # Graceful warm restart
-                subprocess.run(["bash", START_SCRIPT], cwd=WORKSPACE_ROOT)
+            restart_cmd = ["bash", START_SCRIPT]
 
         elif "CORNER1" in f_upper or "APEX_CLIFF" in f_upper or "CLIFF" in f_upper:
             action_summary = "Shifted curriculum spawner to flood Corner 1 runway (45%) and extended lookahead distance 1.2m -> 1.5m"
@@ -515,19 +515,17 @@ class AutonomousSentinel:
                     })
                 except Exception as e:
                     self.logger.error(f"Failed to update curriculum config: {e}")
-                subprocess.run(["bash", START_SCRIPT], cwd=WORKSPACE_ROOT)
+            restart_cmd = ["bash", START_SCRIPT]
 
         elif "WALL_HUGGING" in f_upper or "HUGGING" in f_upper:
             action_summary = "Refreshed track direction symmetry and warm-restarted training to clear outer shoulder bias"
-            if not self.dry_run:
-                subprocess.run(["bash", START_SCRIPT], cwd=WORKSPACE_ROOT)
+            restart_cmd = ["bash", START_SCRIPT]
 
         elif "COLLAPSE" in f_upper or "DIVERGENCE" in f_upper:
             target_ckpt = PRIMARY_LANDMARK if os.path.exists(PRIMARY_LANDMARK) else SECONDARY_LANDMARK
             action_summary = f"Automated rollback to certified landmark checkpoint {os.path.basename(target_ckpt)}"
             files_touched.append(target_ckpt)
-            if not self.dry_run:
-                subprocess.run(["bash", START_SCRIPT, target_ckpt], cwd=WORKSPACE_ROOT)
+            restart_cmd = ["bash", START_SCRIPT, target_ckpt]
 
         # Write diagnosis file
         try:
@@ -561,6 +559,11 @@ class AutonomousSentinel:
             )
 
         self.logger.info("Self-healing intervention successfully executed and logged.")
+
+        # Execute restart command last, as it may kill the running tmux session/sentinel
+        if not self.dry_run and restart_cmd:
+            subprocess.run(restart_cmd, cwd=WORKSPACE_ROOT)
+
         return True
 
 
