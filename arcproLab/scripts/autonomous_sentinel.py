@@ -37,7 +37,8 @@ LANDMARK_DIR = os.path.join(WORKSPACE_ROOT, "archive/landmark_checkpoints")
 START_SCRIPT = os.path.join(WORKSPACE_ROOT, "start_tmux_training.sh")
 
 PRIMARY_LANDMARK = os.path.join(LANDMARK_DIR, "agent_4141500_peak.pt")
-SECONDARY_LANDMARK = os.path.join(LANDMARK_DIR, "agent_3670000_1000step_peak.pt")
+SECONDARY_LANDMARK = os.path.join(LANDMARK_DIR, "agent_2587500_corner_plateau_baseline.pt")
+TERTIARY_LANDMARK = os.path.join(LANDMARK_DIR, "agent_1405000_latest_backup.pt")
 
 DEFAULT_COOLDOWN_SEC = 300.0  # 5 minutes stabilization cooldown after intervention
 
