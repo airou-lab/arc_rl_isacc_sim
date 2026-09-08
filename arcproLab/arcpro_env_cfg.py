@@ -85,7 +85,7 @@ class ARCProSceneCfg(InteractiveSceneCfg):
 
     )
 
-    # Camera (Mimic Intel RealSense D435i Wide - 90° HFOV) with NO TILT
+    # Camera (Mimic Intel RealSense D455 Wide - 86-90° HFOV, Global Shutter)
     tiled_camera = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/Chassis/CameraSensor",
         update_period=0.0,
@@ -93,11 +93,9 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             horizontal_aperture=3.86, # 90-degree HFOV (2 * atan(3.86 / (2 * 1.93)))
             focal_length=1.93,
         ),
-        # Raised to 0.35m with no tilt to see further down the track (convention="ros" aligns camera forward)
-        # Moved forward to pos=(0.5, 0.0, 0.35) to ensure it is completely outside the car mesh
-        # The car drives in +X direction. We place it at +0.5 to clear the chassis mesh.
-        # We pitch down 15 degrees around Y (w=0.9914, y=0.1305).
-        offset=TiledCameraCfg.OffsetCfg(pos=(0.5, 0.0, 0.35), rot=(0.9914, 0.0, 0.1305, 0.0), convention="world"),
+        # Realistically mounted on F1Tenth front bumper at pos=(0.22, 0.0, 0.18)
+        # 15 degrees downward pitch around Y (w=0.9914, y=0.1305) to see road 0.25m to 4.0m ahead
+        offset=TiledCameraCfg.OffsetCfg(pos=(0.22, 0.0, 0.18), rot=(0.9914, 0.0, 0.1305, 0.0), convention="world"),
         data_types=["rgb"], width=224, height=224,
     )
 
@@ -113,7 +111,7 @@ class ARCProSceneCfg(InteractiveSceneCfg):
             mass_props=sim_utils.MassPropertiesCfg(mass=0.001) # Explicitly 1 gram so it doesn't tip the car
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.3, 0.0, 0.35),
+            pos=(0.22, 0.0, 0.18),
             rot=(0.707, 0.0, 0.707, 0.0) # Points X forward
         )
     )
@@ -158,7 +156,7 @@ class ActionCfg:
         joint_names=["Joint_Steer_L", "Joint_Steer_R"], 
         wheelbase=0.33, 
         track_width=0.28, 
-        max_steering_angle=0.5,
+        max_steering_angle=0.68, # 38.96 deg (enables R_min = 0.408m < Corner 1 R=0.464m)
         offset=0.0
     )
     b_drive = arcpro_actions.GroupedJointVelocityActionCfg(

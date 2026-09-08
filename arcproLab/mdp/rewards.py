@@ -92,14 +92,20 @@ def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
     Penalty based on lateral offset from track centerline.
     0.0 at center, drops to negative values as it drifts.
-    This prevents farming 'centering points' while standing still.
+    Curvature-gated slack: on sharp corners (high kappa), allows up to 10cm
+    of geometric out-in-out apex clipping without penalty. On straightaways
+    (kappa ~ 0), enforces strict 0cm centerline tracking.
     """
     lat_err = env.extras.get("lat_err", torch.zeros(env.num_envs, device=env.device))
     abs_lat = torch.abs(lat_err)
     
-    # Pure penalty
-    reward = - (abs_lat * 10.0)
-    return reward
+    slack = torch.zeros_like(abs_lat)
+    if "lookahead_kappa" in env.extras and env.extras["lookahead_kappa"] is not None:
+        kappa = torch.abs(env.extras["lookahead_kappa"].to(device=env.device, dtype=torch.float32).view_as(abs_lat))
+        slack = torch.clamp(kappa * 0.08, min=0.0, max=0.10)
+        
+    penalized_lat = torch.clamp(abs_lat - slack, min=0.0)
+    return - (penalized_lat * 10.0)
 
 def jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     """

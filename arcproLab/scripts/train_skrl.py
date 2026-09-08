@@ -16,6 +16,7 @@ simulation_app = app_launcher.app
 import os
 import sys
 import re
+import subprocess
 import warnings
 from datetime import datetime
 
@@ -174,7 +175,18 @@ def main():
     cfg_ppo["entropy_loss_scale"] = 0.005  # Raised from 0.001 for more exploration out of local minima
     cfg_ppo["learning_rate_scheduler"] = None
     
-    log_dir = os.path.join("logs", "ppo_skrl", datetime.now().strftime("%Y%m%d-%H%M%S"))
+    # Branch-aware experiment directory to isolate checkpoints by branch
+    try:
+        branch_name = subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], 
+            stderr=subprocess.DEVNULL
+        ).decode().strip()
+        branch_slug = re.sub(r'[^a-zA-Z0-9_\-]', '_', branch_name)
+    except Exception:
+        branch_slug = "main"
+        
+    log_folder = "ppo_skrl" if branch_slug == "main" else f"ppo_skrl_{branch_slug}"
+    log_dir = os.path.join("logs", log_folder, datetime.now().strftime("%Y%m%d-%H%M%S"))
     cfg_ppo["experiment"]["directory"] = log_dir
     cfg_ppo["experiment"]["write_interval"] = 100
     cfg_ppo["experiment"]["checkpoint_interval"] = 250000  # Save every 0.25M (250k) timesteps to prevent disk bloat

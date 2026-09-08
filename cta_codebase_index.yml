@@ -1,8 +1,8 @@
 # CTA Codebase Map & RAG Query Guide
 cta_version: '1.0'
 database: '.cta/cta_codebase.db'
-last_updated: '2026-09-07T23:27:06.261717+00:00Z'
-git_commit: 'af8b7278eb80932e758ba26aeb197f1dc653c849'
+last_updated: '2026-09-08T06:25:03.462856+00:00Z'
+git_commit: 'c0575844acf728423136f019bfbcb6df3a2d9517'
 stats:
   total_indexed_files: 167
   total_symbols: 697

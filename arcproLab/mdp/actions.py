@@ -102,7 +102,7 @@ class AckermannSteeringActionCfg(ActionTermCfg):
     joint_names: list[str] = field(default_factory=list)
     wheelbase: float = 0.33
     track_width: float = 0.28
-    max_steering_angle: float = 0.5
+    max_steering_angle: float = 0.68  # 38.96 deg (enables R_min = 0.408m for Corner 1 R=0.464m)
     scale: float = 1.0
     offset: float = 0.0
     invert_right_joint: bool = False

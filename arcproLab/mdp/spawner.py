@@ -73,9 +73,10 @@ def _apply_steering_limits(robot_prim: Usd.Prim, stage) -> None:
         if child_name in ["Joint_Steer_L", "Joint_Steer_R"]:
             if child.IsA(UsdPhysics.RevoluteJoint):
                 joint = UsdPhysics.RevoluteJoint(child)
-                # Set hard limits to +/- 35 degrees (0.61 radians) so they can never spin 360
-                joint.CreateLowerLimitAttr().Set(-35.0)
-                joint.CreateUpperLimitAttr().Set(35.0)
+                # Set hard limits to +/- 55.0 degrees (~0.96 radians) to allow full Ackermann inner wheel travel (up to 51 deg for 0.68 rad steering)
+                joint.CreateLowerLimitAttr().Set(-55.0)
+                joint.CreateUpperLimitAttr().Set(55.0)
+
 
 
 def _apply_tire_friction(robot_prim: Usd.Prim, stage) -> None:

@@ -688,5 +688,24 @@ At the 500k milestone, the agent's episode lengths reached up to ~723, but the e
   1. **Apex-Safe Boundary Thresholds (`mdp/terminations.py`):** White threshold set to 0.04m, inner yellow curb threshold set to 0.02m (allowing tight apex clipping without false resets), and off-road fallback set to |lat_err| > 0.60m. Removed false `gate_contact` kills.
   2. **Heading Reward Decoupled from Raw Speed (`mdp/rewards.py`):** Gated heading reward with `clamp(speed / 0.25, max=1.0)` so braking to 0.35 m/s receives full +100 reward while keeping stationary protection.
   3. **Curvature Target Speed & Weight (`mdp/rewards.py`, `arcpro_env_cfg.py`):** Adjusted curvature slope to $0.85 - (\kappa_{\text{eff}} \times 0.70)$ so target speed commands 0.35 m/s in sharp $\kappa \ge 0.70$ turns, and increased `speed_tracking` weight to 60.0.
-  4. **Corner Stagnation Protection (`mdp/rewards.py`):** Reduced stationary progress threshold from 5.0 to 3.0 waypoints, ensuring 0.30–0.35 m/s cornering is never penalized.
-  5. **Clean Restart:** Resumed cleanly from `agent_2587500.pt` on 20 camera environments (~10GB VRAM).
+### Issue 103: Checkpoint Disk Bloat & 250k Pruning
+- **Problem:** Frequent 500-step checkpointing accumulated 1,230+ files across `logs/ppo_skrl/`, consuming 7.4 GB and risking disk saturation.
+- **Resolution:**
+  1. Archived key landmarks (`agent_4141500_peak.pt`, `agent_3670000_1000step_peak.pt`, `agent_4286500_latest.pt`, `best_agent_4286500_run.pt`) in `archive/landmark_checkpoints/`.
+  2. Pruned 1,230 redundant intermediate checkpoints, reclaiming 7.36 GB.
+  3. Increased `checkpoint_interval` in `arcproLab/scripts/train_skrl.py` to `250000` (0.25M timesteps).
+
+### Issue 104: Physical Kinematics Unlocking, RealSense D455 Bumper Mounting & Racing Line Slack
+- **Problem:** Across 5M training steps, camera-only lane following failed to clear Corner 1 ($R = 0.464\text{ m}$). A 5-worker divergent CTA Swarm audit revealed:
+  1. **Kinematic Impossibility:** Wheelbase $L = 0.33\text{ m}$ with `max_steering_angle = 0.50\text{ rad}` ($28.65^\circ$) yields $R_{\min} = 0.604\text{ m}$. Centerline following forced an unavoidable $14\text{ cm}$ outward drift into the outer line (clearance is only $6.3\text{ cm}$).
+  2. **PhysX Joint Clamping Bug:** `arcproLab/mdp/spawner.py` hardcoded USD RevoluteJoint limits to $\pm 35.0^\circ$. For Ackermann steering $\delta = 0.68\text{ rad}$ ($39^\circ$), the inner wheel requires $50.9^\circ$. PhysX was clamping inner wheel rotation to $35^\circ$, making tight turns physically impossible.
+  3. **Sensor Discrepancy & Mid-Air Camera:** Config claimed D435i Wide ($90^\circ$ HFOV), but real D435i RGB is $69.4^\circ$ with a rolling shutter. Intel RealSense D455 has true $86\text{--}90^\circ$ FOV with a Global Shutter. Furthermore, the camera was floating $25\text{ cm}$ in mid-air in front of the vehicle at $0.35\text{ m}$ height (`pos=(0.5, 0, 0.35)`).
+  4. **Racing Line Penalization:** Real racers use an "out-in-out" racing line through sharp $90^\circ$ corners (expanding effective radius to $R_{\text{eff}} \ge 0.70\text{ m}$). `lateral_error_reward` strictly penalized any deviation from the centerline, discouraging the car from cutting the corner.
+- **Resolution (Branch `feature/realsense-realistic-kinematics`):**
+  1. **PhysX USD Limits (`spawner.py`):** Expanded `Joint_Steer_.*` limits from $\pm 35.0^\circ$ to $\pm 55.0^\circ$.
+  2. **Steering Authority (`actions.py`, `arcpro_env_cfg.py`):** Raised `max_steering_angle` from $0.50\text{ rad}$ to $0.68\text{ rad}$ ($39.0^\circ$), unlocking $R_{\min} = 0.408\text{ m} < 0.464\text{ m}$.
+  3. **RealSense D455 Bumper Mount (`arcpro_env_cfg.py`):** Repositioned camera to realistic front bumper mount `pos=(0.22, 0.0, 0.18)` with $15^\circ$ downward pitch. Updated visual cone marker to match.
+  4. **Curvature-Gated Racing Line Slack (`rewards.py`):** In `lateral_error_reward`, added dynamic curvature slack $\text{slack} = \text{clamp}(\kappa \times 0.08, 0, 0.10)$. Straights enforce strict $0\text{ cm}$ centering; sharp corners allow up to $10\text{ cm}$ of apex-cutting without penalty.
+  5. **Branch Checkpoint Isolation (`train_skrl.py`, `start_tmux_training.sh`):** Configured automated branch-prefixed experiment directory (`logs/ppo_skrl_<branch>/`) so branch runs never collide with `main`.
+  6. **Warm-Start Transfer:** Resumed from landmark peak checkpoint `agent_4141500_peak.pt` on `feature/realsense-realistic-kinematics`.
+

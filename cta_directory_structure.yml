@@ -1,6 +1,6 @@
 # CTA Codebase Directory Structure & Architectural Layout
 cta_version: '1.0'
-last_updated: '2026-09-07T23:27:06.262049+00:00Z'
+last_updated: '2026-09-08T06:25:03.463186+00:00Z'
 root: '.'
 
 directories:

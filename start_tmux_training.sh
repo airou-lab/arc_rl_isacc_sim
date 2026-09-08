@@ -17,9 +17,15 @@ tmux new-session -d -s training
 if [ -n "$1" ]; then
     LATEST_CKPT="$1"
 else
-    LATEST_CKPT=$(find logs/ppo_skrl -name "agent_*.pt" -printf "%T@ %p\n" 2>/dev/null | sort -n | tail -n 1 | awk '{print $2}')
+    BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+    BRANCH_TAG=$(echo "$BRANCH" | tr '/' '_')
+    LOG_SUBDIR="logs/ppo_skrl_${BRANCH_TAG}"
+    if [ "$BRANCH" = "main" ] || [ ! -d "$LOG_SUBDIR" ]; then
+        LOG_SUBDIR="logs/ppo_skrl"
+    fi
+    LATEST_CKPT=$(find "$LOG_SUBDIR" -name "agent_*.pt" -printf "%T@ %p\n" 2>/dev/null | sort -n | tail -n 1 | awk '{print $2}')
     if [ -z "$LATEST_CKPT" ]; then
-        LATEST_CKPT=$(find logs/ppo_skrl -name "best_agent.pt" -printf "%T@ %p\n" 2>/dev/null | sort -n | tail -n 1 | awk '{print $2}')
+        LATEST_CKPT=$(find "$LOG_SUBDIR" -name "best_agent.pt" -printf "%T@ %p\n" 2>/dev/null | sort -n | tail -n 1 | awk '{print $2}')
     fi
 fi
 RESUME_FLAG=""
