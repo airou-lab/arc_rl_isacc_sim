@@ -20,25 +20,16 @@ if ROOT_DIR not in sys.path:
 print("Importing torch...")
 sys.stdout.flush()
 import torch
-import torch.nn as nn
 
 print("Importing IsaacLab...")
 sys.stdout.flush()
 from isaaclab.envs import ManagerBasedRLEnv
 
-print("Importing SKRL...")
-sys.stdout.flush()
-from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
-
 print("Importing ARCPro modules...")
 sys.stdout.flush()
 from arcproLab.arcpro_env_cfg import ARCProEnvCfg
-from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic
-from skrl.envs.wrappers.torch import IsaacLabWrapper, Wrapper
-import numpy as np
-import gymnasium as gym
-
-from agents.skrl_wrappers import SKRLFlattenWrapper
+from skrl.envs.wrappers.torch import IsaacLabWrapper
+from arcproLab.agents.skrl_wrappers import SKRLFlattenWrapper
 
 import traceback
 

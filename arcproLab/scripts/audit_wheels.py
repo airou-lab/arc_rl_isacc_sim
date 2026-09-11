@@ -9,7 +9,6 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import torch
-import numpy as np
 from isaaclab.envs import ManagerBasedRLEnv
 from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 

@@ -1,6 +1,6 @@
 # CTA Codebase Directory Structure & Architectural Layout
 cta_version: '1.0'
-last_updated: '2026-09-08T06:25:03.463186+00:00Z'
+last_updated: '2026-09-11T17:21:16.272724+00:00Z'
 root: '.'
 
 directories:
@@ -23,7 +23,7 @@ directories:
   arcproLab/mdp:
     layer: 'config'
     tags: ["config"]
-    primary_files: ["arcproLab/mdp/debug_terminations.py", "arcproLab/mdp/spawner.py", "arcproLab/mdp/actions.py", "arcproLab/mdp/curriculum_config.py", "arcproLab/mdp/rewards.py"]
+    primary_files: ["arcproLab/mdp/spawner.py", "arcproLab/mdp/actions.py", "arcproLab/mdp/curriculum_config.py", "arcproLab/mdp/rewards.py", "arcproLab/mdp/events.py"]
   arcproLab/models:
     layer: 'database'
     tags: ["database"]
@@ -67,7 +67,7 @@ directories:
   arcproLab/scripts:
     layer: 'testing'
     tags: ["testing", "robotics", "config", "database"]
-    primary_files: ["arcproLab/scripts/verify_markers.py", "arcproLab/scripts/deep_verify.py", "arcproLab/scripts/debug_kinematics.py", "arcproLab/scripts/test_terminations.py", "arcproLab/scripts/audit_assets.py"]
+    primary_files: ["arcproLab/scripts/verify_markers.py", "arcproLab/scripts/deep_verify.py", "arcproLab/scripts/debug_kinematics.py", "arcproLab/scripts/test_terminations.py", "arcproLab/scripts/test_render_sanity.py"]
   tensorboard_view_docker:
     layer: 'general'
     tags: []

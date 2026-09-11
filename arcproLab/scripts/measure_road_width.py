@@ -18,7 +18,6 @@ simulation_app = app_launcher.app
 import os
 import sys
 import torch
-import numpy as np
 
 # Add arcproLab to sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))

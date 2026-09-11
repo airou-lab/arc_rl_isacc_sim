@@ -18,7 +18,7 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import omni.usd
-from pxr import Usd, UsdGeom
+from pxr import UsdGeom
 
 def main():
     # Load the stage

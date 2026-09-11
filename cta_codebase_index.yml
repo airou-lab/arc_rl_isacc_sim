@@ -1,28 +1,28 @@
 # CTA Codebase Map & RAG Query Guide
 cta_version: '1.0'
 database: '.cta/cta_codebase.db'
-last_updated: '2026-09-08T06:25:03.462856+00:00Z'
-git_commit: 'c0575844acf728423136f019bfbcb6df3a2d9517'
+last_updated: '2026-09-11T17:21:16.272074+00:00Z'
+git_commit: '440614ef38af92cf40e0b93c4618671b89114a1d'
 stats:
-  total_indexed_files: 167
-  total_symbols: 697
+  total_indexed_files: 157
+  total_symbols: 689
 
 domain_tags:
   config:
     category: 'config'
-    matching_entities: 13
+    matching_entities: 12
     sample_targets: ["arcproLab/arcpro_env_cfg.py", "arcproLab/mdp/curriculum_config.py", "arcproLab/policy_stack/agent/agent_env_wrapper.py", "arcproLab/policy_stack/agent/config.py", "arcproLab/policy_stack/tests/mock_env_utils.py"]
   database:
     category: 'layer'
-    matching_entities: 5
-    sample_targets: ["cta_turns.db", "arcproLab/agents/skrl_models.py", "arcproLab/policy_stack/baselines/dave2/model.py", "arcproLab/scripts/init_gsd_db.py", "arcproLab/models/road_following_model.pth"]
+    matching_entities: 4
+    sample_targets: ["arcproLab/agents/skrl_models.py", "arcproLab/policy_stack/baselines/dave2/model.py", "arcproLab/scripts/init_gsd_db.py", "arcproLab/models/road_following_model.pth"]
   robotics:
     category: 'domain'
     matching_entities: 3
     sample_targets: ["arcproLab/arcpro_robot_cfg.py", "arcproLab/scripts/test_intersection_crossing.py", "arcproLab/scripts/list_robot_joints.py"]
   testing:
     category: 'layer'
-    matching_entities: 25
+    matching_entities: 24
     sample_targets: ["arcproLab/test_rewards.py", "arcproLab/policy_stack/pytest.ini", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/tests/test_intersection_worker.py", "arcproLab/policy_stack/tests/test_intersection_node_server.py"]
 
 query_templates:

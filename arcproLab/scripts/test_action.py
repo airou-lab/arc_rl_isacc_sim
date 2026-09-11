@@ -1,7 +1,6 @@
 import os
 import sys
 import torch
-import numpy as np
 
 # Setup paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))

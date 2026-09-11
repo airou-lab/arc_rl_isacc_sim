@@ -382,7 +382,7 @@ class AutonomousSentinel:
         # -------------------------------------------------------------
         # Sentinel 2: Corner 1 Apex Cliff / Understeer Lockup Sentinel
         # -------------------------------------------------------------
-        # Condition: Over 50,000 steps, max(Len) <= 350 steps (car unable to pass Corner 1 / understeer)
+        # Condition: Over 50,000 steps, max(Len) <= 860 steps (car unable to pass Corner 1 / understeer)
         s2_triggered = False
         if self.state.get("apex_cliff_eval_start_step", 0) == 0:
             self.state["apex_cliff_eval_start_step"] = latest_batch.step
@@ -392,13 +392,21 @@ class AutonomousSentinel:
                 self.state.get("step_window_max_len", 0), max_len_seen
             )
             step_delta = latest_batch.step - self.state["apex_cliff_eval_start_step"]
-            if step_delta >= 50000:
-                if self.state["step_window_max_len"] <= 350:
+            # Gate apex cliff evaluation so newborn policy (step < 300k) has runway to learn
+            if latest_batch.step >= 300000 and step_delta >= 50000:
+                if self.state["step_window_max_len"] <= 860:
                     s2_triggered = True
+                    # Reset evaluation window after triggering to prevent infinite re-fire
+                    self.state["apex_cliff_eval_start_step"] = latest_batch.step
+                    self.state["step_window_max_len"] = max_len_seen
                 else:
                     # Reset window
                     self.state["apex_cliff_eval_start_step"] = latest_batch.step
                     self.state["step_window_max_len"] = max_len_seen
+            elif latest_batch.step < 300000:
+                # Keep window tracking fresh during newborn warmup
+                self.state["apex_cliff_eval_start_step"] = latest_batch.step
+                self.state["step_window_max_len"] = max_len_seen
 
         diagnostics["sentinels"]["sentinel_2_apex_cliff"] = {
             "triggered": s2_triggered,
@@ -407,15 +415,15 @@ class AutonomousSentinel:
         }
         if s2_triggered:
             triggered_failures.append(
-                f"CORNER1_APEX_CLIFF: max(Len)={self.state['step_window_max_len']} <= 350 across 50k steps"
+                f"CORNER1_APEX_CLIFF: max(Len)={self.state['step_window_max_len']} <= 860 across 50k steps"
             )
 
         # -------------------------------------------------------------
         # Sentinel 3: Outer Shoulder Wall-Hugging Sentinel
         # -------------------------------------------------------------
-        # Condition: Repeated resets on straightaway with Len < 150
+        # Condition: Repeated resets on straightaway with Len < 150 (gated for step >= 100k to allow newborn exploration)
         s3_triggered = False
-        if avg_ep_len < 150.0 and avg_speed >= 0.50 and avg_rew < 600.0:
+        if latest_batch.step >= 100000 and avg_ep_len < 150.0 and avg_speed >= 0.50 and avg_rew < 600.0:
             self.state["wall_hugging_consecutive_count"] += 1
             if self.state["wall_hugging_consecutive_count"] >= 10:
                 s3_triggered = True
@@ -507,7 +515,7 @@ class AutonomousSentinel:
 
         elif "CORNER1" in f_upper or "APEX_CLIFF" in f_upper or "CLIFF" in f_upper:
             target_ckpt = SECONDARY_LANDMARK
-            action_summary = f"Hierarchical Rollback to secondary landmark {os.path.basename(target_ckpt)} after persistent understeer (50k steps max_len <= 350)"
+            action_summary = f"Hierarchical Rollback to secondary landmark {os.path.basename(target_ckpt)} after persistent understeer (50k steps max_len <= 860)"
             files_touched.append(target_ckpt)
             restart_cmd = ["bash", START_SCRIPT, target_ckpt]
 

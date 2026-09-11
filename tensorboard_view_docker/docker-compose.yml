@@ -4,7 +4,7 @@ services:
     container_name: arcpro-tensorboard
     restart: unless-stopped
     ports:
-      - "6006:6006"
+      - "127.0.0.1:6006:6006"
     volumes:
       # Mount the logs directory relative to this docker-compose file (one level up)
       - ../logs:/logs:ro

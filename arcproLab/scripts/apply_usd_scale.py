@@ -4,10 +4,8 @@ from omni.isaac.kit import SimulationApp
 # Start simulation app
 simulation_app = SimulationApp({"headless": True})
 
-import omni.usd
 from pxr import Usd, UsdGeom, Gf
 import os
-import numpy as np
 
 def scale_mesh_vertices(usd_path, scale_factor=0.125):
     print(f"Opening stage: {usd_path}")

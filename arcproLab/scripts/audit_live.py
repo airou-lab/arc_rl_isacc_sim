@@ -17,7 +17,6 @@ simulation_app = app_launcher.app
 
 import os
 import sys
-import torch
 
 # Add arcproLab to sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -28,7 +27,7 @@ if ARCPRO_LAB_DIR not in sys.path:
 from isaaclab.envs import ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
 import omni.usd
-from pxr import Usd, UsdGeom
+from pxr import UsdGeom
 
 def main():
     # 1. Setup Environment

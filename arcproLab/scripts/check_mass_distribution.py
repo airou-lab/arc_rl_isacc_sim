@@ -21,7 +21,6 @@ simulation_app = app_launcher.app
 
 import os
 import sys
-import torch
 import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation
 from isaaclab.sim import SimulationContext, SimulationCfg
@@ -59,7 +58,7 @@ def main():
     # Let's try getting them from the articulation object first.
     try:
         body_names = robot.body_names
-    except:
+    except AttributeError:
         # Fallback: manual USD traversal
         import omni.usd
         from pxr import UsdPhysics, Usd

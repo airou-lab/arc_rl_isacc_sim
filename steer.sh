@@ -1,6 +1,6 @@
 #!/bin/bash
-# ARCPro RL - Straight Line Test Viewer
-# Launches the open-loop straight-line test in a GUI window for visual inspection of physics.
+# ARCPro RL - Steering Test Viewer
+# Launches the open-loop steering test in a GUI window for visual inspection of physics.
 
 set -euo pipefail
 

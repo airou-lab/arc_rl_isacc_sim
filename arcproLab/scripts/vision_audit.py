@@ -11,7 +11,6 @@ simulation_app = app_launcher.app
 # 2. NOW import the rest
 import os
 import sys
-import torch
 import numpy as np
 from PIL import Image
 

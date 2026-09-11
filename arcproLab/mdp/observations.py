@@ -7,6 +7,7 @@ import torch
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 from mdp.curriculum_config import get_lookahead_distance
+from mdp.track_manager import get_track_manager
 
 def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     return _compute_telemetry(env, asset_cfg, masked=True)
@@ -95,11 +96,10 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     try:
         if env.action_manager.action is not None and env.action_manager.action.shape[1] >= 2:
             obs[:, 5:7] = torch.clamp(env.action_manager.action[:, :2], min=-1.0, max=1.0)
-    except:
+    except (AttributeError, IndexError):
         pass
 
     # Index 8 & 9: Lateral and Heading Error
-    from mdp.track_manager import get_track_manager
     tm = get_track_manager(device=env.device)
 
     # 1. Update persistent track indices and compute errors

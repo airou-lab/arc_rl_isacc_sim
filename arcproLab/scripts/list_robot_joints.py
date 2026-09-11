@@ -10,7 +10,6 @@ simulation_app = app_launcher.app
 
 import os
 import sys
-import torch
 from isaaclab.assets import Articulation
 from isaaclab.sim import SimulationContext, SimulationCfg
 

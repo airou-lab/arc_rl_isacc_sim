@@ -1,8 +1,6 @@
 import torch
 import sys
 import os
-import numpy as np
-import gymnasium as gym
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from isaaclab.app import AppLauncher
@@ -12,7 +10,7 @@ simulation_app = app_launcher.app
 
 from isaaclab.envs import ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
-from skrl.envs.wrappers.torch import IsaacLabWrapper, Wrapper
+from skrl.envs.wrappers.torch import IsaacLabWrapper
 
 from agents.skrl_wrappers import SKRLFlattenWrapper
 

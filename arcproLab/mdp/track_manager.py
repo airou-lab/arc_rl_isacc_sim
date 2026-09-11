@@ -157,7 +157,7 @@ class TrackManager:
             if self.load_cache():
                 print(f"[TrackManager] Loaded boundaries from cache: {self.cache_path}")
             else:
-                print(f"[TrackManager] Building high-fidelity boundary markers from USD (slow)...")
+                print("[TrackManager] Building high-fidelity boundary markers from USD (slow)...")
                 self.collect_raw_marker_points()
                 self.save_cache()
             
@@ -435,7 +435,8 @@ class TrackManager:
             #     target_viz[:, :2] = target_pts
             #     target_viz[:, 2] = 0.0
             #     self.visualizer_target.visualize(to_w(target_viz, z_off=0.18))
-        except: pass
+        except Exception:
+            pass
 
     def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor, target_lane_offset: torch.Tensor | float = 0.0):
         """
