@@ -1,21 +1,21 @@
 # CTA Codebase Map & RAG Query Guide
 cta_version: '1.0'
 database: '.cta/cta_codebase.db'
-last_updated: '2026-09-11T17:21:16.272074+00:00Z'
-git_commit: '440614ef38af92cf40e0b93c4618671b89114a1d'
+last_updated: '2026-09-18T23:41:21.026262+00:00Z'
+git_commit: '9e9b464323521c44bb5b9f96b078e08c9c67e8e9'
 stats:
-  total_indexed_files: 157
-  total_symbols: 689
+  total_indexed_files: 159
+  total_symbols: 692
 
 domain_tags:
   config:
     category: 'config'
     matching_entities: 12
-    sample_targets: ["arcproLab/arcpro_env_cfg.py", "arcproLab/mdp/curriculum_config.py", "arcproLab/policy_stack/agent/agent_env_wrapper.py", "arcproLab/policy_stack/agent/config.py", "arcproLab/policy_stack/tests/mock_env_utils.py"]
+    sample_targets: ["arcproLab/policy_stack/agent/agent_env_wrapper.py", "arcproLab/policy_stack/agent/config.py", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/envs/registry.py", "arcproLab/policy_stack/envs/__init__.py"]
   database:
     category: 'layer'
-    matching_entities: 4
-    sample_targets: ["arcproLab/agents/skrl_models.py", "arcproLab/policy_stack/baselines/dave2/model.py", "arcproLab/scripts/init_gsd_db.py", "arcproLab/models/road_following_model.pth"]
+    matching_entities: 5
+    sample_targets: ["arcproLab/policy_stack/baselines/dave2/model.py", "arcproLab/scripts/init_gsd_db.py", "arcproLab/models/road_following_model.pth", "cta_turns.db", "arcproLab/agents/skrl_models.py"]
   robotics:
     category: 'domain'
     matching_entities: 3

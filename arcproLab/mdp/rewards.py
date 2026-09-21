@@ -131,7 +131,15 @@ def jerk_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     # Update prev_action_jerk for the next step
     env.extras["prev_action_jerk"] = env.action_manager.action.clone()
     
-    return -100.0 * torch.square(steer_delta)
+    # Scale down jerk penalty when negotiating curves/corners so rapid turn-in is not penalized
+    kappa = env.extras.get("lookahead_kappa", None)
+    if kappa is not None:
+        kappa_val = torch.abs(kappa.to(device=env.device, dtype=torch.float32).view_as(steer_delta))
+        corner_gate = torch.clamp(1.0 - 2.5 * kappa_val, min=0.0, max=1.0)
+    else:
+        corner_gate = torch.ones_like(steer_delta)
+    
+    return -100.0 * torch.square(steer_delta) * corner_gate
 
 def action_rate_smoothness_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     if env.action_manager.action is None or env.action_manager.action.shape[1] < 1:
@@ -240,10 +248,13 @@ def curvature_speed_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
         lookahead_kappa = lookahead_kappa.view_as(current_kappa)
 
     effective_kappa = torch.maximum(torch.abs(current_kappa), torch.abs(lookahead_kappa))
-    # Target speed decreases with curvature: 0.85 m/s on straights -> 0.35 m/s in sharp turns (effective_kappa >= 0.70)
     target_speed = torch.clamp(0.85 - (effective_kappa * 0.70), min=0.35, max=0.85).to(device=env.device)
     current_speed = torch.norm(env.scene["robot"].data.root_lin_vel_b[:, :2], dim=1).to(device=env.device)
     
     speed_error = torch.abs(current_speed - target_speed)
-    return torch.exp(-2.0 * speed_error).to(device=env.device)
+    rew = torch.exp(-2.5 * speed_error).to(device=env.device)
+    overspeed = torch.clamp(current_speed - 0.45, min=0.0)
+    is_sharp = effective_kappa >= 0.70
+    overspeed_pen = torch.where(is_sharp, -2.0 * torch.square(overspeed), torch.tensor(0.0, device=env.device))
+    return rew + overspeed_pen
 

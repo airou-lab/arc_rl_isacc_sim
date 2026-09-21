@@ -1,8 +1,14 @@
 #!/bin/bash
-# If invoked from inside tmux session 'training', detach execution to prevent suicide
-if [ -n "$TMUX" ] && tmux display-message -p '#S' 2>/dev/null | grep -q "^training$"; then
-    nohup bash "$0" "$@" > /tmp/start_tmux.log 2>&1 &
-    exit 0
+# If invoked from inside tmux session 'training', detach cleanly without inheriting $TMUX
+if [ -n "$TMUX" ] && [ "$1" != "--detached-internal" ]; then
+    if tmux display-message -p '#S' 2>/dev/null | grep -q "^training$"; then
+        echo "[start_tmux] Detaching from active session 'training' to execute restart..."
+        env -u TMUX -u TMUX_PANE nohup bash "$0" --detached-internal "$@" > /tmp/start_tmux.log 2>&1 &
+        exit 0
+    fi
+fi
+if [ "$1" = "--detached-internal" ]; then
+    shift
 fi
 
 # Kill any existing training session

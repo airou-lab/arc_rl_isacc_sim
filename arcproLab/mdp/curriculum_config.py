@@ -6,16 +6,24 @@ from typing import Any, Dict, List, Tuple
 
 _CONFIG_PATH = os.path.join(os.path.dirname(__file__), "curriculum_sectors.json")
 _LAST_MTIME = 0.0
+_DEFAULT_SPAWNS = {
+    "1": {"x": -16.197, "y": 5.50, "yaw": -1.5708},
+    "2": {"x": -16.197, "y": -3.50, "yaw": -1.5708},
+    "3": {"x": -12.000, "y": -7.10, "yaw": 0.0},
+    "4": {"x": 0.500, "y": -6.55, "yaw": 0.0},
+    "5": {"x": -6.082, "y": 6.377, "yaw": 3.14159265}
+}
 _CACHED_CONFIG: Dict[str, Any] = {
     "sector_weights": [0.20, 0.20, 0.20, 0.20, 0.20],
     "lookahead_distance": 1.2,
     "speed_tracking_weight": 60.0,
     "target_corner_speed": 0.35,
+    "sector_spawns": _DEFAULT_SPAWNS,
     "sectors": {
         "1": "Start Line (11m straight)",
         "2": "Corner 1 Runway Approach (2.5m runway)",
         "3": "Leg 2 Post-C1 Exit (8m runway)",
-        "4": "Leg 2 Intersection Approach (4.15m runway)",
+        "4": "Corner 2 Runway Approach (2.5m runway, X=0.50, Y=-6.55)",
         "5": "North Straight Return Corridor (10m runway)"
     }
 }
@@ -53,6 +61,12 @@ def get_sector_thresholds() -> Tuple[float, float, float, float]:
     """Get the 4 cumulative probability thresholds for 5 sectors."""
     get_curriculum_config()
     return (_CACHED_THRESHOLDS[0], _CACHED_THRESHOLDS[1], _CACHED_THRESHOLDS[2], _CACHED_THRESHOLDS[3])
+
+
+def get_sector_spawns() -> Dict[str, Dict[str, float]]:
+    """Get spawn coordinates and orientations for the 5 curriculum sectors."""
+    cfg = get_curriculum_config()
+    return cfg.get("sector_spawns", _DEFAULT_SPAWNS)
 
 
 def get_lookahead_distance() -> float:

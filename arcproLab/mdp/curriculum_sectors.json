@@ -1,14 +1,47 @@
 {
-  "sector_weights": [0.35, 0.20, 0.15, 0.15, 0.15],
+  "sector_weights": [
+    0.35,
+    0.1,
+    0.1,
+    0.35,
+    0.1
+  ],
   "lookahead_distance": 1.6,
-  "speed_tracking_weight": 60.0,
+  "speed_tracking_weight": 120.0,
   "target_corner_speed": 0.35,
+  "sector_spawns": {
+    "1": {
+      "x": -16.197,
+      "y": 5.5,
+      "yaw": -1.5708
+    },
+    "2": {
+      "x": -16.197,
+      "y": -3.5,
+      "yaw": -1.5708
+    },
+    "3": {
+      "x": -12.0,
+      "y": -7.1,
+      "yaw": 0.0
+    },
+    "4": {
+      "x": 0.5,
+      "y": -6.55,
+      "yaw": 0.0
+    },
+    "5": {
+      "x": -6.082,
+      "y": 6.377,
+      "yaw": 3.14159265
+    }
+  },
   "sectors": {
     "1": "Start Line (11m straight)",
     "2": "Corner 1 Runway Approach (2.5m runway)",
     "3": "Leg 2 Post-C1 Exit (8m runway)",
-    "4": "Leg 2 Intersection Approach (4.15m runway)",
+    "4": "Corner 2 Runway Approach (2.5m runway, X=0.50, Y=-6.55)",
     "5": "North Straight Return Corridor (10m runway)"
   },
-  "updated_at": "2026-09-11T02:35:00Z"
+  "updated_at": "2026-09-21T20:42:36.550919Z"
 }

@@ -183,8 +183,8 @@ class RewardCfg:
     progress_reward = RewTerm(func=lambda env: torch.tanh(mdp_rew.waypoint_progress_reward(env)), weight=200.0)
     
     # Exploration: Tiny reward for applying any throttle/drive action to break out of stagnation
-    # Increased steering penalty (-2.0) to prevent the agent from exploiting spinning in circles (Spinning Top exploit).
-    action_steer_penalty = RewTerm(func=lambda env: torch.square(env.action_manager.action[:, 0]), weight=-0.5)
+    # Steering penalty zeroed out so holding steering lock in tight corners is never penalized
+    action_steer_penalty = RewTerm(func=lambda env: torch.square(env.action_manager.action[:, 0]), weight=0.0)
     # Forward Drive Incentive: Balanced to 5.0 so forward motion is encouraged without barrelling into corners
     action_drive_reward = RewTerm(
         func=lambda env: env.action_manager.action[:, 1],
@@ -205,17 +205,18 @@ class RewardCfg:
     # It densely rewards the agent for facing forward (+10/step) and heavily penalizes facing backward (-10/step).
     # This prevents spin-outs and backwards driving without explicitly penalizing the steering action itself.
     heading = RewTerm(func=mdp_rew.heading_alignment_reward, weight=100.0)
-    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=2.0)
+    # Smoothness zeroed out (duplicate of curvature-gated jerk term)
+    smoothness = RewTerm(func=mdp_rew.action_rate_smoothness_reward, weight=0.0)
     
-    # Jitter Suppression (Straightaway Stability Tuning - Issue 88)
-    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.05)
+    # Jitter Suppression (Curvature-gated, benign 0.01 weight)
+    jerk = RewTerm(func=mdp_rew.jerk_penalty, weight=0.01)
     
     # Boundary Penalty: (Enabled: Risk-aware shaping to smoothly steer away from walls)
     # Set to 0.4 (Issue 33) to perfectly balance against stagnation without over-saturation.
     boundary = RewTerm(func=mdp_rew.boundary_penalty, weight=0.0)
 
     # Curvature-Adaptive Target Speed Tracking (Incentivizes braking before sharp turn apexes)
-    speed_tracking = RewTerm(func=mdp_rew.curvature_speed_reward, weight=60.0)
+    speed_tracking = RewTerm(func=mdp_rew.curvature_speed_reward, weight=120.0)
 
 
 @configclass
@@ -224,10 +225,9 @@ class TerminationCfg:
     # Physical USD Contact: Terminate if any part of the robot touches the physical ground plane.
     # NOTE FOR USER: Threshold MUST be > 50.0! The track mesh is thin and rests 5cm above the ground plane.
     # The car's wheels slightly clip through the track mesh and constantly touch the ground plane beneath it,
-    # generating small contact forces (e.g., 5-20N). A threshold of 1.0 triggers instantly on spawn.
-    # A threshold of 50.0+ ignores the clipping wheels but will successfully trigger when the full weight
-    # of the car slams into the ground plane after falling off the track!
-    ground_contact_term = DoneTerm(func=mdp_done.ground_contact_termination, params={"sensor_cfg": SceneEntityCfg("ground_contact"), "threshold": 150.0})
+    # generating small contact forces (e.g., 5-20N). Dynamic cornering loads can produce spikes of 80-140N.
+    # A threshold of 250.0 ignores cornering tire flex but cleanly catches full-weight drops off track!
+    ground_contact_term = DoneTerm(func=mdp_done.ground_contact_termination, params={"sensor_cfg": SceneEntityCfg("ground_contact"), "threshold": 250.0})
     # Stagnation: Reset if stuck against a wall
     stagnation = DoneTerm(func=mdp_done.stagnation_termination)
 

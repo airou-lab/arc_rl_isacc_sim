@@ -2,7 +2,7 @@ import math
 import torch
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
-from mdp.curriculum_config import get_sector_thresholds
+from mdp.curriculum_config import get_sector_spawns, get_sector_thresholds
 
 def reset_robot_curriculum_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")):
     """
@@ -10,7 +10,7 @@ def reset_robot_curriculum_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, 
     Sector 1: Start Line (X = -16.197, Y = 5.50, yaw = -1.5708 [South])
     Sector 2: Corner 1 Runway Approach (X = -16.197, Y = -3.50, yaw = -1.5708 [South])
     Sector 3: Leg 2 Post-C1 Exit (X = -12.000, Y = -7.10, yaw = 0.0 [East])
-    Sector 4: Leg 2 Intersection Approach (X = -8.000, Y = -7.10, yaw = 0.0 [East])
+    Sector 4: Corner 2 Runway Approach (X = 0.500, Y = -6.55, yaw = 0.0 [East])
     Sector 5: North Straight Return Corridor (X = -6.082, Y = 6.377, yaw = 3.14159 [West])
     Applies ±5cm lateral jitter and ±3° heading noise to prevent open-loop memorization.
     """
@@ -25,24 +25,25 @@ def reset_robot_curriculum_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, 
 
     # 5-Sector Certified Circuit Spawner with Dynamic Curriculum Thresholds:
     t1, t2, t3, t4 = get_sector_thresholds()
+    spawns = get_sector_spawns()
     r = torch.rand(num_resets, device=env.device)
-    base_x = torch.where(r < t1, torch.tensor(-16.197, device=env.device),
-             torch.where(r < t2, torch.tensor(-16.197, device=env.device),
-             torch.where(r < t3, torch.tensor(-12.000, device=env.device),
-             torch.where(r < t4, torch.tensor(-8.000, device=env.device),
-                                  torch.tensor(-6.082, device=env.device)))))
+    base_x = torch.where(r < t1, torch.tensor(spawns["1"]["x"], device=env.device),
+             torch.where(r < t2, torch.tensor(spawns["2"]["x"], device=env.device),
+             torch.where(r < t3, torch.tensor(spawns["3"]["x"], device=env.device),
+             torch.where(r < t4, torch.tensor(spawns["4"]["x"], device=env.device),
+                                  torch.tensor(spawns["5"]["x"], device=env.device)))))
 
-    base_y = torch.where(r < t1, torch.tensor(5.50, device=env.device),
-             torch.where(r < t2, torch.tensor(-3.50, device=env.device),
-             torch.where(r < t3, torch.tensor(-7.10, device=env.device),
-             torch.where(r < t4, torch.tensor(-7.10, device=env.device),
-                                  torch.tensor(6.377, device=env.device)))))
+    base_y = torch.where(r < t1, torch.tensor(spawns["1"]["y"], device=env.device),
+             torch.where(r < t2, torch.tensor(spawns["2"]["y"], device=env.device),
+             torch.where(r < t3, torch.tensor(spawns["3"]["y"], device=env.device),
+             torch.where(r < t4, torch.tensor(spawns["4"]["y"], device=env.device),
+                                  torch.tensor(spawns["5"]["y"], device=env.device)))))
 
-    base_yaw = torch.where(r < t1, torch.tensor(-1.5708, device=env.device),
-               torch.where(r < t2, torch.tensor(-1.5708, device=env.device),
-               torch.where(r < t3, torch.tensor(0.0, device=env.device),
-               torch.where(r < t4, torch.tensor(0.0, device=env.device),
-                                    torch.tensor(3.14159265, device=env.device)))))
+    base_yaw = torch.where(r < t1, torch.tensor(spawns["1"]["yaw"], device=env.device),
+               torch.where(r < t2, torch.tensor(spawns["2"]["yaw"], device=env.device),
+               torch.where(r < t3, torch.tensor(spawns["3"]["yaw"], device=env.device),
+               torch.where(r < t4, torch.tensor(spawns["4"]["yaw"], device=env.device),
+                                    torch.tensor(spawns["5"]["yaw"], device=env.device)))))
 
     # Domain Randomization: Lateral Jitter (±5cm) & Heading Noise (±3 deg)
     # Prevents fixed-trajectory memorization and forces active visual lane centering!

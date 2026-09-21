@@ -15,6 +15,7 @@ Failure Sentinels:
 
 import argparse
 import datetime
+import glob
 import json
 import logging
 import os
@@ -32,13 +33,36 @@ SENTINEL_LOG = os.path.join(WORKSPACE_ROOT, "logs/sentinel.log")
 DIAGNOSIS_FILE = os.path.join(WORKSPACE_ROOT, "logs/SENTINEL_DIAGNOSIS.md")
 STATE_FILE = os.path.join(WORKSPACE_ROOT, "logs/sentinel_state.json")
 CTA_DB_PATH = os.path.join(WORKSPACE_ROOT, ".cta/cta_turns.db")
-CURRICULUM_CFG_PATH = os.path.join(WORKSPACE_ROOT, "arcproLab/mdp/curriculum_sectors.json")
+CURRICULUM_CFG_PATH = os.path.join(
+    WORKSPACE_ROOT, "arcproLab/mdp/curriculum_sectors.json"
+)
 LANDMARK_DIR = os.path.join(WORKSPACE_ROOT, "archive/landmark_checkpoints")
 START_SCRIPT = os.path.join(WORKSPACE_ROOT, "start_tmux_training.sh")
 
-PRIMARY_LANDMARK = os.path.join(LANDMARK_DIR, "agent_4141500_peak.pt")
-SECONDARY_LANDMARK = os.path.join(LANDMARK_DIR, "agent_2587500_corner_plateau_baseline.pt")
-TERTIARY_LANDMARK = os.path.join(LANDMARK_DIR, "agent_1405000_latest_backup.pt")
+
+def get_branch_checkpoint(target: str = "best_agent.pt") -> str:
+    """Resolve checkpoint within current branch run directory, falling back to archive."""
+    branch = "feature/realsense-realistic-kinematics"
+    branch_tag = branch.replace("/", "_")
+    branch_dir = os.path.join(WORKSPACE_ROOT, f"logs/ppo_skrl_{branch_tag}")
+    if os.path.exists(branch_dir):
+        matches = glob.glob(os.path.join(branch_dir, "**", target), recursive=True)
+        if matches:
+            return matches[0]
+        all_pts = glob.glob(os.path.join(branch_dir, "**", "*.pt"), recursive=True)
+        if all_pts:
+            return sorted(all_pts, key=os.path.getmtime)[-1]
+    fallback = os.path.join(LANDMARK_DIR, target)
+    return (
+        fallback
+        if os.path.exists(fallback)
+        else os.path.join(LANDMARK_DIR, "best_agent.pt")
+    )
+
+
+PRIMARY_LANDMARK = get_branch_checkpoint("best_agent.pt")
+SECONDARY_LANDMARK = get_branch_checkpoint("agent_750000.pt")
+TERTIARY_LANDMARK = get_branch_checkpoint("agent_500000.pt")
 
 DEFAULT_COOLDOWN_SEC = 300.0  # 5 minutes stabilization cooldown after intervention
 
@@ -151,15 +175,17 @@ def check_process_status(max_stale_seconds: float = 180.0) -> ProcessStatus:
     """Check tmux session, process execution, and log freshness."""
     tmux_active = False
     try:
-        res = subprocess.run(["tmux", "has-session", "-t", "training"], capture_output=True)
-        tmux_active = (res.returncode == 0)
+        res = subprocess.run(
+            ["tmux", "has-session", "-t", "training"], capture_output=True
+        )
+        tmux_active = res.returncode == 0
     except Exception:
         tmux_active = False
 
     python_active = False
     try:
         res = subprocess.run(["pgrep", "-f", "train_skrl.py"], capture_output=True)
-        python_active = (res.returncode == 0)
+        python_active = res.returncode == 0
     except Exception:
         python_active = False
 
@@ -170,7 +196,7 @@ def check_process_status(max_stale_seconds: float = 180.0) -> ProcessStatus:
         try:
             mtime = os.path.getmtime(LOG_FILE)
             log_age = time.time() - mtime
-            log_fresh = (log_age <= max_stale_seconds)
+            log_fresh = log_age <= max_stale_seconds
         except Exception:
             pass
 
@@ -191,7 +217,9 @@ def parse_recent_metrics(max_lines: int = 300) -> List[MetricBatch]:
         return []
 
     try:
-        tail_bytes = subprocess.check_output(["tail", "-n", str(max_lines), LOG_FILE], timeout=5)
+        tail_bytes = subprocess.check_output(
+            ["tail", "-n", str(max_lines), LOG_FILE], timeout=5
+        )
         text = tail_bytes.decode("utf-8", errors="replace")
     except Exception:
         return []
@@ -247,6 +275,7 @@ def log_to_cta_db(
 
     try:
         import sqlite3
+
         conn = sqlite3.connect(CTA_DB_PATH, timeout=10.0)
         c = conn.cursor()
         now_utc = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -307,10 +336,14 @@ class AutonomousSentinel:
             s5_reasons.append("train_skrl.py process not detected")
         if not proc.log_fresh and proc.log_age_seconds > 180.0:
             s5_triggered = True
-            s5_reasons.append(f"training log is stale ({proc.log_age_seconds:.1f}s > 180s)")
+            s5_reasons.append(
+                f"training log is stale ({proc.log_age_seconds:.1f}s > 180s)"
+            )
         if proc.gpu.vram_used_mb > 11500.0:
             s5_triggered = True
-            s5_reasons.append(f"GPU VRAM exhaustion ({proc.gpu.vram_used_mb}MB > 11.5GB)")
+            s5_reasons.append(
+                f"GPU VRAM exhaustion ({proc.gpu.vram_used_mb}MB > 11.5GB)"
+            )
 
         diagnostics["sentinels"]["sentinel_5_process_hang"] = {
             "triggered": s5_triggered,
@@ -382,25 +415,27 @@ class AutonomousSentinel:
         # -------------------------------------------------------------
         # Sentinel 2: Corner 1 Apex Cliff / Understeer Lockup Sentinel
         # -------------------------------------------------------------
-        # Condition: Over 50,000 steps, max(Len) <= 860 steps (car unable to pass Corner 1 / understeer)
+        # Condition: Over 100,000 steps, max(Len) < 800 steps (car unable to penetrate Corner 1 / understeer)
         s2_triggered = False
-        if self.state.get("apex_cliff_eval_start_step", 0) == 0:
+        eval_start = self.state.get("apex_cliff_eval_start_step", 0)
+        if eval_start == 0 or latest_batch.step < eval_start:
+            # Immediate unblinding: uninitialized or rollback occurred
             self.state["apex_cliff_eval_start_step"] = latest_batch.step
             self.state["step_window_max_len"] = max_len_seen
         else:
             self.state["step_window_max_len"] = max(
                 self.state.get("step_window_max_len", 0), max_len_seen
             )
-            step_delta = latest_batch.step - self.state["apex_cliff_eval_start_step"]
-            # Gate apex cliff evaluation so newborn policy (step < 300k) has runway to learn
-            if latest_batch.step >= 300000 and step_delta >= 50000:
-                if self.state["step_window_max_len"] <= 860:
+            step_delta = latest_batch.step - eval_start
+            # Gate apex cliff evaluation so policy has a generous 100k-step horizon to adapt
+            if latest_batch.step >= 300000 and step_delta >= 100000:
+                if self.state["step_window_max_len"] < 800:
                     s2_triggered = True
                     # Reset evaluation window after triggering to prevent infinite re-fire
                     self.state["apex_cliff_eval_start_step"] = latest_batch.step
                     self.state["step_window_max_len"] = max_len_seen
                 else:
-                    # Reset window
+                    # Reset window: successfully penetrated Corner 1 apex (>= 800 steps)
                     self.state["apex_cliff_eval_start_step"] = latest_batch.step
                     self.state["step_window_max_len"] = max_len_seen
             elif latest_batch.step < 300000:
@@ -411,19 +446,29 @@ class AutonomousSentinel:
         diagnostics["sentinels"]["sentinel_2_apex_cliff"] = {
             "triggered": s2_triggered,
             "window_max_len": self.state.get("step_window_max_len", 0),
-            "step_delta": latest_batch.step - self.state.get("apex_cliff_eval_start_step", latest_batch.step),
+            "step_delta": latest_batch.step
+            - self.state.get("apex_cliff_eval_start_step", latest_batch.step),
         }
         if s2_triggered:
             triggered_failures.append(
-                f"CORNER1_APEX_CLIFF: max(Len)={self.state['step_window_max_len']} <= 860 across 50k steps"
+                f"CORNER1_APEX_CLIFF: max(Len)={self.state['step_window_max_len']} < 800 across 100k steps"
             )
 
         # -------------------------------------------------------------
         # Sentinel 3: Outer Shoulder Wall-Hugging Sentinel
         # -------------------------------------------------------------
-        # Condition: Repeated resets on straightaway with Len < 150 (gated for step >= 100k to allow newborn exploration)
+        # Condition: Repeated straightaway crashes with NO exploration (avg_ep_len < 150, max_len < 350, wps < 25)
+        # Gated so that multi-sector curriculum (e.g. Sector 2 short runway to C1) and healthy
+        # exploratory agents (max_len >= 350 or wps_cum >= 25) never trigger false resets.
         s3_triggered = False
-        if latest_batch.step >= 100000 and avg_ep_len < 150.0 and avg_speed >= 0.50 and avg_rew < 600.0:
+        if (
+            latest_batch.step >= 100000
+            and avg_ep_len < 150.0
+            and max_len_seen < 350
+            and latest_batch.wps_cum < 25
+            and avg_speed >= 0.50
+            and avg_rew < 600.0
+        ):
             self.state["wall_hugging_consecutive_count"] += 1
             if self.state["wall_hugging_consecutive_count"] >= 10:
                 s3_triggered = True
@@ -438,7 +483,7 @@ class AutonomousSentinel:
         }
         if s3_triggered:
             triggered_failures.append(
-                f"WALL_HUGGING: Premature straightaway terminations with ep_len={avg_ep_len:.1f} < 150"
+                f"WALL_HUGGING: Premature straightaway terminations with ep_len={avg_ep_len:.1f} < 150 (max_len={max_len_seen}, wps={latest_batch.wps_cum})"
             )
 
         # -------------------------------------------------------------
@@ -447,15 +492,20 @@ class AutonomousSentinel:
         # Condition: NaN divergence or sustained negative reward (avg_rew < 0.0) over 10 intervals
         s4_triggered = False
         import math
+
         is_diverged = math.isnan(avg_rew) or math.isnan(avg_ep_len)
         if is_diverged:
             s4_triggered = True
-            triggered_failures.append("POLICY_COLLAPSE: Numerical NaN detected in reward or episode length")
+            triggered_failures.append(
+                "POLICY_COLLAPSE: Numerical NaN detected in reward or episode length"
+            )
         elif len(batches) >= 20 and avg_rew < 0.0:
             self.state["collapse_consecutive_count"] += 1
             if self.state["collapse_consecutive_count"] >= 10:
                 s4_triggered = True
-                triggered_failures.append(f"POLICY_COLLAPSE: Sustained negative reward avg_rew={avg_rew:.1f} < 0.0 for 10 intervals")
+                triggered_failures.append(
+                    f"POLICY_COLLAPSE: Sustained negative reward avg_rew={avg_rew:.1f} < 0.0 for 10 intervals"
+                )
         else:
             self.state["collapse_consecutive_count"] = max(
                 0, self.state["collapse_consecutive_count"] - 1
@@ -470,16 +520,22 @@ class AutonomousSentinel:
         self.state["last_seen_step"] = latest_batch.step
         save_state(self.state)
 
-        is_healthy = (len(triggered_failures) == 0)
+        is_healthy = len(triggered_failures) == 0
         return is_healthy, triggered_failures, diagnostics
 
-    def execute_self_healing(self, failure_type: str, diagnostics: Dict[str, Any], force: bool = False) -> bool:
+    def execute_self_healing(
+        self, failure_type: str, diagnostics: Dict[str, Any], force: bool = False
+    ) -> bool:
         """Execute automated self-healing action matching the failure mode."""
         now = time.time()
         elapsed_since_last = now - self.state.get("last_intervention_time", 0.0)
 
         # Prevent flapping with minimum cooldown, unless forced or process is dead/hung
-        if not force and "PROCESS_HANG" not in failure_type and elapsed_since_last < DEFAULT_COOLDOWN_SEC:
+        if (
+            not force
+            and "PROCESS_HANG" not in failure_type
+            and elapsed_since_last < DEFAULT_COOLDOWN_SEC
+        ):
             remaining = DEFAULT_COOLDOWN_SEC - elapsed_since_last
             self.logger.warning(
                 f"Intervention cooldown active ({remaining:.1f}s remaining). Skipping flapping execution."
@@ -505,10 +561,13 @@ class AutonomousSentinel:
             if not self.dry_run:
                 try:
                     from mdp.curriculum_config import update_curriculum_config
-                    update_curriculum_config({
-                        "speed_tracking_weight": 90.0,
-                        "target_corner_speed": 0.40,
-                    })
+
+                    update_curriculum_config(
+                        {
+                            "speed_tracking_weight": 90.0,
+                            "target_corner_speed": 0.40,
+                        }
+                    )
                 except Exception as e:
                     self.logger.error(f"Failed to update curriculum config: {e}")
             restart_cmd = ["bash", START_SCRIPT]
@@ -524,7 +583,11 @@ class AutonomousSentinel:
             restart_cmd = ["bash", START_SCRIPT]
 
         elif "COLLAPSE" in f_upper or "DIVERGENCE" in f_upper:
-            target_ckpt = PRIMARY_LANDMARK if os.path.exists(PRIMARY_LANDMARK) else SECONDARY_LANDMARK
+            target_ckpt = (
+                PRIMARY_LANDMARK
+                if os.path.exists(PRIMARY_LANDMARK)
+                else SECONDARY_LANDMARK
+            )
             action_summary = f"Automated rollback to certified landmark checkpoint {os.path.basename(target_ckpt)}"
             files_touched.append(target_ckpt)
             restart_cmd = ["bash", START_SCRIPT, target_ckpt]
@@ -533,7 +596,9 @@ class AutonomousSentinel:
         try:
             with open(DIAGNOSIS_FILE, "w") as f:
                 f.write(f"# SENTINEL SELF-HEALING DIAGNOSIS\n\n")
-                f.write(f"**Timestamp**: {datetime.datetime.now(datetime.timezone.utc).isoformat()}\n\n")
+                f.write(
+                    f"**Timestamp**: {datetime.datetime.now(datetime.timezone.utc).isoformat()}\n\n"
+                )
                 f.write(f"**Failure Detected**: `{failure_type}`\n\n")
                 f.write(f"**Action Taken**: {action_summary}\n\n")
                 f.write(f"**Dry Run**: {self.dry_run}\n\n")
@@ -548,6 +613,12 @@ class AutonomousSentinel:
         self.state["crawling_consecutive_count"] = 0
         self.state["collapse_consecutive_count"] = 0
         self.state["wall_hugging_consecutive_count"] = 0
+        if any(
+            term in failure_type.upper()
+            for term in ["CORNER1", "APEX_CLIFF", "CLIFF", "COLLAPSE", "DIVERGENCE"]
+        ):
+            self.state["apex_cliff_eval_start_step"] = 0
+            self.state["step_window_max_len"] = 0
         save_state(self.state)
 
         # Log to CTA database
@@ -564,14 +635,21 @@ class AutonomousSentinel:
 
         # Execute restart command last, as it may kill the running tmux session/sentinel
         if not self.dry_run and restart_cmd:
-            subprocess.run(restart_cmd, cwd=WORKSPACE_ROOT)
+            clean_env = os.environ.copy()
+            clean_env.pop("TMUX", None)
+            clean_env.pop("TMUX_PANE", None)
+            subprocess.Popen(
+                restart_cmd, cwd=WORKSPACE_ROOT, env=clean_env, start_new_session=True
+            )
 
         return True
 
 
 def run_daemon(sentinel: AutonomousSentinel, interval_sec: float = 15.0) -> None:
     """Run persistent monitoring loop."""
-    sentinel.logger.info(f"Autonomous Sentinel Daemon Active (interval={interval_sec}s)...")
+    sentinel.logger.info(
+        f"Autonomous Sentinel Daemon Active (interval={interval_sec}s)..."
+    )
     try:
         while True:
             is_healthy, failures, diagnostics = sentinel.run_health_check()
@@ -596,16 +674,49 @@ def run_daemon(sentinel: AutonomousSentinel, interval_sec: float = 15.0) -> None
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Autonomous Self-Healing Sentinel for ARCPro RL")
-    parser.add_argument("--daemon", action="store_true", help="Run in continuous monitoring daemon loop")
-    parser.add_argument("--check", action="store_true", help="Perform single health check and exit")
-    parser.add_argument("--status", action="store_true", help="Print current sentinel state and metrics")
-    parser.add_argument("--dry-run", action="store_true", help="Evaluate failure conditions without modifying state")
-    parser.add_argument("--interval", type=float, default=15.0, help="Check interval in seconds for daemon (default: 15)")
-    parser.add_argument("--trigger", type=str, choices=["crawling", "apex_cliff", "wall_hugging", "policy_collapse", "process_hang"],
-                        help="Manually trigger a specific self-healing intervention")
-    parser.add_argument("--force", action="store_true", help="Bypass cooldown period for testing or immediate override")
-    parser.add_argument("--verbose", action="store_true", help="Enable verbose debug logging")
+    parser = argparse.ArgumentParser(
+        description="Autonomous Self-Healing Sentinel for ARCPro RL"
+    )
+    parser.add_argument(
+        "--daemon", action="store_true", help="Run in continuous monitoring daemon loop"
+    )
+    parser.add_argument(
+        "--check", action="store_true", help="Perform single health check and exit"
+    )
+    parser.add_argument(
+        "--status", action="store_true", help="Print current sentinel state and metrics"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Evaluate failure conditions without modifying state",
+    )
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=15.0,
+        help="Check interval in seconds for daemon (default: 15)",
+    )
+    parser.add_argument(
+        "--trigger",
+        type=str,
+        choices=[
+            "crawling",
+            "apex_cliff",
+            "wall_hugging",
+            "policy_collapse",
+            "process_hang",
+        ],
+        help="Manually trigger a specific self-healing intervention",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Bypass cooldown period for testing or immediate override",
+    )
+    parser.add_argument(
+        "--verbose", action="store_true", help="Enable verbose debug logging"
+    )
     args = parser.parse_args()
 
     logger = setup_logger(verbose=args.verbose)
@@ -614,7 +725,9 @@ def main():
     if args.trigger:
         logger.info(f"Manual trigger requested for sentinel: {args.trigger}")
         is_healthy, failures, diagnostics = sentinel.run_health_check()
-        sentinel.execute_self_healing(f"MANUAL_TRIGGER_{args.trigger.upper()}", diagnostics, force=args.force)
+        sentinel.execute_self_healing(
+            f"MANUAL_TRIGGER_{args.trigger.upper()}", diagnostics, force=args.force
+        )
         sys.exit(0)
 
     if args.status:
@@ -632,12 +745,20 @@ def main():
                 print(f"  {k}: {v}")
         proc = diagnostics.get("process", {})
         print("\nProcess & GPU Status:")
-        print(f"  tmux session 'training': {'Running' if proc.get('tmux_active') else 'Dead'}")
-        print(f"  Python process: {'Active' if proc.get('python_active') else 'Inactive'}")
+        print(
+            f"  tmux session 'training': {'Running' if proc.get('tmux_active') else 'Dead'}"
+        )
+        print(
+            f"  Python process: {'Active' if proc.get('python_active') else 'Inactive'}"
+        )
         print(f"  Log age: {proc.get('log_age_seconds', 0):.1f}s")
         gpu = proc.get("gpu", {})
-        print(f"  GPU VRAM: {gpu.get('vram_used_mb', 0):.0f} / {gpu.get('vram_total_mb', 0):.0f} MB ({gpu.get('gpu_util_pct', 0)}% util)")
-        print(f"\nLast Intervention: {sentinel.state.get('last_intervention_type')} at {sentinel.state.get('last_intervention_time')}")
+        print(
+            f"  GPU VRAM: {gpu.get('vram_used_mb', 0):.0f} / {gpu.get('vram_total_mb', 0):.0f} MB ({gpu.get('gpu_util_pct', 0)}% util)"
+        )
+        print(
+            f"\nLast Intervention: {sentinel.state.get('last_intervention_type')} at {sentinel.state.get('last_intervention_time')}"
+        )
         print(f"Total Interventions: {sentinel.state.get('interventions_count', 0)}")
         sys.exit(0 if is_healthy else 1)
 
@@ -652,7 +773,9 @@ def main():
             len_str = f"Len {metrics.get('avg_ep_len', 'N/A')}"
             rew_str = f"Rew {metrics.get('avg_rew', 'N/A')}"
             spd_str = f"Spd {metrics.get('avg_speed', 'N/A')} m/s"
-            logger.info(f"✅ Sentinel Check PASSED ({step_str} | {len_str} | {rew_str} | {spd_str})")
+            logger.info(
+                f"✅ Sentinel Check PASSED ({step_str} | {len_str} | {rew_str} | {spd_str})"
+            )
             sys.exit(0)
         else:
             logger.warning(f"❌ Sentinel Check FAILED: {failures}")

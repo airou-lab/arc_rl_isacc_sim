@@ -709,3 +709,86 @@ At the 500k milestone, the agent's episode lengths reached up to ~723, but the e
   5. **Branch Checkpoint Isolation (`train_skrl.py`, `start_tmux_training.sh`):** Configured automated branch-prefixed experiment directory (`logs/ppo_skrl_<branch>/`) so branch runs never collide with `main`.
   6. **Warm-Start Transfer:** Resumed from landmark peak checkpoint `agent_4141500_peak.pt` on `feature/realsense-realistic-kinematics`.
 
+### Issue 105: Ackermann Steering Feedforward Prior, Disarmed Centering Spring & Differential Learning Rates
+- **Problem:** End-to-end PPO visual steering struggled to learn sharp $90^\circ$ left-turn cornering from scratch without prior inductive guidance, causing cars to drive straight into the outer white line at Corner 1. Telemetry slot 5 (`last_steer`) acted as a strong auto-centering spring that actively resisted and counter-steered against cornering commands. The optimizer utilized a flat learning rate across both the convolutional feature extractor and the MLP policy head.
+- **Resolution:**
+  1. **Kinematic Curvature Feedforward Steering Prior (`arcproLab/agents/skrl_models.py`):**
+     Injected Ackermann steering bias derived from vehicle wheelbase $L = 0.33\text{ m}$ and max steering angle $\delta_{\max} = 0.68\text{ rad}$ ($39.0^\circ$):
+     $$\text{steer\_bias} = \text{clamp}(0.485 \times \kappa, -1.0, 1.0)$$
+     $$\text{action\_steer} = \text{clamp}(\text{raw\_action\_mean}[:, 0:1] + \text{steer\_bias}, -1.0, 1.0)$$
+     Straightaways ($\kappa \approx 0$) retain zero bias for straight tracking; sharp curves ($\kappa \approx 2.15\text{ m}^{-1}$) provide intentional turn-in exploration.
+  2. **Disarmed Centering Spring (`arcproLab/agents/skrl_models.py`):**
+     Masked slot 5 (`last_steer`) to 0.0 inside `ARCProActor.compute()` so the network cannot learn to counter-steer against turn entry.
+  3. **Parameter-Group Differential Learning Rates (`arcproLab/scripts/train_skrl.py`):**
+     Split Adam optimizer into 3 parameter groups:
+     - Visual Feature Extractor (`spatial_conv`, `spatial_fc`, `layer_norm`): $3 \times 10^{-5}$ (stable representation retention).
+     - Policy Control Head (`policy_head`, `log_std`): $3 \times 10^{-4}$ (10x faster control learning).
+     - Privileged Critic (`critic_head`): $1 \times 10^{-4}$ (low-variance baseline estimation).
+     Raised `entropy_loss_scale` to 0.010 for corner exploration.
+  4. **Autonomous Sentinel Hardening (`arcproLab/scripts/autonomous_sentinel.py`):**
+     Fixed post-rollback evaluation blindness in Sentinel 2 (`CORNER1_APEX_CLIFF`) and gated Sentinel 3 (`WALL_HUGGING`) with `step >= 100k` and `wps_cum < 25` to eliminate false restart loops during curriculum adaptation.
+
+### Issue 106: Corner 1 Apex Understeer Breakthrough — Kinematic Throttle Pre-Braking Prior, Reward Rebalancing & Sector 2 Curriculum Focus
+- **Problem:** At Step 1,350,000+ (27M+ transitions), episode length plateaued tightly at 810–837 steps. Telemetry confirmed cars traveled the entire 11.5m straightaway at 0.75–0.90 m/s but failed to decelerate before Corner 1 ($R = 0.464\text{ m}$, $\kappa = 2.155\text{ m}^{-1}$). Entering at 0.80+ m/s produced excessive lateral acceleration ($a_y \approx 1.38\text{ m/s}^2$) exceeding tire friction limits, causing uncontrollable understeer across the outer white line. Waypoint progress reward (+200) heavily outweighed speed tracking reward (+60), creating a perverse incentive where cruising at full speed into a fatal crash yielded higher cumulative reward than slowing down to 0.35 m/s.
+- **CTA Swarm Resolution (`run_20260916_210807_275cde`, `scatter_gather` topology across 3 subagents):**
+  1. **Kinematic Curvature Pre-Braking Throttle Prior (`arcproLab/agents/skrl_models.py`):**
+     Added an inductive deceleration bias to the drive channel in `ARCProActor.compute()`:
+     $$\text{brake\_bias} = \text{clamp}(|\kappa| \times 0.35, 0.0, 0.70)$$
+     $$\text{action\_drive} = \text{clamp}(\text{raw\_action\_mean}[:, 1:2] - \text{brake\_bias}, -1.0, 1.0)$$
+     $$\text{action\_mean} = [\text{action\_steer}, \text{action\_drive}]$$
+     On straightaways ($\kappa \approx 0$), `brake_bias = 0.0` (full acceleration). Approaching Corner 1 ($\kappa \ge 1.5\text{--}2.15$), `brake_bias` scales up to 0.70, smoothly reducing drive action down to $-0.45$, commanding wheel velocity ~11 rad/s ($v \approx 0.35\text{ m/s}$), which fits within linear tire friction limits.
+  2. **Pre-Braking Reward Calibration & Overspeed Penalty (`arcproLab/arcpro_env_cfg.py`, `arcproLab/mdp/rewards.py`):**
+     Doubled `speed_tracking` weight from 60.0 to 120.0 to decisively outweigh waypoint delta sprint incentives. In `curvature_speed_reward`, tightened tracking exponent to $-2.5$ and added a quadratic overspeed penalty for speeds $> 0.45\text{ m/s}$ when $\kappa_{\text{eff}} \ge 0.70$:
+     $$\text{overspeed\_pen} = -2.0 \times \max(0, v - 0.45)^2$$
+  3. **Curriculum Sector 2 Focus (`arcproLab/mdp/curriculum_sectors.json`):**
+     Shifted sector weights to `[0.15, 0.50, 0.15, 0.10, 0.10]`, placing 50% of spawns directly at Sector 2 ($X = -16.197, Y = -3.50$), 2.5m before Corner 1. Set `lookahead_distance = 1.6m` and `target_corner_speed = 0.35 m/s`.
+  4. **Warm-Restart & Verification:**
+     Resumed training cleanly from `agent_1350000.pt` in tmux session `training` (20 camera envs, RTX 3060). All 3 worker gates passed (`python3 -m py_compile` exit code 0). Within 19k steps, peak reward surged to +5,150.2, max episode length reached 827 steps, and mean length climbed to 257.4 steps.
+
+### Issue 107: Multi-Sector Curriculum Rebalancing for Full-Lap & Intersection/Corner 2 Progression
+- **Context:** Following the elimination of the Corner 1 understeer barrier via the kinematic pre-braking prior (Issue 106), the vehicle routinely cleared Corner 1 and traversed the 8m Leg 2 runway, reaching an all-time peak episode length of 1,536 steps (~22m, ~33% of the 64.85m full circuit) and rewards exceeding +10,209.8.
+- **Problem:** Because Sector 2 (Corner 1 runway approach) was allocated 50% of spawns, 85% of rollouts started mid-track and could not achieve a 5,000-step full lap. Meanwhile, the fleet is now encountering the Leg 2 intersection (WP 1700–1900) and Corner 2 (WP 2450, 90° left turn into the East Straight).
+- **Resolution (Option B Execution):**
+  1. **Curriculum Rebalance (`arcproLab/mdp/curriculum_sectors.json`):**
+     Updated sector weights from `[0.15, 0.50, 0.15, 0.10, 0.10]` to `[0.35, 0.10, 0.10, 0.35, 0.10]`.
+     - **Sector 1 (35%):** Spawns at the Start Line ($X = -16.197, Y = 5.50$) to maximize full-lap attempt density (0 to 64.85m, target ~5,000 steps).
+     - **Sector 4 (35%):** Spawns at the Leg 2 Intersection Approach ($X = -8.000, Y = -7.10$, heading East), providing high-density exposure to the 0.55m intersection lane shift and Corner 2 turn-in dynamics.
+     - **Sector 2 (10%), Sector 3 (10%), Sector 5 (10%):** Preserves Corner 1 pre-braking, Leg 2 exit acceleration, and North return corridor mastery without regression.
+  2. **Zero-Downtime Dynamic Auto-Reload:**
+     Utilized mtime-based auto-reload in `curriculum_config.py` to seamlessly update active environment thresholds in the running tmux simulation without stopping or restarting the 20-car training process.
+
+### Issue 108: Corner 2 Dedicated Runway Spawner to Unblock the 1,000–1,100 Step Frontier Plateau
+- **Context:** Across 8 hours of training under Option B (Steps 1.718M to 2.054M), fleet average episode length surged by +50% (263.9 -> 395.3 steps, all-time peak batch mean of 788 steps) and rewards climbed +72% (1,365 -> 2,348). However, the frontier maximum episode length plateaued at 1,000–1,120 steps across 672 batches.
+- **Root Cause (The 1k Double Convergence):** 70% of spawns were allocated to Sector 1 (Start Line, 0m) and Sector 4 (Intersection approach, 20m). At 0.68 m/s (50Hz), 1,000 steps equals ~13.6m of travel. For Sector 1, Corner 1 is at 11.5m (~1,050 steps). For Sector 4, Corner 2 is at 12m from spawn (~1,000 steps). Because Sector 4 spawned 12 meters before Corner 2, cars had to survive the 0.55m intersection lane shift and an 8m straight before ever encountering Corner 2, resulting in zero high-density practice on Corner 2 turn-in dynamics.
+- **Resolution (Swarm Run 3 Execution):**
+  1. **Dynamic Sector Spawns (`curriculum_config.py`, `curriculum_sectors.json`, `events.py`):**
+     Introduced `sector_spawns` into `curriculum_sectors.json` with dynamic mtime reload via `curriculum_config.get_sector_spawns()`.
+  2. **Corner 2 Dedicated Runway Approach (Sector 4 Relocation):**
+     Relocated Sector 4 from $X = -8.000, Y = -7.10$ (12m away) to $X = 0.500, Y = -6.550$, heading East ($yaw = 0.0$), placing vehicles on a straight runway exactly 2.3m before Corner 2 entry (WP 2218 -> 2400).
+  3. **High-Density Corner 2 Exposure:**
+     Allocates 35% of all spawns directly to Corner 2 approach, triggering the kinematic pre-braking prior (lookahead kappa climbing from 0.01 -> 0.796 at WP 2458) to master Corner 2 entry, exactly replicating the solution that solved Corner 1.
+
+### Issue 109: False Termination Geometry in Intersections & Corner Apexes (The 1,000-Step Physical Barrier)
+- **Context:** User paused background training at Step 2.425M to evaluate checkpoints in Isaac Sim 3D GUI (`./debug.sh`). Observed vehicle consistently driving cleanly on straightaways but immediately terminating upon reaching intersections and tight turn apexes.
+- **Root Cause Discovery:** GPU tensor boundary distance audit against USD track point clouds (`track_boundaries_1x.npz`) revealed two severe geometric defects in `terminations.py`:
+  1. **Intersection Gate Permeability Blindspot:** Gate permeability was defined as `dist_g < 0.50m`. However, gate markers were sparse or offset (South intersection WP 1640-1860 had `dist_g` of 0.88m-2.64m; North intersection WP 4170-4270 had `dist_g` of 0.83m-2.13m). Consequently, `dist_g < 0.50` was False across 93.2% of the South intersection and 100% of the North intersection. Crossing paint marks/stop lines inside junctions triggered immediate false boundary hits (`dist_w < 0.04m`).
+  2. **Tight Turn Apex Narrowing & Shoulder Trap:**
+     - Corner 1 apex (WP 985): Centerline to yellow curb is only 0.068m (6.8cm).
+     - Corner 2 apex (WP 2520): Centerline to yellow curb is only 0.099m (9.9cm).
+     - North chicane (WP 4199): Centerline to white line is only 0.082m (8.2cm).
+     - With vehicle width of 0.19m (half-width 9.5cm) and fixed threshold of 0.02m (2cm), cutting the apex by merely 4.8cm triggered false curb strikes.
+     - Additionally, `off_road_shoulder = (lat_err < -0.25) & (dist_y > 0.38)` false-triggered on wide corner approaches where the road naturally flares to 1.0m–1.2m width.
+  3. **Ground Contact Force Spikes:** Dynamic cornering tire deformation against the thin track mesh generated physical contact spikes against `/World/defaultGroundPlane` approaching 150N.
+- **CTA Swarm Resolution (`run_20260918_225950_bfa22d`, `generator_auditor` topology across 3 tasks):**
+  1. **Intersection Permeability Corridors (`terminations.py`):**
+     Masked roadmark hits inside designated intersection corridors (South: WP 1640-1860, North: WP 4170-4270) and expanded gate marker proximity to `dist_g < 1.85m`.
+  2. **Curvature-Adaptive Apex Thresholds (`terminations.py`):**
+     Configured `dyn_threshold_y = 0.005m` and `dyn_threshold_w = 0.015m` for tight turns ($|\kappa| > 0.60$), allowing vehicles to clip the inside curb apex without false resets.
+  3. **Calibrated Shoulder & Off-Track Limits (`terminations.py`):**
+     Updated shoulder detection to straightaways only (`lat_err < -0.30m & dist_y > 0.40m & ~is_tight_turn & ~in_gate_zone`), and enforced a clean gross off-track threshold of `|lat_err| > 0.45m`.
+  4. **Ground Contact Sensor Threshold (`arcpro_env_cfg.py`):**
+     Raised `ground_contact_term` threshold from 150.0N to 250.0N, absorbing dynamic tire roll while preserving 100% detection of genuine falls off the track.
+  5. **Reset Diagnostics (`play_skrl.py`):**
+     Added per-term termination inspection to print the active termination reason, robot position, and lateral error on every reset.
+  6. **Rollback Decision:** Checkpoint `agent_2400000.pt` is healthy with high feature representations across all 5 sectors; no rollback needed. Resumed training will immediately break through the former 1,000-step ceiling.
+

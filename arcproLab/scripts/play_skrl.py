@@ -19,7 +19,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 # Auto-detect latest checkpoint when --checkpoint is not provided
-log_dir = os.path.join(ROOT_DIR, "logs", "ppo_skrl")
+log_dir = os.path.join(ROOT_DIR, "logs")
 if args_cli.checkpoint is None:
     candidates = []
     for root, dirs, files in os.walk(log_dir):
@@ -119,8 +119,18 @@ try:
 
     print(f"Loading checkpoint: {args_cli.checkpoint}")
     if args_cli.checkpoint is not None and os.path.exists(args_cli.checkpoint):
-        agent.load(args_cli.checkpoint)
-        print("Checkpoint loaded successfully.")
+        try:
+            agent.load(args_cli.checkpoint)
+            print("Checkpoint loaded successfully via agent.load.")
+        except Exception as e:
+            print(f"Note: Full agent.load encountered ({e}), loading model weights directly for evaluation...")
+            ckpt_data = torch.load(args_cli.checkpoint, map_location=agent.device)
+            if "policy" in ckpt_data:
+                agent.policy.load_state_dict(ckpt_data["policy"])
+                print("Policy network weights loaded successfully.")
+            if "value" in ckpt_data:
+                agent.value.load_state_dict(ckpt_data["value"])
+                print("Value network weights loaded successfully.")
     elif args_cli.checkpoint is not None:
         print(f"ERROR: Checkpoint not found: {args_cli.checkpoint}")
         print("Proceeding with random weights for visual debug.")
@@ -160,7 +170,24 @@ try:
             sys.stdout.flush()
             
         if done:
-            print(f"[RESET] Episode finished at step {step_count} — resetting.")
+            # Diagnostic inspection of active termination terms
+            term_reasons = []
+            if hasattr(env, "termination_manager"):
+                tm = env.termination_manager
+                if hasattr(tm, "_term_names") and hasattr(tm, "_term_dones"):
+                    for t_i, t_name in enumerate(tm._term_names):
+                        if tm._term_dones[0, t_i]:
+                            term_reasons.append(t_name)
+            if not term_reasons and truncated[0].item():
+                term_reasons.append("time_out")
+            reason_str = ", ".join(term_reasons) if term_reasons else "unknown"
+
+            robot = env.scene["robot"]
+            local_x = float(robot.data.root_pos_w[0, 0].item() - env.scene.env_origins[0, 0].item())
+            local_y = float(robot.data.root_pos_w[0, 1].item() - env.scene.env_origins[0, 1].item())
+            lat_err = float(env.extras["lat_err"][0].item()) if "lat_err" in env.extras else 0.0
+            print(f"[RESET] Episode ended at step {step_count:>4} | Reason: [{reason_str}] | Pos: ({local_x:+.2f}, {local_y:+.2f}) | LatErr: {lat_err:+.3f}m")
+            sys.stdout.flush()
             step_count = 0
 
     print("Simulation loop ended.")

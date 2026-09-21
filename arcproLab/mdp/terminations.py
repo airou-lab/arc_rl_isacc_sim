@@ -26,7 +26,6 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
     yaw = yaw + 3.14159265
     yaw = torch.atan2(torch.sin(yaw), torch.cos(yaw))
-    
     lat_err, raw_head_err, kappa = tm.compute_errors(local_pos, yaw)
     if "track_dir" not in env.extras:
         env.extras["track_dir"] = torch.where(torch.abs(raw_head_err) > 1.5708, -1.0, 1.0).to(env.device)
@@ -40,26 +39,40 @@ def white_line_contact(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     # Get boundary data
     dist_y, dist_w, dist_g = tm.compute_marker_distances(local_pos)
     
-    # 1. Boundary hit (Apex-safe thresholds for 1.0x scale):
-    # Outer white line: threshold 0.04m from chassis center.
-    # Inner yellow curb: threshold 0.02m from chassis center (allows apex clipping at WP 986 where centerline is 6.8cm).
-    # Shoulder departure: detects vehicle crossing outside white line (lat_err < -0.25m and farther from yellow than road width).
-    # Lane departure fallback: lateral error > 0.60m from track centerline.
-    threshold_w = 0.04
-    threshold_y = 0.02
-    off_road_shoulder = (lat_err < -0.25) & (dist_y > 0.38)
-    boundary_hit = (dist_w < threshold_w) | (dist_y < threshold_y) | off_road_shoulder | (torch.abs(lat_err) > 0.60)
+    # 1. Apex-safe adaptive thresholds:
+    # In tight turns (|kappa| > 0.60, e.g. Corner 1 apex WP 985 where centerline is 6.8cm from curb),
+    # allow inner curb clipping down to 0.005m (5mm) and outer line proximity down to 0.015m.
+    # On straights, enforce 0.015m yellow and 0.025m white (calibrated to prevent false strikes on narrow corridors).
+    is_tight_turn = torch.abs(kappa) > 0.60
+    dyn_threshold_y = torch.where(is_tight_turn, 0.005, 0.015)
+    dyn_threshold_w = torch.where(is_tight_turn, 0.015, 0.025)
 
-    # 2. Gate permeability check:
-    # Mask boundary resets inside intersection gate zones (dist_g < 0.50m) where road markings cross path
-    in_gate_zone = dist_g < 0.50
-    masked_boundary_hit = boundary_hit & (~in_gate_zone)
+    # 2. Gate & Intersection Permeability check:
+    # Intersections contain perpendicular paint markings, stop bars, and crosswalk lines.
+    # We mask paint contact inside designated intersection zones (South: WP 1640-1860, North: WP 4170-4270)
+    # or within 1.85m of gate marker prims.
+    closest_wp = tm.last_indices if tm.last_indices is not None else torch.zeros_like(lat_err, dtype=torch.long)
+    in_south_intersection = (closest_wp >= 1640) & (closest_wp <= 1900)
+    in_north_intersection = (closest_wp >= 4170) & (closest_wp <= 4270)
+    in_gate_marker = dist_g < 1.85
+    in_gate_zone = in_south_intersection | in_north_intersection | in_gate_marker
+
+    line_hit = (dist_w < dyn_threshold_w) | (dist_y < dyn_threshold_y)
+    masked_line_hit = line_hit & (~in_gate_zone)
+
+    # 3. Shoulder and gross lane departure:
+    # Shoulder departure: outside line breached on straights (lat_err < -0.30m & dist_y > 0.40m).
+    # Gross lane departure: vehicle exceeds 0.45m lateral displacement (entire 19cm chassis off 40cm track).
+    off_road_shoulder = (lat_err < -0.30) & (dist_y > 0.40) & (~is_tight_turn) & (~in_gate_zone)
+    gross_off_track = torch.abs(lat_err) > 0.45
+
+    boundary_hit = masked_line_hit | off_road_shoulder | gross_off_track
 
     # Check if we just started (less than 20 steps) to prevent spawn resets
     is_spawn = env.episode_length_buf < 20
 
     # Apply grace period
-    return (~is_spawn) & masked_boundary_hit
+    return (~is_spawn) & boundary_hit
 
 def height_termination(env: ManagerBasedRLEnv, threshold: float = -0.05, max_height: float = 0.50, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Terminates if the robot flips, falls below a threshold, or flies too high."""
