@@ -189,7 +189,7 @@ def main():
     log_dir = os.path.join("logs", log_folder, datetime.now().strftime("%Y%m%d-%H%M%S"))
     cfg_ppo["experiment"]["directory"] = log_dir
     cfg_ppo["experiment"]["write_interval"] = 100
-    cfg_ppo["experiment"]["checkpoint_interval"] = 50000  # Save every 50k timesteps (~2.4h) for safe disaster recovery
+    cfg_ppo["experiment"]["checkpoint_interval"] = 500000  # Save every 500k timesteps as requested
 
     # Auto-detect initial_step from resume checkpoint if not explicitly provided
     initial_step = args_cli.initial_step
