@@ -1,5 +1,5 @@
 {
-  "sector_weights": [0.35, 0.20, 0.15, 0.15, 0.15],
+  "sector_weights": [0.15, 0.45, 0.15, 0.15, 0.10],
   "lookahead_distance": 1.6,
   "speed_tracking_weight": 60.0,
   "target_corner_speed": 0.35,
@@ -10,5 +10,5 @@
     "4": "Leg 2 Intersection Approach (4.15m runway)",
     "5": "North Straight Return Corridor (10m runway)"
   },
-  "updated_at": "2026-09-11T02:35:00Z"
+  "updated_at": "2026-09-22T20:12:00Z"
 }

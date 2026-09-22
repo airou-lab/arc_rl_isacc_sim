@@ -43,6 +43,39 @@ TERTIARY_LANDMARK = os.path.join(LANDMARK_DIR, "agent_1405000_latest_backup.pt")
 DEFAULT_COOLDOWN_SEC = 300.0  # 5 minutes stabilization cooldown after intervention
 
 
+def get_current_run_checkpoint() -> str:
+    """Finds the best or latest checkpoint from the active clean training run."""
+    try:
+        branch = subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=WORKSPACE_ROOT,
+            text=True,
+        ).strip()
+    except Exception:
+        branch = "rollback/clean-baseline"
+    branch_tag = branch.replace("/", "_")
+    log_subdir = os.path.join(WORKSPACE_ROOT, f"logs/ppo_skrl_{branch_tag}")
+    if not os.path.isdir(log_subdir):
+        log_subdir = os.path.join(WORKSPACE_ROOT, "logs/ppo_skrl")
+
+    best_ckpts = []
+    agent_ckpts = []
+    for root, _, files in os.walk(log_subdir):
+        for f in files:
+            p = os.path.join(root, f)
+            if f == "best_agent.pt":
+                best_ckpts.append((os.path.getmtime(p), p))
+            elif f.startswith("agent_") and f.endswith(".pt"):
+                agent_ckpts.append((os.path.getmtime(p), p))
+    if best_ckpts:
+        best_ckpts.sort()
+        return best_ckpts[-1][1]
+    if agent_ckpts:
+        agent_ckpts.sort()
+        return agent_ckpts[-1][1]
+    return ""
+
+
 @dataclass
 class MetricBatch:
     step: int
@@ -514,20 +547,34 @@ class AutonomousSentinel:
             restart_cmd = ["bash", START_SCRIPT]
 
         elif "CORNER1" in f_upper or "APEX_CLIFF" in f_upper or "CLIFF" in f_upper:
-            target_ckpt = SECONDARY_LANDMARK
-            action_summary = f"Hierarchical Rollback to secondary landmark {os.path.basename(target_ckpt)} after persistent understeer (50k steps max_len <= 860)"
-            files_touched.append(target_ckpt)
-            restart_cmd = ["bash", START_SCRIPT, target_ckpt]
+            # Curriculum intervention: reinforce Sector 2 spawn weighting (45%) to accelerate Corner 1 trial density without rollback
+            action_summary = "Curriculum boost applied: reinforced Sector 2 spawn weighting (45%) to accelerate Corner 1 trial density without rollback."
+            files_touched.append(CURRICULUM_CFG_PATH)
+            if not self.dry_run:
+                try:
+                    from mdp.curriculum_config import update_curriculum_config
+                    update_curriculum_config({
+                        "sector_weights": [0.15, 0.45, 0.15, 0.15, 0.10],
+                        "target_corner_speed": 0.35,
+                    })
+                except Exception as e:
+                    self.logger.error(f"Failed to update curriculum config: {e}")
+            restart_cmd = None  # Do NOT restart or rollback! Training continues uninterrupted.
 
         elif "WALL_HUGGING" in f_upper or "HUGGING" in f_upper:
             action_summary = "Refreshed track direction symmetry and warm-restarted training to clear outer shoulder bias"
             restart_cmd = ["bash", START_SCRIPT]
 
         elif "COLLAPSE" in f_upper or "DIVERGENCE" in f_upper:
-            target_ckpt = PRIMARY_LANDMARK if os.path.exists(PRIMARY_LANDMARK) else SECONDARY_LANDMARK
-            action_summary = f"Automated rollback to certified landmark checkpoint {os.path.basename(target_ckpt)}"
-            files_touched.append(target_ckpt)
-            restart_cmd = ["bash", START_SCRIPT, target_ckpt]
+            target_ckpt = get_current_run_checkpoint()
+            if not target_ckpt or not os.path.exists(target_ckpt):
+                target_ckpt = PRIMARY_LANDMARK if os.path.exists(PRIMARY_LANDMARK) else ""
+            action_summary = f"Automated rollback to current run's best/latest checkpoint {os.path.basename(target_ckpt) if target_ckpt else 'None'}"
+            if target_ckpt:
+                files_touched.append(target_ckpt)
+                restart_cmd = ["bash", START_SCRIPT, target_ckpt]
+            else:
+                restart_cmd = ["bash", START_SCRIPT]
 
         # Write diagnosis file
         try:
