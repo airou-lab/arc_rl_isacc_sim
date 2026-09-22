@@ -5,6 +5,8 @@ parser = argparse.ArgumentParser(description="Play SKRL ARCPro Policy")
 parser.add_argument("--checkpoint", type=str, default=None,
                     help="Path to SKRL checkpoint .pt file. Auto-detects latest best_agent.pt if omitted.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of parallel environments")
+parser.add_argument("--debug", action="store_true", default=False,
+                    help="Enable visual debug spheres in Isaac Sim (boundaries, gates, centerline, target lane)")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
@@ -18,32 +20,55 @@ ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-# Auto-detect latest checkpoint when --checkpoint is not provided
-log_dir = os.path.join(ROOT_DIR, "logs", "ppo_skrl")
+# Auto-detect latest checkpoint across logs and archive directories
+search_dirs = [
+    os.path.join(ROOT_DIR, "logs"),
+    os.path.join(ROOT_DIR, "archive", "landmark_checkpoints")
+]
+
 if args_cli.checkpoint is None:
     candidates = []
-    for root, dirs, files in os.walk(log_dir):
-        for f in files:
-            if f.endswith(".pt"):
-                candidates.append(os.path.join(root, f))
+    for s_dir in search_dirs:
+        if os.path.exists(s_dir):
+            for root, dirs, files in os.walk(s_dir):
+                for f in files:
+                    if f.endswith(".pt"):
+                        candidates.append(os.path.join(root, f))
     if candidates:
         args_cli.checkpoint = max(candidates, key=os.path.getmtime)
         print(f"[debug.sh] Auto-detected latest checkpoint: {args_cli.checkpoint}")
     else:
-        print("[debug.sh] WARNING: No checkpoint found. Running with random weights.")
+        champion = os.path.join(ROOT_DIR, "archive", "landmark_checkpoints", "agent_4641500_realsense_champion.pt")
+        if os.path.exists(champion):
+            args_cli.checkpoint = champion
+            print(f"[debug.sh] Falling back to champion checkpoint: {args_cli.checkpoint}")
+        else:
+            print("[debug.sh] WARNING: No checkpoint found. Running with random weights.")
 elif not os.path.exists(args_cli.checkpoint):
-    # Support shortcuts like 'agent_36600.pt' or '36600'
-    target = os.path.basename(args_cli.checkpoint)
-    if not target.endswith(".pt"):
-        target = f"agent_{target}.pt" if not target.startswith("agent_") else f"{target}.pt"
+    # Support shortcuts like 'agent_36600.pt', '36600', 'champion', or 'straightaway'
+    query = args_cli.checkpoint.strip()
+    target = os.path.basename(query)
+    if "champion" in target.lower():
+        target = "agent_4641500_realsense_champion.pt"
+    
     matches = []
-    for root, dirs, files in os.walk(log_dir):
-        for f in files:
-            if f == target or target in f:
-                matches.append(os.path.join(root, f))
+    for s_dir in search_dirs:
+        if os.path.exists(s_dir):
+            for root, dirs, files in os.walk(s_dir):
+                for f in files:
+                    if f.endswith(".pt"):
+                        # Match exact filename, stripped query, or target
+                        clean_query = query.replace(".pt", "")
+                        if f == target or clean_query in f or target in f:
+                            matches.append(os.path.join(root, f))
     if matches:
+        exact_matches = [m for m in matches if os.path.basename(m) in (f"agent_{clean_query}.pt", f"{clean_query}.pt", target)]
+        if exact_matches:
+            matches = exact_matches
         args_cli.checkpoint = max(matches, key=os.path.getmtime)
         print(f"[debug.sh] Resolved checkpoint shortcut to: {args_cli.checkpoint}")
+    else:
+        print(f"[debug.sh] WARNING: Could not resolve checkpoint '{query}'. Checked: {search_dirs}")
 
 print("Importing torch...")
 sys.stdout.flush()
@@ -99,6 +124,13 @@ try:
     env = IsaacLabWrapper(env)
     env = SKRLFlattenWrapper(env)
 
+    if args_cli.debug:
+        print("[debug.sh] Activating visual debug spheres (Yellow/White boundaries, Green gates, Cyan path, Magenta lane)...")
+        from mdp.track_manager import get_track_manager
+        tm = get_track_manager(device="cuda:0")
+        tm.debug = True
+        tm.refresh_visuals()
+
     print("Setting up models...")
     sys.stdout.flush()
     state_space = getattr(env, "state_space", env.observation_space)
@@ -119,8 +151,25 @@ try:
 
     print(f"Loading checkpoint: {args_cli.checkpoint}")
     if args_cli.checkpoint is not None and os.path.exists(args_cli.checkpoint):
-        agent.load(args_cli.checkpoint)
-        print("Checkpoint loaded successfully.")
+        try:
+            agent.load(args_cli.checkpoint)
+            print("Checkpoint loaded successfully via agent.load.")
+        except Exception as e:
+            print(f"Note: Full agent.load encountered ({e}). Loading policy network weights directly for evaluation...")
+            ckpt_data = torch.load(args_cli.checkpoint, map_location=agent.device)
+            if isinstance(ckpt_data, dict):
+                if "policy" in ckpt_data:
+                    agent.policy.load_state_dict(ckpt_data["policy"])
+                    print("Policy network weights loaded successfully.")
+                if "value" in ckpt_data:
+                    try:
+                        agent.value.load_state_dict(ckpt_data["value"])
+                        print("Value network weights loaded successfully.")
+                    except Exception:
+                        pass
+            else:
+                agent.policy.load_state_dict(ckpt_data)
+                print("Raw policy weights loaded successfully.")
     elif args_cli.checkpoint is not None:
         print(f"ERROR: Checkpoint not found: {args_cli.checkpoint}")
         print("Proceeding with random weights for visual debug.")

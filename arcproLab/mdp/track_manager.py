@@ -400,43 +400,57 @@ class TrackManager:
                 return VisualizationMarkers(cfg)
 
             def to_w(pts, z_off=0.05):
-                if pts is None:
-                    raise ValueError("Cannot convert points to world coordinates: points array is None.")
-                w = torch.zeros((len(pts), 3), device=self.device)
-                w[:, 0], w[:, 1], w[:, 2] = torch.tensor(pts[:, 0], device=self.device) + origin[0], torch.tensor(pts[:, 1], device=self.device) + origin[1], torch.tensor(pts[:, 2], device=self.device) + origin[2] + z_off
+                if pts is None or len(pts) == 0:
+                    return None
+                if isinstance(pts, np.ndarray):
+                    pts_t = torch.from_numpy(pts).to(device=self.device, dtype=torch.float32)
+                else:
+                    pts_t = pts.to(device=self.device, dtype=torch.float32)
+                
+                n_pts = pts_t.shape[0]
+                w = torch.zeros((n_pts, 3), device=self.device, dtype=torch.float32)
+                w[:, 0] = pts_t[:, 0] + origin[0]
+                w[:, 1] = pts_t[:, 1] + origin[1]
+                if pts_t.shape[1] > 2:
+                    w[:, 2] = pts_t[:, 2] + origin[2] + z_off
+                else:
+                    w[:, 2] = origin[2] + z_off
                 return w
 
-            if self.visualizer_yellow is None: self.visualizer_yellow = create_v("/World/Visuals/YellowSpheres", (1.0, 1.0, 0.0))
-            if self.visualizer_white is None: self.visualizer_white = create_v("/World/Visuals/WhiteSpheres", (1.0, 1.0, 1.0))
+            if self.visualizer_yellow is None: self.visualizer_yellow = create_v("/World/Visuals/YellowSpheres", (1.0, 1.0, 0.0), radius=0.05)
+            if self.visualizer_white is None: self.visualizer_white = create_v("/World/Visuals/WhiteSpheres", (1.0, 1.0, 1.0), radius=0.05)
             if self.visualizer_gate is None: self.visualizer_gate = create_gate_v("/World/Visuals/GateSpheres", (0.0, 1.0, 0.0), radius=0.20)
-            if self.visualizer_waypoints is None: self.visualizer_waypoints = create_v("/World/Visuals/CyanPath", (0.0, 1.0, 1.0))
-            if self.visualizer_target is None: self.visualizer_target = create_v("/World/Visuals/TargetLane", (1.0, 0.0, 1.0))
+            if self.visualizer_waypoints is None: self.visualizer_waypoints = create_v("/World/Visuals/CyanPath", (0.0, 1.0, 1.0), radius=0.06)
+            if self.visualizer_target is None: self.visualizer_target = create_v("/World/Visuals/TargetLane", (1.0, 0.0, 1.0), radius=0.06)
 
-            if self.raw_yellow_pts is not None: self.visualizer_yellow.visualize(to_w(self.raw_yellow_pts[::16]))
-            if self.raw_white_pts is not None: self.visualizer_white.visualize(to_w(self.raw_white_pts[::16]))
+            # 1. Yellow & White Boundaries
+            if self.raw_yellow_pts is not None:
+                pts_y = to_w(self.raw_yellow_pts[::16], z_off=0.05)
+                if pts_y is not None: self.visualizer_yellow.visualize(pts_y)
+                
+            if self.raw_white_pts is not None:
+                pts_w = to_w(self.raw_white_pts[::16], z_off=0.05)
+                if pts_w is not None: self.visualizer_white.visualize(pts_w)
             
-            # User request: "remove the green spheres"
-            # if self.raw_gate_pts is not None: self.visualizer_gate.visualize(to_w(self.raw_gate_pts, z_off=0.40))
+            # 2. Gate Markers (Green)
+            if self.raw_gate_pts is not None:
+                pts_g = to_w(self.raw_gate_pts[::4], z_off=0.25)
+                if pts_g is not None: self.visualizer_gate.visualize(pts_g)
             
-            # User request: "cyan and purple are wrong direction though. But i thought we arent using them"
-            # We will disable the visualization to avoid confusion, since the policy is vision-only.
-            # (Note: the reward function still uses them for lateral error!)
-            # if self.waypoints is not None:
-            #     wp_np = self.waypoints.cpu().numpy()
-            #     
-            #     # 1. Visualize Base Centerline (Cyan)
-            #     self.visualizer_waypoints.visualize(to_w(wp_np[:, :2]))
-            #     
-            #     # 2. Visualize Target Offset Path (Magenta)
-            #     yaws = wp_np[:, 2]
-            #     normals = np.stack([-np.sin(yaws), np.cos(yaws)], axis=1)
-            #     target_pts = wp_np[:, :2] + target_lane_offset * normals
-            #     target_viz = np.zeros((len(wp_np), 3))
-            #     target_viz[:, :2] = target_pts
-            #     target_viz[:, 2] = 0.0
-            #     self.visualizer_target.visualize(to_w(target_viz, z_off=0.18))
-        except Exception:
-            pass
+            # 3. Centerline (Cyan) & Target Lane Offset (Magenta)
+            if self.waypoints is not None:
+                pts_wp = to_w(self.waypoints[::10, :2], z_off=0.08)
+                if pts_wp is not None: self.visualizer_waypoints.visualize(pts_wp)
+                
+                wp_np = self.waypoints.cpu().numpy()
+                yaws = wp_np[:, 2]
+                normal_x = np.sin(yaws)
+                normal_y = -np.cos(yaws)
+                target_pts = wp_np[:, :2] + target_lane_offset * np.stack([normal_x, normal_y], axis=1)
+                pts_target = to_w(target_pts[::10], z_off=0.12)
+                if pts_target is not None: self.visualizer_target.visualize(pts_target)
+        except Exception as e:
+            print(f"[TrackManager] refresh_visuals error: {e}")
 
     def compute_errors(self, pos: torch.Tensor, yaw: torch.Tensor, target_lane_offset: torch.Tensor | float = 0.0):
         """

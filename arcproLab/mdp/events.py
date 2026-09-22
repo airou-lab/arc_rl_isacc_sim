@@ -11,7 +11,7 @@ def reset_robot_curriculum_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, 
     Sector 2: Corner 1 Runway Approach (X = -16.197, Y = -3.50, yaw = -1.5708 [South])
     Sector 3: Leg 2 Post-C1 Exit (X = -12.000, Y = -7.10, yaw = 0.0 [East])
     Sector 4: Leg 2 Intersection Approach (X = -8.000, Y = -7.10, yaw = 0.0 [East])
-    Sector 5: North Straight Return Corridor (X = -6.082, Y = 6.377, yaw = 3.14159 [West])
+    Sector 5: North Straight Return Corridor (X = -8.000, Y = 7.100, yaw = 3.14159 [West])
     Applies ±5cm lateral jitter and ±3° heading noise to prevent open-loop memorization.
     """
     if env_ids is None:
@@ -30,13 +30,13 @@ def reset_robot_curriculum_spawn(env: ManagerBasedRLEnv, env_ids: torch.Tensor, 
              torch.where(r < t2, torch.tensor(-16.197, device=env.device),
              torch.where(r < t3, torch.tensor(-12.000, device=env.device),
              torch.where(r < t4, torch.tensor(-8.000, device=env.device),
-                                  torch.tensor(-6.082, device=env.device)))))
+                                  torch.tensor(-8.000, device=env.device)))))
 
     base_y = torch.where(r < t1, torch.tensor(5.50, device=env.device),
              torch.where(r < t2, torch.tensor(-3.50, device=env.device),
              torch.where(r < t3, torch.tensor(-7.10, device=env.device),
              torch.where(r < t4, torch.tensor(-7.10, device=env.device),
-                                  torch.tensor(6.377, device=env.device)))))
+                                  torch.tensor(7.100, device=env.device)))))
 
     base_yaw = torch.where(r < t1, torch.tensor(-1.5708, device=env.device),
                torch.where(r < t2, torch.tensor(-1.5708, device=env.device),

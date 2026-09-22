@@ -20,7 +20,10 @@ fi
 tmux new-session -d -s training
 
 # Automatically resume from specified checkpoint or the newest saved checkpoint
-if [ -n "$1" ]; then
+if [ "${1:-}" = "--fresh" ] || [ "${1:-}" = "--scratch" ]; then
+    LATEST_CKPT=""
+    echo "Starting clean training from step 0 (fresh start)."
+elif [ -n "${1:-}" ]; then
     LATEST_CKPT="$1"
 else
     BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")

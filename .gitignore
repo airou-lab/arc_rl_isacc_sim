@@ -20,6 +20,7 @@ env/
 *.log
 *.txt
 logs/
+archive/old_logs_pre_reroute/
 model_*_telemetry.md
 exts/omni.*
 
