@@ -1,4 +1,3 @@
-
 import argparse
 from isaaclab.app import AppLauncher
 
@@ -21,26 +20,29 @@ if ARCPRO_LAB_DIR not in sys.path:
 from arcpro_env_cfg import ARCProEnvCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
+
 def main():
     env_cfg = ARCProEnvCfg()
     env_cfg.scene.num_envs = 1
     env_cfg.enable_cameras = True
     env = ManagerBasedRLEnv(cfg=env_cfg)
-    
+
     # Get the stage directly from the simulation app's context
     import omni.usd
+
     stage = omni.usd.get_context().get_stage()
-    
-    print("\n" + "="*60)
+
+    print("\n" + "=" * 60)
     print("STAGE HIERARCHY AUDIT")
-    print("="*60)
-    
+    print("=" * 60)
+
     for prim in stage.Traverse():
         path = str(prim.GetPath())
         if "/Robot" in path:
             print(f"Prim: {path} [{prim.GetTypeName()}]")
 
     simulation_app.close()
+
 
 if __name__ == "__main__":
     main()

@@ -1,4 +1,3 @@
-import omni.kit
 from omni.isaac.kit import SimulationApp
 
 # Start simulation app
@@ -6,6 +5,7 @@ simulation_app = SimulationApp({"headless": True})
 
 from pxr import Usd, UsdGeom, Gf
 import os
+
 
 def scale_mesh_vertices(usd_path, scale_factor=0.125):
     print(f"Opening stage: {usd_path}")
@@ -20,13 +20,13 @@ def scale_mesh_vertices(usd_path, scale_factor=0.125):
             mesh = UsdGeom.Mesh(prim)
             points_attr = mesh.GetPointsAttr()
             points = points_attr.Get()
-            
+
             if points:
                 # Multiply every vertex by the scale factor
                 scaled_points = [p * scale_factor for p in points]
                 points_attr.Set(scaled_points)
                 print(f"  Scaled {len(points)} vertices for mesh: {prim.GetPath()}")
-            
+
             # 2. Also scale any local translations (to keep positions correct)
             xform = UsdGeom.Xformable(prim)
             for op in xform.GetOrderedXformOps():
@@ -58,6 +58,7 @@ def scale_mesh_vertices(usd_path, scale_factor=0.125):
     stage.GetRootLayer().Export(new_path)
     print(f"Flattened asset saved to: {new_path}")
     return new_path
+
 
 if __name__ == "__main__":
     usd_dir = "/home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim/openStreetUSD"

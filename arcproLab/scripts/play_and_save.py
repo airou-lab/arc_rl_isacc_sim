@@ -21,7 +21,8 @@ if args_cli.checkpoint is None:
     c = []
     for r, d, f in os.walk(log_dir):
         for n in f:
-            if n.endswith(".pt"): c.append(os.path.join(r, n))
+            if n.endswith(".pt"):
+                c.append(os.path.join(r, n))
     args_cli.checkpoint = max(c, key=os.path.getmtime) if c else None
 
 from isaaclab.envs import ManagerBasedRLEnv
@@ -37,16 +38,21 @@ env_cfg.enable_cameras = True
 env = ManagerBasedRLEnv(cfg=env_cfg, render_mode="rgb_array")
 
 import gymnasium as gym
+
 obs_raw_dict = {}
+
+
 class FrameCaptureWrapper(gym.Wrapper):
     def step(self, action):
         o, r, d, t, i = self.env.step(action)
         obs_raw_dict["camera"] = o["policy"]["tiled_camera"].clone()
         return o, r, d, t, i
+
     def reset(self, **kwargs):
         o, i = self.env.reset(**kwargs)
         obs_raw_dict["camera"] = o["policy"]["tiled_camera"].clone()
         return o, i
+
 
 env = FrameCaptureWrapper(env)
 env = IsaacLabWrapper(env)
@@ -54,12 +60,21 @@ env = SKRLFlattenWrapper(env)
 
 models = {
     "policy": ARCProActor(env.observation_space, env.action_space, "cuda:0"),
-    "value": ARCProCritic(getattr(env, "state_space", env.observation_space), env.action_space, "cuda:0")
+    "value": ARCProCritic(
+        getattr(env, "state_space", env.observation_space), env.action_space, "cuda:0"
+    ),
 }
 agent_cfg = PPO_DEFAULT_CONFIG.copy()
 agent_cfg["experiment"]["write_interval"] = 0
 agent_cfg["experiment"]["checkpoint_interval"] = 0
-agent = PPO(models=models, memory=None, cfg=agent_cfg, observation_space=env.observation_space, action_space=env.action_space, device="cuda:0")
+agent = PPO(
+    models=models,
+    memory=None,
+    cfg=agent_cfg,
+    observation_space=env.observation_space,
+    action_space=env.action_space,
+    device="cuda:0",
+)
 agent.load(args_cli.checkpoint)
 agent.set_mode("eval")
 
@@ -69,10 +84,12 @@ for step in range(200):
     with torch.no_grad():
         action = agent.act(obs, timestep=0, timesteps=0)[0]
     obs, r, d, t, i = env.step(action)
-    
+
     if step % 20 == 0:
         img = obs_raw_dict["camera"].cpu().numpy()[0]
-        img_bgr = cv2.cvtColor((np.clip(img, 0, 1) * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
+        img_bgr = cv2.cvtColor(
+            (np.clip(img, 0, 1) * 255).astype(np.uint8), cv2.COLOR_RGB2BGR
+        )
         cv2.imwrite(f"debug_frames/eval_frame_{step}.png", img_bgr)
         print(f"Saved eval_frame_{step}.png")
 

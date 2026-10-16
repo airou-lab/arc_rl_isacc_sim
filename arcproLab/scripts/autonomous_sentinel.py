@@ -32,15 +32,47 @@ SENTINEL_LOG = os.path.join(WORKSPACE_ROOT, "logs/sentinel.log")
 DIAGNOSIS_FILE = os.path.join(WORKSPACE_ROOT, "logs/SENTINEL_DIAGNOSIS.md")
 STATE_FILE = os.path.join(WORKSPACE_ROOT, "logs/sentinel_state.json")
 CTA_DB_PATH = os.path.join(WORKSPACE_ROOT, ".cta/cta_turns.db")
-CURRICULUM_CFG_PATH = os.path.join(WORKSPACE_ROOT, "arcproLab/mdp/curriculum_sectors.json")
+CURRICULUM_CFG_PATH = os.path.join(
+    WORKSPACE_ROOT, "arcproLab/mdp/curriculum_sectors.json"
+)
 LANDMARK_DIR = os.path.join(WORKSPACE_ROOT, "archive/landmark_checkpoints")
 START_SCRIPT = os.path.join(WORKSPACE_ROOT, "start_tmux_training.sh")
 
-PRIMARY_LANDMARK = os.path.join(LANDMARK_DIR, "agent_4141500_peak.pt")
-SECONDARY_LANDMARK = os.path.join(LANDMARK_DIR, "agent_2587500_corner_plateau_baseline.pt")
+CHAMPION_LANDMARK = os.path.join(LANDMARK_DIR, "agent_3587500_c1_champion.pt")
+PRIMARY_LANDMARK = (
+    CHAMPION_LANDMARK
+    if os.path.isfile(CHAMPION_LANDMARK)
+    else os.path.join(LANDMARK_DIR, "agent_2587500_corner_plateau_baseline.pt")
+)
+SECONDARY_LANDMARK = os.path.join(
+    LANDMARK_DIR, "agent_2587500_corner_plateau_baseline.pt"
+)
 TERTIARY_LANDMARK = os.path.join(LANDMARK_DIR, "agent_1405000_latest_backup.pt")
 
 DEFAULT_COOLDOWN_SEC = 300.0  # 5 minutes stabilization cooldown after intervention
+
+
+def prune_corrupted_run_checkpoints() -> int:
+    """Removes corrupted or dead-end checkpoints from the active run directory."""
+    branch = "rollback/clean-baseline"
+    branch_tag = branch.replace("/", "_")
+    log_subdir = os.path.join(WORKSPACE_ROOT, f"logs/ppo_skrl_{branch_tag}")
+    removed = 0
+    if os.path.isdir(log_subdir):
+        import shutil
+
+        for item in os.listdir(log_subdir):
+            item_path = os.path.join(log_subdir, item)
+            if os.path.isdir(item_path):
+                shutil.rmtree(item_path, ignore_errors=True)
+                removed += 1
+            elif os.path.isfile(item_path) and item_path.endswith(".pt"):
+                try:
+                    os.remove(item_path)
+                    removed += 1
+                except Exception:
+                    pass
+    return removed
 
 
 def get_current_run_checkpoint() -> str:
@@ -61,18 +93,21 @@ def get_current_run_checkpoint() -> str:
     best_ckpts = []
     agent_ckpts = []
     for root, _, files in os.walk(log_subdir):
+        if "corrupted" in root:
+            continue
         for f in files:
             p = os.path.join(root, f)
             if f == "best_agent.pt":
                 best_ckpts.append((os.path.getmtime(p), p))
             elif f.startswith("agent_") and f.endswith(".pt"):
                 agent_ckpts.append((os.path.getmtime(p), p))
-    if best_ckpts:
-        best_ckpts.sort()
-        return best_ckpts[-1][1]
+    # Prioritize latest step agent checkpoint over stale best_agent.pt
     if agent_ckpts:
         agent_ckpts.sort()
         return agent_ckpts[-1][1]
+    if best_ckpts:
+        best_ckpts.sort()
+        return best_ckpts[-1][1]
     return ""
 
 
@@ -130,13 +165,7 @@ def setup_logger(verbose: bool = False) -> logging.Logger:
 
 def load_state() -> Dict[str, Any]:
     """Load persistent sentinel state."""
-    if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, "r") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {
+    state = {
         "last_intervention_time": 0.0,
         "last_intervention_type": None,
         "interventions_count": 0,
@@ -147,7 +176,19 @@ def load_state() -> Dict[str, Any]:
         "step_window_start": 0,
         "step_window_max_len": 0,
         "apex_cliff_eval_start_step": 0,
+        "apex_cliff_trigger_count": 0,
+        "audited_checkpoints": [],
     }
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r") as f:
+                loaded = json.load(f)
+                state.update(loaded)
+        except Exception:
+            pass
+    if "audited_checkpoints" not in state:
+        state["audited_checkpoints"] = []
+    return state
 
 
 def save_state(state: Dict[str, Any]) -> None:
@@ -184,15 +225,17 @@ def check_process_status(max_stale_seconds: float = 180.0) -> ProcessStatus:
     """Check tmux session, process execution, and log freshness."""
     tmux_active = False
     try:
-        res = subprocess.run(["tmux", "has-session", "-t", "training"], capture_output=True)
-        tmux_active = (res.returncode == 0)
+        res = subprocess.run(
+            ["tmux", "has-session", "-t", "training"], capture_output=True
+        )
+        tmux_active = res.returncode == 0
     except Exception:
         tmux_active = False
 
     python_active = False
     try:
         res = subprocess.run(["pgrep", "-f", "train_skrl.py"], capture_output=True)
-        python_active = (res.returncode == 0)
+        python_active = res.returncode == 0
     except Exception:
         python_active = False
 
@@ -203,7 +246,7 @@ def check_process_status(max_stale_seconds: float = 180.0) -> ProcessStatus:
         try:
             mtime = os.path.getmtime(LOG_FILE)
             log_age = time.time() - mtime
-            log_fresh = (log_age <= max_stale_seconds)
+            log_fresh = log_age <= max_stale_seconds
         except Exception:
             pass
 
@@ -224,7 +267,9 @@ def parse_recent_metrics(max_lines: int = 300) -> List[MetricBatch]:
         return []
 
     try:
-        tail_bytes = subprocess.check_output(["tail", "-n", str(max_lines), LOG_FILE], timeout=5)
+        tail_bytes = subprocess.check_output(
+            ["tail", "-n", str(max_lines), LOG_FILE], timeout=5
+        )
         text = tail_bytes.decode("utf-8", errors="replace")
     except Exception:
         return []
@@ -280,6 +325,7 @@ def log_to_cta_db(
 
     try:
         import sqlite3
+
         conn = sqlite3.connect(CTA_DB_PATH, timeout=10.0)
         c = conn.cursor()
         now_utc = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -330,6 +376,15 @@ class AutonomousSentinel:
         # -------------------------------------------------------------
         # Sentinel 5: Process Hang & VRAM Exhaustion Sentinel
         # -------------------------------------------------------------
+        # Check if audit is actively in progress; if so, training is intentionally stopped
+        current_state = load_state()
+        if current_state.get("is_auditing", False):
+            diagnostics["sentinels"]["sentinel_5_process_hang"] = {
+                "triggered": False,
+                "reasons": ["Audit in progress: training intentionally suspended"],
+            }
+            return True, [], diagnostics
+
         s5_triggered = False
         s5_reasons = []
         if not proc.tmux_active:
@@ -340,10 +395,14 @@ class AutonomousSentinel:
             s5_reasons.append("train_skrl.py process not detected")
         if not proc.log_fresh and proc.log_age_seconds > 180.0:
             s5_triggered = True
-            s5_reasons.append(f"training log is stale ({proc.log_age_seconds:.1f}s > 180s)")
+            s5_reasons.append(
+                f"training log is stale ({proc.log_age_seconds:.1f}s > 180s)"
+            )
         if proc.gpu.vram_used_mb > 11500.0:
             s5_triggered = True
-            s5_reasons.append(f"GPU VRAM exhaustion ({proc.gpu.vram_used_mb}MB > 11.5GB)")
+            s5_reasons.append(
+                f"GPU VRAM exhaustion ({proc.gpu.vram_used_mb}MB > 11.5GB)"
+            )
 
         diagnostics["sentinels"]["sentinel_5_process_hang"] = {
             "triggered": s5_triggered,
@@ -391,9 +450,9 @@ class AutonomousSentinel:
         # -------------------------------------------------------------
         # Sentinel 1: Crawling Trap Sentinel
         # -------------------------------------------------------------
-        # Condition: avg_speed < 0.40 across consecutive evaluations with moderate/high ep_len
+        # Condition: avg_speed < 0.25 across consecutive evaluations with moderate/high ep_len
         s1_triggered = False
-        if avg_speed < 0.40 and avg_ep_len >= 150.0:
+        if avg_speed < 0.25 and avg_ep_len >= 150.0:
             self.state["crawling_consecutive_count"] += 1
             if self.state["crawling_consecutive_count"] >= 5:
                 s1_triggered = True
@@ -409,7 +468,7 @@ class AutonomousSentinel:
         }
         if s1_triggered:
             triggered_failures.append(
-                f"CRAWLING_TRAP: avg_speed={avg_speed:.2f} m/s (< 0.40) over 5 intervals"
+                f"CRAWLING_TRAP: avg_speed={avg_speed:.2f} m/s (< 0.25) over 5 intervals"
             )
 
         # -------------------------------------------------------------
@@ -433,9 +492,10 @@ class AutonomousSentinel:
                     self.state["apex_cliff_eval_start_step"] = latest_batch.step
                     self.state["step_window_max_len"] = max_len_seen
                 else:
-                    # Reset window
+                    # Reset window and trigger count
                     self.state["apex_cliff_eval_start_step"] = latest_batch.step
                     self.state["step_window_max_len"] = max_len_seen
+                    self.state["apex_cliff_trigger_count"] = 0
             elif latest_batch.step < 300000:
                 # Keep window tracking fresh during newborn warmup
                 self.state["apex_cliff_eval_start_step"] = latest_batch.step
@@ -444,7 +504,8 @@ class AutonomousSentinel:
         diagnostics["sentinels"]["sentinel_2_apex_cliff"] = {
             "triggered": s2_triggered,
             "window_max_len": self.state.get("step_window_max_len", 0),
-            "step_delta": latest_batch.step - self.state.get("apex_cliff_eval_start_step", latest_batch.step),
+            "step_delta": latest_batch.step
+            - self.state.get("apex_cliff_eval_start_step", latest_batch.step),
         }
         if s2_triggered:
             triggered_failures.append(
@@ -454,11 +515,18 @@ class AutonomousSentinel:
         # -------------------------------------------------------------
         # Sentinel 3: Outer Shoulder Wall-Hugging Sentinel
         # -------------------------------------------------------------
-        # Condition: Repeated resets on straightaway with Len < 150 (gated for step >= 100k to allow newborn exploration)
+        # Condition: Repeated resets on straightaway with Len < 110 and max_len_seen < 300
+        # (gated for step >= 100k to allow newborn exploration, guarded against multi-sector corner resets)
         s3_triggered = False
-        if latest_batch.step >= 100000 and avg_ep_len < 150.0 and avg_speed >= 0.50 and avg_rew < 600.0:
+        if (
+            latest_batch.step >= 100000
+            and avg_ep_len < 110.0
+            and max_len_seen < 300
+            and avg_speed >= 0.50
+            and avg_rew < 600.0
+        ):
             self.state["wall_hugging_consecutive_count"] += 1
-            if self.state["wall_hugging_consecutive_count"] >= 10:
+            if self.state["wall_hugging_consecutive_count"] >= 15:
                 s3_triggered = True
         else:
             self.state["wall_hugging_consecutive_count"] = max(
@@ -471,24 +539,29 @@ class AutonomousSentinel:
         }
         if s3_triggered:
             triggered_failures.append(
-                f"WALL_HUGGING: Premature straightaway terminations with ep_len={avg_ep_len:.1f} < 150"
+                f"WALL_HUGGING: Premature straightaway terminations with ep_len={avg_ep_len:.1f} < 110 and max_len={max_len_seen} < 300"
             )
 
         # -------------------------------------------------------------
         # Sentinel 4: Policy Collapse & Divergence Sentinel
         # -------------------------------------------------------------
-        # Condition: NaN divergence or sustained negative reward (avg_rew < 0.0) over 10 intervals
+        # Condition: NaN divergence or sustained catastrophic collapse (avg_rew < -500.0 and avg_ep_len < 120.0) over 10 intervals
         s4_triggered = False
         import math
+
         is_diverged = math.isnan(avg_rew) or math.isnan(avg_ep_len)
         if is_diverged:
             s4_triggered = True
-            triggered_failures.append("POLICY_COLLAPSE: Numerical NaN detected in reward or episode length")
-        elif len(batches) >= 20 and avg_rew < 0.0:
+            triggered_failures.append(
+                "POLICY_COLLAPSE: Numerical NaN detected in reward or episode length"
+            )
+        elif len(batches) >= 20 and avg_rew < -500.0 and avg_ep_len < 120.0:
             self.state["collapse_consecutive_count"] += 1
             if self.state["collapse_consecutive_count"] >= 10:
                 s4_triggered = True
-                triggered_failures.append(f"POLICY_COLLAPSE: Sustained negative reward avg_rew={avg_rew:.1f} < 0.0 for 10 intervals")
+                triggered_failures.append(
+                    f"POLICY_COLLAPSE: Sustained catastrophic failure avg_rew={avg_rew:.1f} < -500.0 and avg_ep_len={avg_ep_len:.1f} < 120 for 10 intervals"
+                )
         else:
             self.state["collapse_consecutive_count"] = max(
                 0, self.state["collapse_consecutive_count"] - 1
@@ -503,16 +576,22 @@ class AutonomousSentinel:
         self.state["last_seen_step"] = latest_batch.step
         save_state(self.state)
 
-        is_healthy = (len(triggered_failures) == 0)
+        is_healthy = len(triggered_failures) == 0
         return is_healthy, triggered_failures, diagnostics
 
-    def execute_self_healing(self, failure_type: str, diagnostics: Dict[str, Any], force: bool = False) -> bool:
+    def execute_self_healing(
+        self, failure_type: str, diagnostics: Dict[str, Any], force: bool = False
+    ) -> bool:
         """Execute automated self-healing action matching the failure mode."""
         now = time.time()
         elapsed_since_last = now - self.state.get("last_intervention_time", 0.0)
 
         # Prevent flapping with minimum cooldown, unless forced or process is dead/hung
-        if not force and "PROCESS_HANG" not in failure_type and elapsed_since_last < DEFAULT_COOLDOWN_SEC:
+        if (
+            not force
+            and "PROCESS_HANG" not in failure_type
+            and elapsed_since_last < DEFAULT_COOLDOWN_SEC
+        ):
             remaining = DEFAULT_COOLDOWN_SEC - elapsed_since_last
             self.logger.warning(
                 f"Intervention cooldown active ({remaining:.1f}s remaining). Skipping flapping execution."
@@ -538,49 +617,68 @@ class AutonomousSentinel:
             if not self.dry_run:
                 try:
                     from mdp.curriculum_config import update_curriculum_config
-                    update_curriculum_config({
-                        "speed_tracking_weight": 90.0,
-                        "target_corner_speed": 0.40,
-                    })
+
+                    update_curriculum_config(
+                        {
+                            "speed_tracking_weight": 90.0,
+                            "target_corner_speed": 0.40,
+                        }
+                    )
                 except Exception as e:
                     self.logger.error(f"Failed to update curriculum config: {e}")
             restart_cmd = ["bash", START_SCRIPT]
 
         elif "CORNER1" in f_upper or "APEX_CLIFF" in f_upper or "CLIFF" in f_upper:
-            # Curriculum intervention: reinforce Sector 2 spawn weighting (45%) to accelerate Corner 1 trial density without rollback
-            action_summary = "Curriculum boost applied: reinforced Sector 2 spawn weighting (45%) to accelerate Corner 1 trial density without rollback."
-            files_touched.append(CURRICULUM_CFG_PATH)
-            if not self.dry_run:
-                try:
-                    from mdp.curriculum_config import update_curriculum_config
-                    update_curriculum_config({
-                        "sector_weights": [0.15, 0.45, 0.15, 0.15, 0.10],
-                        "target_corner_speed": 0.35,
-                    })
-                except Exception as e:
-                    self.logger.error(f"Failed to update curriculum config: {e}")
-            restart_cmd = None  # Do NOT restart or rollback! Training continues uninterrupted.
+            apex_triggers = self.state.get("apex_cliff_trigger_count", 0) + 1
+            self.state["apex_cliff_trigger_count"] = apex_triggers
+            if apex_triggers == 1:
+                action_summary = "Curriculum boost applied (Attempt 1): reinforced Sector 2 spawn weighting (70%) to accelerate Corner 1 trial density without rollback."
+                files_touched.append(CURRICULUM_CFG_PATH)
+                if not self.dry_run:
+                    try:
+                        from mdp.curriculum_config import update_curriculum_config
+
+                        update_curriculum_config(
+                            {
+                                "sector_weights": [0.10, 0.70, 0.05, 0.10, 0.05],
+                                "target_corner_speed": 0.35,
+                            }
+                        )
+                    except Exception as e:
+                        self.logger.error(f"Failed to update curriculum config: {e}")
+                restart_cmd = None
+            else:
+                action_summary = f"Persistent Apex Cliff (Attempt {apex_triggers}): Pruned corrupted run checkpoints and triggered clean rollback to {os.path.basename(PRIMARY_LANDMARK)}"
+                if not self.dry_run:
+                    pruned = prune_corrupted_run_checkpoints()
+                    self.logger.info(
+                        f"Pruned {pruned} corrupted checkpoints from active run directory."
+                    )
+                self.state["apex_cliff_trigger_count"] = 0
+                files_touched.append(PRIMARY_LANDMARK)
+                restart_cmd = ["bash", START_SCRIPT, PRIMARY_LANDMARK]
 
         elif "WALL_HUGGING" in f_upper or "HUGGING" in f_upper:
-            action_summary = "Refreshed track direction symmetry and warm-restarted training to clear outer shoulder bias"
-            restart_cmd = ["bash", START_SCRIPT]
+            action_summary = f"Wall-hugging / line bias detected: Pruned biased checkpoints and warm-restarted training from {os.path.basename(PRIMARY_LANDMARK)}"
+            if not self.dry_run:
+                prune_corrupted_run_checkpoints()
+            files_touched.append(PRIMARY_LANDMARK)
+            restart_cmd = ["bash", START_SCRIPT, PRIMARY_LANDMARK]
 
         elif "COLLAPSE" in f_upper or "DIVERGENCE" in f_upper:
-            target_ckpt = get_current_run_checkpoint()
-            if not target_ckpt or not os.path.exists(target_ckpt):
-                target_ckpt = PRIMARY_LANDMARK if os.path.exists(PRIMARY_LANDMARK) else ""
-            action_summary = f"Automated rollback to current run's best/latest checkpoint {os.path.basename(target_ckpt) if target_ckpt else 'None'}"
-            if target_ckpt:
-                files_touched.append(target_ckpt)
-                restart_cmd = ["bash", START_SCRIPT, target_ckpt]
-            else:
-                restart_cmd = ["bash", START_SCRIPT]
+            action_summary = f"Policy Collapse / Divergence detected: Pruned corrupted checkpoints and rolled back cleanly to {os.path.basename(PRIMARY_LANDMARK)}"
+            if not self.dry_run:
+                prune_corrupted_run_checkpoints()
+            files_touched.append(PRIMARY_LANDMARK)
+            restart_cmd = ["bash", START_SCRIPT, PRIMARY_LANDMARK]
 
         # Write diagnosis file
         try:
             with open(DIAGNOSIS_FILE, "w") as f:
                 f.write(f"# SENTINEL SELF-HEALING DIAGNOSIS\n\n")
-                f.write(f"**Timestamp**: {datetime.datetime.now(datetime.timezone.utc).isoformat()}\n\n")
+                f.write(
+                    f"**Timestamp**: {datetime.datetime.now(datetime.timezone.utc).isoformat()}\n\n"
+                )
                 f.write(f"**Failure Detected**: `{failure_type}`\n\n")
                 f.write(f"**Action Taken**: {action_summary}\n\n")
                 f.write(f"**Dry Run**: {self.dry_run}\n\n")
@@ -611,16 +709,190 @@ class AutonomousSentinel:
 
         # Execute restart command last, as it may kill the running tmux session/sentinel
         if not self.dry_run and restart_cmd:
-            subprocess.run(restart_cmd, cwd=WORKSPACE_ROOT)
+            clean_env = os.environ.copy()
+            clean_env.pop("TMUX", None)
+            clean_env["RUNNING_DETACHED"] = "1"
+            self.logger.info(
+                f"Spawning detached restart process: {' '.join(restart_cmd)}"
+            )
+            subprocess.Popen(
+                restart_cmd,
+                cwd=WORKSPACE_ROOT,
+                env=clean_env,
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
 
+        return True
+
+    def audit_checkpoint(
+        self, ckpt_path: str, auto_heal: bool = True, steps: int = 150
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """Run headless regression audit across 5 sectors for a checkpoint."""
+        if not os.path.isfile(ckpt_path):
+            self.logger.error(f"Checkpoint not found for audit: {ckpt_path}")
+            return False, {}
+
+        ckpt_name = os.path.basename(ckpt_path)
+        self.logger.info(
+            f"🎯 Initiating Checkpoint Regression Audit for: {ckpt_name}"
+        )
+
+        # Mark audit state to prevent daemon process hang triggers
+        self.state["is_auditing"] = True
+        save_state(self.state)
+
+        # 1. Gracefully stop active training to release 100% GPU VRAM for the auditor
+        proc = check_process_status()
+        if proc.python_active or proc.tmux_active:
+            self.logger.info("Stopping active training session to free GPU VRAM for audit...")
+            try:
+                subprocess.run(
+                    ["tmux", "send-keys", "-t", "training:0.0", "C-c"],
+                    capture_output=True,
+                )
+                time.sleep(10)
+            except Exception:
+                pass
+            subprocess.run("pkill -9 -f 'train_skrl.py'", shell=True, capture_output=True)
+            time.sleep(5)
+
+        gpu_stat = query_gpu_stats()
+        self.logger.info(
+            f"GPU VRAM free for audit: {gpu_stat.vram_used_mb:.0f} MB / {gpu_stat.vram_total_mb:.0f} MB"
+        )
+
+        # 2. Run checkpoint_auditor.py via isaaclab.sh with TERM=xterm
+        auditor_script = os.path.join(
+            WORKSPACE_ROOT, "arcproLab/scripts/checkpoint_auditor.py"
+        )
+        cmd = [
+            "/home/arika/IsaacLab/isaaclab.sh",
+            "-p",
+            auditor_script,
+            "--checkpoint",
+            ckpt_path,
+            "--steps",
+            str(steps),
+        ]
+        if auto_heal:
+            cmd.append("--auto_heal")
+
+        self.logger.info(f"Executing auditor: {' '.join(cmd)}")
+        passed = False
+        audit_output = ""
+        try:
+            auditor_env = os.environ.copy()
+            auditor_env["TERM"] = "xterm"
+            res = subprocess.run(
+                cmd,
+                cwd=WORKSPACE_ROOT,
+                env=auditor_env,
+                capture_output=True,
+                text=True,
+                timeout=400,
+            )
+            audit_output = res.stdout + "\n" + res.stderr
+            if res.stdout:
+                self.logger.info(res.stdout)
+            if res.stderr and res.returncode != 0:
+                self.logger.warning(res.stderr)
+            passed = res.returncode == 0
+            if passed:
+                self.logger.info(f"✅ Checkpoint {ckpt_name} PASSED all sector audits!")
+            else:
+                self.logger.warning(
+                    f"⚠️ Checkpoint {ckpt_name} FAILED sector audits. Auto-heal applied."
+                )
+        except subprocess.TimeoutExpired:
+            self.logger.error(f"Audit timed out after 400s for {ckpt_name}")
+        except Exception as e:
+            self.logger.error(f"Audit failed with exception: {e}")
+
+        # 3. Mark checkpoint as audited in state and clear is_auditing
+        if "audited_checkpoints" not in self.state:
+            self.state["audited_checkpoints"] = []
+        if ckpt_name not in self.state["audited_checkpoints"]:
+            self.state["audited_checkpoints"].append(ckpt_name)
+        self.state["is_auditing"] = False
+        save_state(self.state)
+
+        # 4. Resume fleet training cleanly from this checkpoint
+        if not self.dry_run:
+            clean_env = os.environ.copy()
+            clean_env.pop("TMUX", None)
+            clean_env["RUNNING_DETACHED"] = "1"
+            self.logger.info(
+                f"Resuming fleet training cleanly from audited checkpoint: {ckpt_name}"
+            )
+            subprocess.Popen(
+                ["bash", START_SCRIPT, ckpt_path],
+                cwd=WORKSPACE_ROOT,
+                env=clean_env,
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            time.sleep(25)
+
+        return passed, {"output": audit_output}
+
+    def check_and_audit_new_checkpoints(self) -> bool:
+        """Checks for new un-audited agent_*.pt checkpoints and triggers audit."""
+        branch = "rollback/clean-baseline"
+        branch_tag = branch.replace("/", "_")
+        log_subdir = os.path.join(WORKSPACE_ROOT, f"logs/ppo_skrl_{branch_tag}")
+        if not os.path.isdir(log_subdir):
+            log_subdir = os.path.join(WORKSPACE_ROOT, "logs/ppo_skrl")
+
+        audited = set(self.state.get("audited_checkpoints", []))
+
+        candidates = []
+        now = time.time()
+        for root, _, files in os.walk(log_subdir):
+            if "corrupted" in root:
+                continue
+            for f in files:
+                if f.startswith("agent_") and f.endswith(".pt"):
+                    p = os.path.join(root, f)
+                    try:
+                        mtime = os.path.getmtime(p)
+                        # Must be at least 20 seconds old
+                        if (now - mtime) >= 20.0 and f not in audited:
+                            candidates.append((mtime, p))
+                    except Exception:
+                        pass
+
+        if not candidates:
+            return False
+
+        # Sort newest first so training always advances with latest policy
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        target_ckpt = candidates[0][1]
+        self.logger.info(
+            f"Found new unaudited checkpoint: {os.path.basename(target_ckpt)}"
+        )
+        # Mark any older candidates as audited to prevent rewinding to stale historical checkpoints
+        for _, old_p in candidates[1:]:
+            old_name = os.path.basename(old_p)
+            if old_name not in self.state["audited_checkpoints"]:
+                self.state["audited_checkpoints"].append(old_name)
+        save_state(self.state)
+
+        self.audit_checkpoint(target_ckpt, auto_heal=True)
         return True
 
 
 def run_daemon(sentinel: AutonomousSentinel, interval_sec: float = 15.0) -> None:
     """Run persistent monitoring loop."""
-    sentinel.logger.info(f"Autonomous Sentinel Daemon Active (interval={interval_sec}s)...")
+    sentinel.logger.info(
+        f"Autonomous Sentinel Daemon Active (interval={interval_sec}s)..."
+    )
+    cycle_counter = 0
     try:
         while True:
+            # 1. Standard telemetry and process health checks
             is_healthy, failures, diagnostics = sentinel.run_health_check()
             if not is_healthy:
                 sentinel.logger.warning(f"Unhealthy condition detected: {failures}")
@@ -637,31 +909,97 @@ def run_daemon(sentinel: AutonomousSentinel, interval_sec: float = 15.0) -> None
                     )
                 else:
                     sentinel.logger.info("Health OK (Awaiting fresh rollouts)...")
+
+            # 2. Check for newly saved checkpoints every 2 cycles (~30s)
+            cycle_counter += 1
+            if cycle_counter % 2 == 0:
+                sentinel.check_and_audit_new_checkpoints()
+
             time.sleep(interval_sec)
     except KeyboardInterrupt:
         sentinel.logger.info("Autonomous Sentinel Daemon terminated by user.")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Autonomous Self-Healing Sentinel for ARCPro RL")
-    parser.add_argument("--daemon", action="store_true", help="Run in continuous monitoring daemon loop")
-    parser.add_argument("--check", action="store_true", help="Perform single health check and exit")
-    parser.add_argument("--status", action="store_true", help="Print current sentinel state and metrics")
-    parser.add_argument("--dry-run", action="store_true", help="Evaluate failure conditions without modifying state")
-    parser.add_argument("--interval", type=float, default=15.0, help="Check interval in seconds for daemon (default: 15)")
-    parser.add_argument("--trigger", type=str, choices=["crawling", "apex_cliff", "wall_hugging", "policy_collapse", "process_hang"],
-                        help="Manually trigger a specific self-healing intervention")
-    parser.add_argument("--force", action="store_true", help="Bypass cooldown period for testing or immediate override")
-    parser.add_argument("--verbose", action="store_true", help="Enable verbose debug logging")
+    parser = argparse.ArgumentParser(
+        description="Autonomous Self-Healing Sentinel for ARCPro RL"
+    )
+    parser.add_argument(
+        "--daemon", action="store_true", help="Run in continuous monitoring daemon loop"
+    )
+    parser.add_argument(
+        "--check", action="store_true", help="Perform single health check and exit"
+    )
+    parser.add_argument(
+        "--status", action="store_true", help="Print current sentinel state and metrics"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Evaluate failure conditions without modifying state",
+    )
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=15.0,
+        help="Check interval in seconds for daemon (default: 15)",
+    )
+    parser.add_argument(
+        "--trigger",
+        type=str,
+        choices=[
+            "crawling",
+            "apex_cliff",
+            "wall_hugging",
+            "policy_collapse",
+            "process_hang",
+        ],
+        help="Manually trigger a specific self-healing intervention",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Bypass cooldown period for testing or immediate override",
+    )
+    parser.add_argument(
+        "--audit",
+        type=str,
+        default="",
+        help="Run regression audit on a specific checkpoint path",
+    )
+    parser.add_argument(
+        "--audit-latest",
+        action="store_true",
+        help="Run regression audit on the latest checkpoint",
+    )
+    parser.add_argument(
+        "--verbose", action="store_true", help="Enable verbose debug logging"
+    )
     args = parser.parse_args()
 
     logger = setup_logger(verbose=args.verbose)
     sentinel = AutonomousSentinel(logger=logger, dry_run=args.dry_run)
 
+    if args.audit:
+        logger.info(f"Manual regression audit requested for checkpoint: {args.audit}")
+        passed, _ = sentinel.audit_checkpoint(args.audit, auto_heal=True)
+        sys.exit(0 if passed else 1)
+
+    if args.audit_latest:
+        latest = get_current_run_checkpoint()
+        if not latest:
+            logger.error("No checkpoint found to audit.")
+            sys.exit(1)
+        logger.info(f"Manual regression audit requested for latest checkpoint: {latest}")
+        passed, _ = sentinel.audit_checkpoint(latest, auto_heal=True)
+        sys.exit(0 if passed else 1)
+
     if args.trigger:
         logger.info(f"Manual trigger requested for sentinel: {args.trigger}")
         is_healthy, failures, diagnostics = sentinel.run_health_check()
-        sentinel.execute_self_healing(f"MANUAL_TRIGGER_{args.trigger.upper()}", diagnostics, force=args.force)
+        sentinel.execute_self_healing(
+            f"MANUAL_TRIGGER_{args.trigger.upper()}", diagnostics, force=args.force
+        )
         sys.exit(0)
 
     if args.status:
@@ -679,13 +1017,22 @@ def main():
                 print(f"  {k}: {v}")
         proc = diagnostics.get("process", {})
         print("\nProcess & GPU Status:")
-        print(f"  tmux session 'training': {'Running' if proc.get('tmux_active') else 'Dead'}")
-        print(f"  Python process: {'Active' if proc.get('python_active') else 'Inactive'}")
+        print(
+            f"  tmux session 'training': {'Running' if proc.get('tmux_active') else 'Dead'}"
+        )
+        print(
+            f"  Python process: {'Active' if proc.get('python_active') else 'Inactive'}"
+        )
         print(f"  Log age: {proc.get('log_age_seconds', 0):.1f}s")
         gpu = proc.get("gpu", {})
-        print(f"  GPU VRAM: {gpu.get('vram_used_mb', 0):.0f} / {gpu.get('vram_total_mb', 0):.0f} MB ({gpu.get('gpu_util_pct', 0)}% util)")
-        print(f"\nLast Intervention: {sentinel.state.get('last_intervention_type')} at {sentinel.state.get('last_intervention_time')}")
+        print(
+            f"  GPU VRAM: {gpu.get('vram_used_mb', 0):.0f} / {gpu.get('vram_total_mb', 0):.0f} MB ({gpu.get('gpu_util_pct', 0)}% util)"
+        )
+        print(
+            f"\nLast Intervention: {sentinel.state.get('last_intervention_type')} at {sentinel.state.get('last_intervention_time')}"
+        )
         print(f"Total Interventions: {sentinel.state.get('interventions_count', 0)}")
+        print(f"Audited Checkpoints: {sentinel.state.get('audited_checkpoints', [])}")
         sys.exit(0 if is_healthy else 1)
 
     if args.daemon:
@@ -699,7 +1046,9 @@ def main():
             len_str = f"Len {metrics.get('avg_ep_len', 'N/A')}"
             rew_str = f"Rew {metrics.get('avg_rew', 'N/A')}"
             spd_str = f"Spd {metrics.get('avg_speed', 'N/A')} m/s"
-            logger.info(f"✅ Sentinel Check PASSED ({step_str} | {len_str} | {rew_str} | {spd_str})")
+            logger.info(
+                f"✅ Sentinel Check PASSED ({step_str} | {len_str} | {rew_str} | {spd_str})"
+            )
             sys.exit(0)
         else:
             logger.warning(f"❌ Sentinel Check FAILED: {failures}")

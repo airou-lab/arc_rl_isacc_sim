@@ -21,6 +21,11 @@ env/
 *.txt
 logs/
 archive/old_logs_pre_reroute/
+archive/corrupted_runs/
+archive/corrupted_void_spawns_20261013-14/
+archive/pre_braking_overspeed_runs/
+runs/
+*.bak
 model_*_telemetry.md
 exts/omni.*
 

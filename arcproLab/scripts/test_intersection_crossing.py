@@ -7,10 +7,16 @@ import argparse
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Test intersection permeability.")
-parser.add_argument("--test_mode", type=str, default="gate", choices=["gate", "wall"], help="Test crossing a gate or hitting a wall.")
+parser.add_argument(
+    "--test_mode",
+    type=str,
+    default="gate",
+    choices=["gate", "wall"],
+    help="Test crossing a gate or hitting a wall.",
+)
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
-args_cli.headless = False # Force GUI
+args_cli.headless = False  # Force GUI
 args_cli.enable_cameras = True
 
 app_launcher = AppLauncher(args_cli)
@@ -31,6 +37,7 @@ from arcpro_env_cfg import ARCProEnvCfg
 from isaaclab.envs import ManagerBasedRLEnv
 from mdp.track_manager import get_track_manager
 
+
 def main():
     # 1. Setup environment
     env_cfg = ARCProEnvCfg()
@@ -40,7 +47,7 @@ def main():
 
     # 2. Get TrackManager
     tm = get_track_manager(device=env.device)
-    tm.debug = True # Force debug spheres for this test
+    tm.debug = True  # Force debug spheres for this test
     tm.ensure_synced()
 
     # 3. Find a test location
@@ -51,7 +58,9 @@ def main():
         dists = np.linalg.norm(gate_pts[:, :2] - default_spawn[:2], axis=1)
         nearest_idx = np.argmin(dists)
         target_gate = gate_pts[nearest_idx]
-        print(f"[TEST] Found target gate at: {target_gate} (Dist to spawn: {dists[nearest_idx]:.2f}m)")
+        print(
+            f"[TEST] Found target gate at: {target_gate} (Dist to spawn: {dists[nearest_idx]:.2f}m)"
+        )
     else:
         print("CRITICAL: No gates found to test!")
         return
@@ -59,28 +68,36 @@ def main():
     # 4. Simulation Loop
     count = 0
     test_started = False
-    
+
     while simulation_app.is_running():
         # Step the environment
         # Action: [Steer, Throttle, Brake]
         # We'll just drive straight
         action = torch.tensor([[0.0, 0.8, 0.0]], device=env.device)
         obs, rewards, terminated, truncated, info = env.step(action)
-        
+
         # Teleport once at the start to the gate
         if not test_started:
             print("[TEST] Teleporting robot to intersection...")
             # Position it 2.5m behind the gate, facing it (South: -1.57 rad)
             # Offset x by +0.3 to get away from yellow centerline
-            spawn_pos = torch.tensor([[target_gate[0] + 0.3, target_gate[1] + 2.5, 0.15]], device=env.device)
-            spawn_quat = torch.tensor([[0.707, 0.0, 0.0, -0.707]], device=env.device) # Facing South
-            
+            spawn_pos = torch.tensor(
+                [[target_gate[0] + 0.3, target_gate[1] + 2.5, 0.15]], device=env.device
+            )
+            spawn_quat = torch.tensor(
+                [[0.707, 0.0, 0.0, -0.707]], device=env.device
+            )  # Facing South
+
             # If testing 'wall', offset it to the side to hit yellow line
             if args_cli.test_mode == "wall":
-                 spawn_pos[0, 0] -= 0.3 # Move left toward yellow line
-            
-            env.scene["robot"].write_root_pose_to_sim(torch.cat([spawn_pos, spawn_quat], dim=-1))
-            env.scene["robot"].write_root_velocity_to_sim(torch.zeros((1, 6), device=env.device))
+                spawn_pos[0, 0] -= 0.3  # Move left toward yellow line
+
+            env.scene["robot"].write_root_pose_to_sim(
+                torch.cat([spawn_pos, spawn_quat], dim=-1)
+            )
+            env.scene["robot"].write_root_velocity_to_sim(
+                torch.zeros((1, 6), device=env.device)
+            )
             test_started = True
 
         if terminated[0]:
@@ -88,9 +105,11 @@ def main():
             if args_cli.test_mode == "wall":
                 print("SUCCESS: Robot correctly reset when hitting the WALL.")
             else:
-                print("FAILURE: Robot reset when it should have passed through the GATE.")
+                print(
+                    "FAILURE: Robot reset when it should have passed through the GATE."
+                )
             break
-            
+
         if count > 200:
             print(f"--- Completed {count} steps without reset ---")
             if args_cli.test_mode == "gate":
@@ -104,6 +123,7 @@ def main():
 
     env.close()
     simulation_app.close()
+
 
 if __name__ == "__main__":
     main()

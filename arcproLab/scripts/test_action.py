@@ -9,6 +9,7 @@ if ARCPRO_LAB_DIR not in sys.path:
     sys.path.insert(0, ARCPRO_LAB_DIR)
 
 from isaaclab.app import AppLauncher
+
 app_launcher = AppLauncher({"headless": True, "num_envs": 1})
 simulation_app = app_launcher.app
 
@@ -34,7 +35,9 @@ for _ in range(50):
     env.step(actions)
 
 vel = env.scene["robot"].data.root_lin_vel_b[0]
-print(f"Velocity after 50 steps of action=1.0: X={vel[0]:.3f}, Y={vel[1]:.3f}, Z={vel[2]:.3f}")
+print(
+    f"Velocity after 50 steps of action=1.0: X={vel[0]:.3f}, Y={vel[1]:.3f}, Z={vel[2]:.3f}"
+)
 
 # Now apply negative throttle
 print("Applying action = [0.0, -1.0]...")
@@ -43,7 +46,9 @@ for _ in range(50):
     env.step(actions)
 
 vel = env.scene["robot"].data.root_lin_vel_b[0]
-print(f"Velocity after 50 steps of action=-1.0: X={vel[0]:.3f}, Y={vel[1]:.3f}, Z={vel[2]:.3f}")
+print(
+    f"Velocity after 50 steps of action=-1.0: X={vel[0]:.3f}, Y={vel[1]:.3f}, Z={vel[2]:.3f}"
+)
 
 env.close()
 simulation_app.close()

@@ -17,13 +17,14 @@ simulation_app = app_launcher.app
 
 import torch
 import omni.usd
-from pxr import Usd, UsdGeom, Gf
+from pxr import Usd, UsdGeom
 from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
 import isaaclab.sim as sim_utils
 
 # Add both root and arcproLab to sys.path
 import os
 import sys
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ARCPRO_LAB_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if ARCPRO_LAB_DIR not in sys.path:
@@ -31,6 +32,7 @@ if ARCPRO_LAB_DIR not in sys.path:
 
 from arcpro_env_cfg import ARCProEnvCfg
 from isaaclab.envs import ManagerBasedRLEnv
+
 
 def main():
     # 1. Setup environment
@@ -44,17 +46,19 @@ def main():
         prim_path="/World/Visuals/GateMarkers",
         markers={
             "sphere": sim_utils.SphereCfg(
-                radius=0.5, # Large enough to see clearly
-                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 0.0)) # Green
+                radius=0.5,  # Large enough to see clearly
+                visual_material=sim_utils.PreviewSurfaceCfg(
+                    diffuse_color=(0.0, 1.0, 0.0)
+                ),  # Green
             )
-        }
+        },
     )
     gate_visualizer = VisualizationMarkers(gate_marker_cfg)
 
     # 3. Find Gates
     stage = omni.usd.get_context().get_stage()
     gate_positions = []
-    
+
     # We need to find the gates in world space
     # In Isaac Lab, envs are usually under /World/envs/env_N
     for prim in Usd.PrimRange(stage.GetPseudoRoot()):
@@ -64,9 +68,13 @@ def main():
             if ds_type == ["DSLaneGate"]:
                 # Get world position
                 xform = UsdGeom.Xformable(prim)
-                world_transform = xform.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+                world_transform = xform.ComputeLocalToWorldTransform(
+                    Usd.TimeCode.Default()
+                )
                 pos = world_transform.ExtractTranslation()
-                gate_positions.append([pos[0], pos[1], pos[2] + 1.0]) # Float it slightly above ground
+                gate_positions.append(
+                    [pos[0], pos[1], pos[2] + 1.0]
+                )  # Float it slightly above ground
                 print(f"[FOUND GATE] Path: {prim.GetPath()} | Pos: {pos}")
 
     if not gate_positions:
@@ -84,6 +92,7 @@ def main():
 
     env.close()
     simulation_app.close()
+
 
 if __name__ == "__main__":
     main()

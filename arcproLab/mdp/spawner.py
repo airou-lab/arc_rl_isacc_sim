@@ -10,6 +10,7 @@ from isaaclab.sim.utils import clone, get_current_stage
 import re
 from pxr import UsdGeom
 
+
 @clone
 def spawn_guide_cone(
     prim_path: str,
@@ -25,6 +26,7 @@ def spawn_guide_cone(
     geom_prim.CreatePurposeAttr().Set(UsdGeom.Tokens.guide)
     return prim
 
+
 @clone
 def spawn_f1tenth(
     prim_path: str,
@@ -38,7 +40,7 @@ def spawn_f1tenth(
     # 1. Spawn using default spawner
     prim = sim_utils.spawn_from_usd(prim_path, cfg, translation, orientation, **kwargs)
     stage = get_current_stage()
-    
+
     if mass_overrides:
         # Apply overrides recursively to all descendants
         for child in Usd.PrimRange(prim):
@@ -47,27 +49,31 @@ def spawn_f1tenth(
                 if re.match(pattern, child_name):
                     # Apply mass override
                     mass_cfg = sim_utils.MassPropertiesCfg(mass=mass)
-                    schemas.define_mass_properties(str(child.GetPath()), mass_cfg, stage)
-                    
+                    schemas.define_mass_properties(
+                        str(child.GetPath()), mass_cfg, stage
+                    )
+
                     # Lower Center of Mass slightly to prevent flipping without clipping
                     from pxr import UsdPhysics, Gf
+
                     mass_api = UsdPhysics.MassAPI.Apply(child)
                     if child_name == "Chassis":
                         # Move CoM down by 1cm (0.01m) relative to the prim origin only for the Chassis
                         mass_api.CreateCenterOfMassAttr().Set(Gf.Vec3f(0.0, 0.0, -0.01))
-                    
+
                     break
 
     # 2. RC Car Tire Friction — applied to all Wheel_* prims
     # Realistic rubber-on-asphalt: static 1.0, dynamic 0.8
     _apply_tire_friction(prim, stage)
     _apply_steering_limits(prim, stage)
-                    
+
     return prim
+
 
 def _apply_steering_limits(robot_prim: Usd.Prim, stage) -> None:
     from pxr import UsdPhysics
-    
+
     for child in Usd.PrimRange(robot_prim):
         child_name = child.GetName()
         if child_name in ["Joint_Steer_L", "Joint_Steer_R"]:
@@ -78,14 +84,13 @@ def _apply_steering_limits(robot_prim: Usd.Prim, stage) -> None:
                 joint.CreateUpperLimitAttr().Set(55.0)
 
 
-
 def _apply_tire_friction(robot_prim: Usd.Prim, stage) -> None:
     """Apply rubber-on-asphalt PhysX material to all Wheel_* child prims."""
     from pxr import UsdPhysics, UsdShade
 
-    STATIC_FRICTION  = 3.0
+    STATIC_FRICTION = 3.0
     DYNAMIC_FRICTION = 3.0
-    RESTITUTION      = 0.0
+    RESTITUTION = 0.0
 
     for child in Usd.PrimRange(robot_prim):
         child_name = child.GetName()
@@ -93,7 +98,7 @@ def _apply_tire_friction(robot_prim: Usd.Prim, stage) -> None:
             continue
 
         child_path = str(child.GetPath())
-        mat_path   = f"{child_path}/TireMaterial"
+        mat_path = f"{child_path}/TireMaterial"
 
         # Create or reuse material prim
         mat_prim = stage.GetPrimAtPath(mat_path)
@@ -110,9 +115,13 @@ def _apply_tire_friction(robot_prim: Usd.Prim, stage) -> None:
         mat_obj = UsdShade.Material(mat_prim)
         mat_binding = UsdShade.MaterialBindingAPI.Apply(child)
         mat_binding.Bind(mat_obj, UsdShade.Tokens.strongerThanDescendants, "physics")
-        
+
         # Explicitly bind to Geom children just in case
         for geom_child in child.GetChildren():
-            if "Geom" in geom_child.GetName() or geom_child.HasAPI(UsdPhysics.CollisionAPI):
+            if "Geom" in geom_child.GetName() or geom_child.HasAPI(
+                UsdPhysics.CollisionAPI
+            ):
                 geom_binding = UsdShade.MaterialBindingAPI.Apply(geom_child)
-                geom_binding.Bind(mat_obj, UsdShade.Tokens.strongerThanDescendants, "physics")
+                geom_binding.Bind(
+                    mat_obj, UsdShade.Tokens.strongerThanDescendants, "physics"
+                )

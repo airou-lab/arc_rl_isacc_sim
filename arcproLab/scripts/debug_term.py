@@ -17,6 +17,7 @@ sys.path.insert(0, ROOT_DIR)
 from isaaclab.envs import ManagerBasedRLEnv
 from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
+
 def main():
     env_cfg = ARCProEnvCfg()
     env_cfg.scene.num_envs = 1
@@ -31,21 +32,26 @@ def main():
 
     print("\n--- SIMULATION STEP TRACE ---")
     action = torch.zeros((1, 2), device=env.device)
-    
+
     for i in range(30):
         if i > 10:
             action[0, 1] = 1.0
-            
+
         env.step(action)
         vel = robot.data.root_lin_vel_b[0, 0].item()
-        
+
         # Check max force
-        max_force = torch.max(torch.norm(sensor.data.net_forces_w, dim=-1), dim=-1)[0].item()
+        max_force = torch.max(torch.norm(sensor.data.net_forces_w, dim=-1), dim=-1)[
+            0
+        ].item()
         term_flag = env.termination_manager.terminated[0].item()
-        
-        print(f"Step {i:2d} | FwdVel(LocalX): {vel:.3f} | GroundForce: {max_force:.1f} N | Term: {term_flag}")
-            
+
+        print(
+            f"Step {i:2d} | FwdVel(LocalX): {vel:.3f} | GroundForce: {max_force:.1f} N | Term: {term_flag}"
+        )
+
     env.close()
+
 
 if __name__ == "__main__":
     main()

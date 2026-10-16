@@ -14,8 +14,8 @@ from skrl.envs.wrappers.torch import IsaacLabWrapper
 
 env_cfg = ARCProEnvCfg()
 env_cfg.scene.num_envs = 1
-env_cfg.enable_cameras = True 
-env_cfg.__post_init__() 
+env_cfg.enable_cameras = True
+env_cfg.__post_init__()
 
 env = ManagerBasedRLEnv(cfg=env_cfg)
 wrapped_env = IsaacLabWrapper(env)

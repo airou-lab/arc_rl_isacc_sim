@@ -17,7 +17,6 @@ Usage:
 
 import argparse
 import json
-import os
 import re
 import subprocess
 import sys
@@ -51,23 +50,24 @@ DEFAULT_MODEL = "qwen3-coder:8b"
 # Prevents the LLM from setting absurd values
 # ──────────────────────────────────────────────────────────────────
 REWARD_GUARDRAILS = {
-    "survival_bonus":       {"min": -5.0,   "max": 10.0},
-    "termination_penalty":  {"min": 0.0,    "max": 100.0},
-    "progress_reward":      {"min": 0.0,    "max": 200.0},
-    "action_steer_penalty": {"min": -20.0,  "max": 0.0},
-    "action_drive_reward":  {"min": -5.0,   "max": 5.0},
-    "lateral_error":        {"min": -20.0,  "max": 0.0},
-    "stationary":           {"min": 0.0,    "max": 200.0},
-    "heading":              {"min": 0.0,    "max": 50.0},
-    "smoothness":           {"min": 0.0,    "max": 20.0},
-    "jerk":                 {"min": -20.0,  "max": 0.0},
-    "boundary":             {"min": 0.0,    "max": 5.0},
+    "survival_bonus": {"min": -5.0, "max": 10.0},
+    "termination_penalty": {"min": 0.0, "max": 100.0},
+    "progress_reward": {"min": 0.0, "max": 200.0},
+    "action_steer_penalty": {"min": -20.0, "max": 0.0},
+    "action_drive_reward": {"min": -5.0, "max": 5.0},
+    "lateral_error": {"min": -20.0, "max": 0.0},
+    "stationary": {"min": 0.0, "max": 200.0},
+    "heading": {"min": 0.0, "max": 50.0},
+    "smoothness": {"min": 0.0, "max": 20.0},
+    "jerk": {"min": -20.0, "max": 0.0},
+    "boundary": {"min": 0.0, "max": 5.0},
 }
 
 
 # ──────────────────────────────────────────────────────────────────
 # Utility functions
 # ──────────────────────────────────────────────────────────────────
+
 
 def log(msg: str) -> None:
     """Timestamped console output."""
@@ -79,7 +79,9 @@ def ollama_request(endpoint: str, payload: dict, timeout: int = 300) -> dict:
     """Make a request to the Ollama API."""
     url = f"{OLLAMA_API_URL}{endpoint}"
     data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(
+        url, data=data, headers={"Content-Type": "application/json"}
+    )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             # Ollama streams responses line-by-line (NDJSON)
@@ -137,11 +139,15 @@ def stop_ollama() -> None:
 def load_model(model: str) -> bool:
     """Pre-load a model into Ollama. Returns True if successful."""
     log(f"Loading model {model} into VRAM...")
-    result = ollama_request("/api/chat", {
-        "model": model,
-        "messages": [{"role": "user", "content": "Hello"}],
-        "stream": False,
-    }, timeout=120)
+    result = ollama_request(
+        "/api/chat",
+        {
+            "model": model,
+            "messages": [{"role": "user", "content": "Hello"}],
+            "stream": False,
+        },
+        timeout=120,
+    )
     if "error" in result:
         log(f"ERROR loading model: {result['error']}")
         return False
@@ -152,6 +158,7 @@ def load_model(model: str) -> bool:
 # ──────────────────────────────────────────────────────────────────
 # Metrics extraction
 # ──────────────────────────────────────────────────────────────────
+
 
 def get_latest_metrics() -> dict[str, Any]:
     """Parse the latest training metrics from the log file."""
@@ -184,7 +191,7 @@ def get_current_weights() -> dict[str, float]:
     for name in REWARD_GUARDRAILS:
         # Match patterns like: name = RewTerm(..., weight=X.X)
         # or: name = RewTerm(..., weight=-X.X)
-        pattern = rf'{name}\s*=\s*RewTerm\([^)]*weight\s*=\s*([-\d\.]+)'
+        pattern = rf"{name}\s*=\s*RewTerm\([^)]*weight\s*=\s*([-\d\.]+)"
         match = re.search(pattern, content)
         if match:
             weights[name] = float(match.group(1))
@@ -195,6 +202,7 @@ def get_current_weights() -> dict[str, float]:
 # Prompt construction
 # ──────────────────────────────────────────────────────────────────
 
+
 def build_prompt(metrics: dict, current_weights: dict) -> list[dict]:
     """Construct the structured prompt for the LLM."""
 
@@ -204,7 +212,9 @@ def build_prompt(metrics: dict, current_weights: dict) -> list[dict]:
         history = HISTORY_PATH.read_text()
         # Keep last 12000 chars to fit in context window (~3000 tokens)
         if len(history) > 12000:
-            history = "...[TRUNCATED — showing last 12000 chars]...\n" + history[-12000:]
+            history = (
+                "...[TRUNCATED — showing last 12000 chars]...\n" + history[-12000:]
+            )
 
     # Read current rewards.py for code-level context
     rewards_code = ""
@@ -249,12 +259,12 @@ AVAILABLE REWARD WEIGHTS (and what they do):
 
     user_prompt = f"""## Current Training Metrics
 ```
-Timesteps: {metrics.get('timesteps', 'N/A')}
-Episode Reward: {metrics.get('reward', 'N/A')}
-Episode Length: {metrics.get('ep_len', 'N/A')}
-Speed (m/s): {metrics.get('speed', 'N/A')}
-Cumulative Waypoints: {metrics.get('wps_cum', 'N/A')}
-WP Delta Reward: {metrics.get('wp_delta_rew', 'N/A')}
+Timesteps: {metrics.get("timesteps", "N/A")}
+Episode Reward: {metrics.get("reward", "N/A")}
+Episode Length: {metrics.get("ep_len", "N/A")}
+Speed (m/s): {metrics.get("speed", "N/A")}
+Cumulative Waypoints: {metrics.get("wps_cum", "N/A")}
+WP Delta Reward: {metrics.get("wp_delta_rew", "N/A")}
 ```
 
 ## Current Reward Weights
@@ -281,6 +291,7 @@ Based on the metrics and history, diagnose the current failure mode and propose 
 # ──────────────────────────────────────────────────────────────────
 # Response parsing and validation
 # ──────────────────────────────────────────────────────────────────
+
 
 def parse_llm_response(raw: str) -> dict | None:
     """Parse and validate the LLM's JSON response."""
@@ -339,7 +350,9 @@ def validate_changes(changes: list[dict], current_weights: dict) -> list[dict]:
         bounds = REWARD_GUARDRAILS[param]
         clamped = max(bounds["min"], min(bounds["max"], new_value))
         if clamped != new_value:
-            log(f"  CLAMPED: '{param}' {new_value} → {clamped} (guardrail: [{bounds['min']}, {bounds['max']}])")
+            log(
+                f"  CLAMPED: '{param}' {new_value} → {clamped} (guardrail: [{bounds['min']}, {bounds['max']}])"
+            )
             new_value = clamped
 
         # Check it's actually different from current
@@ -348,12 +361,14 @@ def validate_changes(changes: list[dict], current_weights: dict) -> list[dict]:
             log(f"  SKIPPED: '{param}' is already {current}")
             continue
 
-        validated.append({
-            "param": param,
-            "old_value": current,
-            "new_value": new_value,
-            "reason": change.get("reason", "No reason given"),
-        })
+        validated.append(
+            {
+                "param": param,
+                "old_value": current,
+                "new_value": new_value,
+                "reason": change.get("reason", "No reason given"),
+            }
+        )
 
     return validated
 
@@ -361,6 +376,7 @@ def validate_changes(changes: list[dict], current_weights: dict) -> list[dict]:
 # ──────────────────────────────────────────────────────────────────
 # Apply changes to files
 # ──────────────────────────────────────────────────────────────────
+
 
 def apply_weight_changes(changes: list[dict]) -> bool:
     """Apply validated weight changes to arcpro_env_cfg.py."""
@@ -373,14 +389,18 @@ def apply_weight_changes(changes: list[dict]) -> bool:
         new_val = change["new_value"]
 
         # Match the weight= value in the RewTerm for this param
-        pattern = rf'({param}\s*=\s*RewTerm\([^)]*weight\s*=\s*)([-\d\.]+)'
+        pattern = rf"({param}\s*=\s*RewTerm\([^)]*weight\s*=\s*)([-\d\.]+)"
         match = re.search(pattern, modified)
         if match:
             old_in_file = match.group(2)
-            modified = modified[:match.start(2)] + str(new_val) + modified[match.end(2):]
+            modified = (
+                modified[: match.start(2)] + str(new_val) + modified[match.end(2) :]
+            )
             log(f"  APPLIED: {param} weight {old_in_file} → {new_val}")
         else:
-            log(f"  WARNING: Could not find weight pattern for '{param}' in config file")
+            log(
+                f"  WARNING: Could not find weight pattern for '{param}' in config file"
+            )
 
     if modified != content:
         ENV_CFG_PATH.write_text(modified)
@@ -400,10 +420,14 @@ def append_to_history(llm_result: dict, changes: list[dict]) -> None:
     entry += f"* **Problem**: {diagnosis}\n"
     entry += f"* **Fix**:\n"
     for c in changes:
-        entry += f"  - `{c['param']}`: {c['old_value']} → {c['new_value']} ({c['reason']})\n"
+        entry += (
+            f"  - `{c['param']}`: {c['old_value']} → {c['new_value']} ({c['reason']})\n"
+        )
     if notes:
         entry += f"* **Notes**: {notes}\n"
-    entry += f"* **Result**: Applied by LLM agent. Checkpoints wiped, training restarted.\n"
+    entry += (
+        f"* **Result**: Applied by LLM agent. Checkpoints wiped, training restarted.\n"
+    )
 
     with open(HISTORY_PATH, "a") as f:
         f.write(entry)
@@ -420,15 +444,15 @@ def write_diagnosis(metrics: dict, llm_result: dict, changes: list[dict]) -> Non
 ## Metrics at Time of Analysis
 | Metric | Value |
 |--------|-------|
-| Timesteps | {metrics.get('timesteps', 'N/A')} |
-| Reward | {metrics.get('reward', 'N/A')} |
-| Episode Length | {metrics.get('ep_len', 'N/A')} |
-| Speed (m/s) | {metrics.get('speed', 'N/A')} |
-| WPs Cumulative | {metrics.get('wps_cum', 'N/A')} |
-| WP Delta Reward | {metrics.get('wp_delta_rew', 'N/A')} |
+| Timesteps | {metrics.get("timesteps", "N/A")} |
+| Reward | {metrics.get("reward", "N/A")} |
+| Episode Length | {metrics.get("ep_len", "N/A")} |
+| Speed (m/s) | {metrics.get("speed", "N/A")} |
+| WPs Cumulative | {metrics.get("wps_cum", "N/A")} |
+| WP Delta Reward | {metrics.get("wp_delta_rew", "N/A")} |
 
 ## Diagnosis
-{llm_result.get('diagnosis', 'N/A')}
+{llm_result.get("diagnosis", "N/A")}
 
 ## Changes Applied
 """
@@ -447,6 +471,7 @@ def write_diagnosis(metrics: dict, llm_result: dict, changes: list[dict]) -> Non
 # Training control
 # ──────────────────────────────────────────────────────────────────
 
+
 def kill_training() -> None:
     """Kill the Isaac Lab training session."""
     log("Killing training session...")
@@ -461,6 +486,7 @@ def wipe_checkpoints() -> None:
     """Delete all checkpoints to force fresh training."""
     if CHECKPOINT_DIR.exists():
         import shutil
+
         for item in CHECKPOINT_DIR.iterdir():
             if item.is_dir():
                 shutil.rmtree(item)
@@ -478,7 +504,9 @@ def restart_training() -> None:
     time.sleep(5)
 
     # Verify tmux session exists
-    result = subprocess.run(["tmux", "has-session", "-t", "training"], capture_output=True)
+    result = subprocess.run(
+        ["tmux", "has-session", "-t", "training"], capture_output=True
+    )
     if result.returncode == 0:
         log("Training restarted successfully in tmux session 'training'.")
     else:
@@ -488,6 +516,7 @@ def restart_training() -> None:
 # ──────────────────────────────────────────────────────────────────
 # Main orchestration
 # ──────────────────────────────────────────────────────────────────
+
 
 def run_analysis_cycle(model: str = DEFAULT_MODEL, dry_run: bool = False) -> bool:
     """
@@ -507,8 +536,10 @@ def run_analysis_cycle(model: str = DEFAULT_MODEL, dry_run: bool = False) -> boo
     metrics = get_latest_metrics()
     current_weights = get_current_weights()
 
-    log(f"Current metrics: T={metrics.get('timesteps')} | Rew={metrics.get('reward')} | "
-        f"Len={metrics.get('ep_len')} | Spd={metrics.get('speed')} | WPs={metrics.get('wps_cum')}")
+    log(
+        f"Current metrics: T={metrics.get('timesteps')} | Rew={metrics.get('reward')} | "
+        f"Len={metrics.get('ep_len')} | Spd={metrics.get('speed')} | WPs={metrics.get('wps_cum')}"
+    )
     log(f"Current weights: {json.dumps(current_weights, indent=None)}")
 
     # 2. Start Ollama and load model
@@ -520,15 +551,19 @@ def run_analysis_cycle(model: str = DEFAULT_MODEL, dry_run: bool = False) -> boo
     messages = build_prompt(metrics, current_weights)
     log(f"Calling {model} via Ollama...")
 
-    response = ollama_request("/api/chat", {
-        "model": model,
-        "messages": messages,
-        "stream": True,
-        "options": {
-            "temperature": 0.3,  # Low temperature for structured output
-            "num_predict": 1024,  # Cap output length
+    response = ollama_request(
+        "/api/chat",
+        {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+            "options": {
+                "temperature": 0.3,  # Low temperature for structured output
+                "num_predict": 1024,  # Cap output length
+            },
         },
-    }, timeout=300)
+        timeout=300,
+    )
 
     if "error" in response:
         log(f"LLM call failed: {response['error']}")
@@ -545,7 +580,9 @@ def run_analysis_cycle(model: str = DEFAULT_MODEL, dry_run: bool = False) -> boo
     llm_result = parse_llm_response(raw_content)
     if llm_result is None:
         log("Failed to parse LLM response. Writing raw output to diagnosis file.")
-        DIAGNOSIS_PATH.write_text(f"# LLM Agent — Parse Failure\n\nRaw response:\n```\n{raw_content}\n```\n")
+        DIAGNOSIS_PATH.write_text(
+            f"# LLM Agent — Parse Failure\n\nRaw response:\n```\n{raw_content}\n```\n"
+        )
         return False
 
     log(f"Diagnosis: {llm_result.get('diagnosis', 'N/A')}")
@@ -599,10 +636,19 @@ def run_analysis_cycle(model: str = DEFAULT_MODEL, dry_run: bool = False) -> boo
 # CLI
 # ──────────────────────────────────────────────────────────────────
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Local LLM Self-Healing Agent for RL Training")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Ollama model name (default: {DEFAULT_MODEL})")
-    parser.add_argument("--dry-run", action="store_true", help="Show proposed changes without applying")
+    parser = argparse.ArgumentParser(
+        description="Local LLM Self-Healing Agent for RL Training"
+    )
+    parser.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help=f"Ollama model name (default: {DEFAULT_MODEL})",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show proposed changes without applying"
+    )
     args = parser.parse_args()
 
     success = run_analysis_cycle(model=args.model, dry_run=args.dry_run)

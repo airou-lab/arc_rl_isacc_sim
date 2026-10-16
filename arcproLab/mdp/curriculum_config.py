@@ -16,8 +16,8 @@ _CACHED_CONFIG: Dict[str, Any] = {
         "2": "Corner 1 Runway Approach (2.5m runway)",
         "3": "Leg 2 Post-C1 Exit (8m runway)",
         "4": "Leg 2 Intersection Approach (4.15m runway)",
-        "5": "North Straight Return Corridor (10m runway)"
-    }
+        "5": "North Straight Return Corridor (10m runway)",
+    },
 }
 _CACHED_THRESHOLDS: List[float] = [0.20, 0.40, 0.60, 0.80]
 
@@ -32,7 +32,9 @@ def get_curriculum_config() -> Dict[str, Any]:
                 with open(_CONFIG_PATH, "r") as f:
                     data = json.load(f)
                 _CACHED_CONFIG.update(data)
-                weights = _CACHED_CONFIG.get("sector_weights", [0.20, 0.20, 0.20, 0.20, 0.20])
+                weights = _CACHED_CONFIG.get(
+                    "sector_weights", [0.20, 0.20, 0.20, 0.20, 0.20]
+                )
                 if len(weights) == 5:
                     total = float(sum(weights))
                     if total > 0:
@@ -52,7 +54,12 @@ def get_curriculum_config() -> Dict[str, Any]:
 def get_sector_thresholds() -> Tuple[float, float, float, float]:
     """Get the 4 cumulative probability thresholds for 5 sectors."""
     get_curriculum_config()
-    return (_CACHED_THRESHOLDS[0], _CACHED_THRESHOLDS[1], _CACHED_THRESHOLDS[2], _CACHED_THRESHOLDS[3])
+    return (
+        _CACHED_THRESHOLDS[0],
+        _CACHED_THRESHOLDS[1],
+        _CACHED_THRESHOLDS[2],
+        _CACHED_THRESHOLDS[3],
+    )
 
 
 def get_lookahead_distance() -> float:
@@ -66,8 +73,9 @@ def update_curriculum_config(updates: Dict[str, Any]) -> Dict[str, Any]:
     cfg = get_curriculum_config().copy()
     cfg.update(updates)
     import datetime
+
     cfg["updated_at"] = datetime.datetime.utcnow().isoformat() + "Z"
-    
+
     tmp_path = _CONFIG_PATH + ".tmp"
     with open(tmp_path, "w") as f:
         json.dump(cfg, f, indent=2)

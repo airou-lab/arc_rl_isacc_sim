@@ -1,6 +1,6 @@
 # CTA Codebase Directory Structure & Architectural Layout
 cta_version: '1.0'
-last_updated: '2026-09-11T17:21:16.272724+00:00Z'
+last_updated: '2026-10-09T23:57:10.952326+00:00Z'
 root: '.'
 
 directories:
@@ -15,7 +15,7 @@ directories:
   arcproLab:
     layer: 'testing'
     tags: ["testing", "robotics", "config"]
-    primary_files: ["arcproLab/test_rewards.py", "arcproLab/verify.py", "arcproLab/arcpro_robot_cfg.py", "arcproLab/arcpro_env_cfg.py", "arcproLab/README.md"]
+    primary_files: ["arcproLab/test_rewards.py", "arcproLab/verify.py", "arcproLab/arcpro_robot_cfg.py", "arcproLab/README.md", "arcproLab/generate_track.py"]
   arcproLab/agents:
     layer: 'database'
     tags: ["database"]
@@ -23,7 +23,7 @@ directories:
   arcproLab/mdp:
     layer: 'config'
     tags: ["config"]
-    primary_files: ["arcproLab/mdp/spawner.py", "arcproLab/mdp/actions.py", "arcproLab/mdp/curriculum_config.py", "arcproLab/mdp/rewards.py", "arcproLab/mdp/events.py"]
+    primary_files: ["arcproLab/mdp/spawner.py", "arcproLab/mdp/curriculum_config.py", "arcproLab/mdp/visual_analytics.py", "arcproLab/mdp/README.md", "arcproLab/mdp/__init__.py"]
   arcproLab/models:
     layer: 'database'
     tags: ["database"]
@@ -67,12 +67,36 @@ directories:
   arcproLab/scripts:
     layer: 'testing'
     tags: ["testing", "robotics", "config", "database"]
-    primary_files: ["arcproLab/scripts/verify_markers.py", "arcproLab/scripts/deep_verify.py", "arcproLab/scripts/debug_kinematics.py", "arcproLab/scripts/test_terminations.py", "arcproLab/scripts/test_render_sanity.py"]
+    primary_files: ["arcproLab/scripts/verify_markers.py", "arcproLab/scripts/deep_verify.py", "arcproLab/scripts/debug_kinematics.py", "arcproLab/scripts/test_terminations.py", "arcproLab/scripts/audit_assets.py"]
+  runs/26-10-05_16-05-53-872359_PPO:
+    layer: 'general'
+    tags: []
+    primary_files: ["runs/26-10-05_16-05-53-872359_PPO/events.out.tfevents.1791234354.airou-alienware.2745187.0"]
+  runs/26-10-05_16-06-01-111093_PPO:
+    layer: 'general'
+    tags: []
+    primary_files: ["runs/26-10-05_16-06-01-111093_PPO/events.out.tfevents.1791234361.airou-alienware.2747357.0"]
+  runs/26-10-05_17-13-09-680932_PPO:
+    layer: 'general'
+    tags: []
+    primary_files: ["runs/26-10-05_17-13-09-680932_PPO/events.out.tfevents.1791238390.airou-alienware.3896280.0"]
+  runs/26-10-05_17-13-16-947431_PPO:
+    layer: 'general'
+    tags: []
+    primary_files: ["runs/26-10-05_17-13-16-947431_PPO/events.out.tfevents.1791238397.airou-alienware.3898451.0"]
+  runs/26-10-05_17-13-23-303981_PPO:
+    layer: 'general'
+    tags: []
+    primary_files: ["runs/26-10-05_17-13-23-303981_PPO/events.out.tfevents.1791238403.airou-alienware.3900478.0"]
+  runs/26-10-05_17-13-46-520960_PPO:
+    layer: 'general'
+    tags: []
+    primary_files: ["runs/26-10-05_17-13-46-520960_PPO/events.out.tfevents.1791238427.airou-alienware.3907464.0"]
   tensorboard_view_docker:
     layer: 'general'
     tags: []
     primary_files: ["tensorboard_view_docker/Dockerfile", "tensorboard_view_docker/docker-compose.yml"]
   tests:
     layer: 'testing'
-    tags: ["testing"]
-    primary_files: ["tests/test_track_dir.py", "tests/test_wp_math.py", "tests/test_physics_rule_based.py"]
+    tags: ["testing", "api"]
+    primary_files: ["tests/test_track_dir.py", "tests/verify_rerouted_track.py", "tests/build_perfect_circuit.py", "tests/test_wp_math.py", "tests/test_physics_rule_based.py"]

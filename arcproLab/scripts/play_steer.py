@@ -2,8 +2,15 @@ import argparse
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Play SKRL ARCPro Policy")
-parser.add_argument("--checkpoint", type=str, default="logs/ppo_skrl/20260701-192503/26-07-01_19-25-03-529362_PPO/checkpoints/best_agent.pt", help="Path to SKRL checkpoint .pt file")
-parser.add_argument("--num_envs", type=int, default=1, help="Number of parallel environments")
+parser.add_argument(
+    "--checkpoint",
+    type=str,
+    default="logs/ppo_skrl/20260701-192503/26-07-01_19-25-03-529362_PPO/checkpoints/best_agent.pt",
+    help="Path to SKRL checkpoint .pt file",
+)
+parser.add_argument(
+    "--num_envs", type=int, default=1, help="Number of parallel environments"
+)
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
@@ -57,7 +64,9 @@ try:
     obs, info = env.reset()
 
     print("Entering simulation loop...")
-    print(f"{'Step':>6} | {'Speed(m/s)':>10} | {'Reward':>8} | {'MaxSpd':>8} | {'Done'}")
+    print(
+        f"{'Step':>6} | {'Speed(m/s)':>10} | {'Reward':>8} | {'MaxSpd':>8} | {'Done'}"
+    )
     print("-" * 55)
     sys.stdout.flush()
 
@@ -78,13 +87,17 @@ try:
         step_count += 1
 
         # Speed is index 3 in the telemetry obs vector (fwd velocity m/s)
-        speed = float(obs[0, 3].item()) if obs.shape[-1] > 3 else float(obs[0, 0].item())
+        speed = (
+            float(obs[0, 3].item()) if obs.shape[-1] > 3 else float(obs[0, 0].item())
+        )
         rew_val = float(reward[0].item())
         done = bool((terminated | truncated)[0].item())
         max_speed = max(max_speed, abs(speed))
 
         if step_count % 50 == 0 or done:
-            print(f"{step_count:>6} | {speed:>10.3f} | {rew_val:>8.2f} | {max_speed:>8.3f} | {'YES' if done else 'no'}")
+            print(
+                f"{step_count:>6} | {speed:>10.3f} | {rew_val:>8.2f} | {max_speed:>8.3f} | {'YES' if done else 'no'}"
+            )
             sys.stdout.flush()
 
         if done:
@@ -94,16 +107,18 @@ try:
             max_speed = 0.0
 
     print("=" * 55)
-    print(f"PHYSICS SUMMARY: max_speed_seen = {max_speed:.3f} m/s over {step_count} steps")
+    print(
+        f"PHYSICS SUMMARY: max_speed_seen = {max_speed:.3f} m/s over {step_count} steps"
+    )
     print("=" * 55)
     sys.stdout.flush()
     env.close()
 
 except Exception as e:
-    print("="*50)
+    print("=" * 50)
     print("ERROR CAUGHT IN PLAY_SKRL.PY:")
     traceback.print_exc()
-    print("="*50)
+    print("=" * 50)
     sys.stdout.flush()
 
 simulation_app.close()

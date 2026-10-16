@@ -38,7 +38,7 @@ from typing import Optional
 
 import torch
 
-from .stop_line_detector import (
+from arcproLab.policy_stack.agent.stop_line_detector import (
     StopLineDetectionContext,
     StopLineDetectorConfig,
     VisualStopLineDetector,
@@ -72,7 +72,9 @@ class GoSignalManager:
 
         self.state = torch.zeros(num_envs, dtype=torch.long, device=device)
         self.dwell_counter = torch.zeros(num_envs, dtype=torch.long, device=device)
-        self.depart_clear_counter = torch.zeros(num_envs, dtype=torch.long, device=device)
+        self.depart_clear_counter = torch.zeros(
+            num_envs, dtype=torch.long, device=device
+        )
         self.last_distance = torch.full(
             (num_envs,), float("nan"), dtype=torch.float32, device=device
         )
@@ -150,9 +152,7 @@ class GoSignalManager:
 _GO_SIGNAL_MANAGER: Optional[GoSignalManager] = None
 
 
-def get_go_signal_manager(
-    num_envs: int, device: str
-) -> GoSignalManager:
+def get_go_signal_manager(num_envs: int, device: str) -> GoSignalManager:
     """Lazy singleton; recreated if num_envs changes between calls."""
     global _GO_SIGNAL_MANAGER
     if (

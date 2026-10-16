@@ -9,13 +9,24 @@ from isaaclab.envs import ManagerBasedRLEnv
 from mdp.curriculum_config import get_lookahead_distance
 from mdp.track_manager import get_track_manager
 
-def get_telemetry_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+
+def get_telemetry_vector(
+    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
     return _compute_telemetry(env, asset_cfg, masked=True)
 
-def get_critic_state_vector(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+
+def get_critic_state_vector(
+    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
     return _compute_telemetry(env, asset_cfg, masked=False)
 
-def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"), masked: bool = True) -> torch.Tensor:
+
+def _compute_telemetry(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    masked: bool = True,
+) -> torch.Tensor:
     """
     Constructs the 22-element telemetry vector for the ARCPro policy.
     Indices follow the legacy protocol established in Phase 1 with added waypoints.
@@ -28,10 +39,13 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     # Calculate yaw from quaternion
     q = asset.data.root_quat_w
     # yaw = atan2(2(qw*qz + qx*qy), 1 - 2(qy^2 + qz^2))
-    yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
-    
+    yaw = torch.atan2(
+        2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]),
+        1.0 - 2.0 * (q[:, 2] ** 2 + q[:, 3] ** 2),
+    )
+
     # FIX: The F1Tenth USD model's physics root X-axis points towards the rear wing.
-    # We must rotate the yaw by 180 degrees (pi) so it aligns with the visual nose, 
+    # We must rotate the yaw by 180 degrees (pi) so it aligns with the visual nose,
     # preventing track_dir from evaluating backwards.
     yaw = yaw + 3.14159265
     yaw = torch.atan2(torch.sin(yaw), torch.cos(yaw))
@@ -43,6 +57,7 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     # Slot 0: turn_token — Provided by vectorized RoadManager (MARL ready)
     try:
         from mdp.road_manager import get_road_manager
+
         rm = get_road_manager(num_envs=env.num_envs, num_agents=1, device=env.device)
         if masked:
             rm.update(env)
@@ -57,6 +72,7 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
     #         When go_signal=0 the policy should learn to brake.
     try:
         from mdp.go_signal_manager import get_go_signal_manager
+
         mgr = get_go_signal_manager(num_envs=env.num_envs, device=env.device)
         camera = env.scene.get("tiled_camera") if hasattr(env.scene, "get") else None
         if camera is None:
@@ -66,17 +82,23 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
             except KeyError:
                 camera = None
         images = None
-        if camera is not None and hasattr(camera, "data") and "rgb" in camera.data.output:
+        if (
+            camera is not None
+            and hasattr(camera, "data")
+            and "rgb" in camera.data.output
+        ):
             images = camera.data.output["rgb"]  # (N, H, W, 3) uint8
-            
+
         # FIX: Only step the GoSignalManager ONCE per physics step (during masked policy call)
         if masked:
             go_signal = mgr.update(images)
             env.extras["go_signal"] = go_signal
         else:
             # Fetch the cached signal for the critic call
-            go_signal = env.extras.get("go_signal", torch.ones(env.num_envs, device=env.device))
-            
+            go_signal = env.extras.get(
+                "go_signal", torch.ones(env.num_envs, device=env.device)
+            )
+
         obs[:, 1] = go_signal
     except Exception:
         # Defensive: detector or camera failure must not crash training.
@@ -94,74 +116,94 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
 
     # Indices 5-6: Last Actions (Steer, Drive)
     try:
-        if env.action_manager.action is not None and env.action_manager.action.shape[1] >= 2:
-            obs[:, 5:7] = torch.clamp(env.action_manager.action[:, :2], min=-1.0, max=1.0)
+        if (
+            env.action_manager.action is not None
+            and env.action_manager.action.shape[1] >= 2
+        ):
+            obs[:, 5:7] = torch.clamp(
+                env.action_manager.action[:, :2], min=-1.0, max=1.0
+            )
     except (AttributeError, IndexError):
         pass
+
+    # Index 7: Lateral Velocity (m/s) in body frame — provides real-time drift/slip feedback
+    obs[:, 7] = torch.clamp(asset.data.root_lin_vel_b[:, 1], min=-2.0, max=2.0)
 
     # Index 8 & 9: Lateral and Heading Error
     tm = get_track_manager(device=env.device)
 
     # 1. Update persistent track indices and compute errors
-    lat_err, raw_head_err, kappa = tm.compute_errors(local_pos, yaw)    
-    
+    lat_err, raw_head_err, kappa = tm.compute_errors(local_pos, yaw)
+
     # 2. Get Marker Distances (Yellow, White, Gate)
     dist_y, dist_w, dist_g = tm.compute_marker_distances(local_pos)
-    
+
     # Distance Tracking (Accumulated)
     if "distance" not in env.extras:
         env.extras["distance"] = torch.zeros(env.num_envs, device=env.device)
-        
+
     # === BI-DIRECTIONAL TRACK SUPPORT ===
     # The track waypoints may be sequenced opposite to the car's intended driving direction.
     if "track_dir" not in env.extras:
-        env.extras["track_dir"] = torch.where(torch.abs(raw_head_err) > 1.5708, -1.0, 1.0).to(env.device)
-        
+        env.extras["track_dir"] = torch.where(
+            torch.abs(raw_head_err) > 1.5708, -1.0, 1.0
+        ).to(env.device)
+
     is_reverse = env.extras["track_dir"] < 0
-    head_err = torch.where(is_reverse, raw_head_err - 3.14159 * torch.sign(raw_head_err), raw_head_err)
+    head_err = torch.where(
+        is_reverse, raw_head_err - 3.14159 * torch.sign(raw_head_err), raw_head_err
+    )
     lat_err = torch.where(is_reverse, -lat_err, lat_err)
-    
+
     # === TRACK PROGRESS TRACKING ===
     # Uses the waypoint index from TrackManager to measure how far the agent
     # has actually traveled along the track (not just forward velocity).
     if masked and tm.last_indices is not None and tm.waypoints is not None:
         num_wps = tm.waypoints.shape[0]
-        
+
         # Use securely tracked cumulative index from rewards.py if available.
         # This prevents the TrackManager teleportation exploit from ruining the logs.
         # It also syncs the logged WPs_cum exactly with the rewarded WPs_cum.
-        delta_wp = env.extras.get("cumulative_wp_index", torch.zeros_like(tm.last_indices)).long()
-        
+        delta_wp = env.extras.get(
+            "cumulative_wp_index", torch.zeros_like(tm.last_indices)
+        ).long()
+
         track_progress_pct = (delta_wp.float() / num_wps) * 100.0  # 0-100%
         env.extras["track_progress_pct"] = track_progress_pct
         env.extras["track_wp_delta"] = delta_wp  # raw waypoints traversed
-    
+
     # Reset distance and track_dir for environments that just reset
     reset_buf = getattr(env, "reset_buf", None)
     if reset_buf is not None and masked:
-        env.extras["distance"] = torch.where(reset_buf, torch.zeros_like(env.extras["distance"]), env.extras["distance"])
-        new_dir = torch.where(torch.abs(raw_head_err) > 1.5708, -1.0, 1.0).to(env.device)
-        env.extras["track_dir"] = torch.where(reset_buf, new_dir, env.extras["track_dir"])
+        env.extras["distance"] = torch.where(
+            reset_buf, torch.zeros_like(env.extras["distance"]), env.extras["distance"]
+        )
+        new_dir = torch.where(torch.abs(raw_head_err) > 1.5708, -1.0, 1.0).to(
+            env.device
+        )
+        env.extras["track_dir"] = torch.where(
+            reset_buf, new_dir, env.extras["track_dir"]
+        )
 
     # Calculate distance moved in this step (only update once per step)
     if masked:
         # Local X points to the rear wing (flipped), so we negate to accumulate forward distance
         env.extras["distance"] -= asset.data.root_lin_vel_b[:, 0] * 0.02
-    
+
     # Sample Lookahead Curvature for Pre-Braking and Curriculum Navigation
     env.extras["lookahead_kappa"] = tm.get_lookahead_curvature(
-        lookahead_distance=get_lookahead_distance(), 
-        track_dir=env.extras.get("track_dir")
+        lookahead_distance=get_lookahead_distance(),
+        track_dir=env.extras.get("track_dir"),
     )
-    
+
     # Store raw values in extras for Reward/Termination (Unmasked)
     env.extras["lat_err"] = lat_err
     env.extras["head_err"] = head_err
     env.extras["kappa"] = kappa
-    env.extras["dist_g"] = dist_g # Masking signal for gate crossing
+    env.extras["dist_g"] = dist_g  # Masking signal for gate crossing
     env.extras["dist_y"] = dist_y
     env.extras["dist_w"] = dist_w
-    
+
     # Asymmetric Actor-Critic (AAC) Routing:
     # Slot 10 provides Lookahead Route Curvature (Pre-Braking Architecture), accessible to BOTH Actor and Critic.
     # Slots 8, 9, 11 (lat_err, head_err, distance) remain privileged coordinates:
@@ -178,10 +220,10 @@ def _compute_telemetry(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
         obs[:, 9] = 0.0
         obs[:, 10] = env.extras["lookahead_kappa"]
         obs[:, 11] = 0.0
-        
+
     # Final verification for NaNs
     nan_mask = torch.isnan(obs)
     if nan_mask.any():
         obs[nan_mask] = 0.0
-        
+
     return obs

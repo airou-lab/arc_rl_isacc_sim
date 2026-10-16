@@ -709,3 +709,158 @@ At the 500k milestone, the agent's episode lengths reached up to ~723, but the e
   5. **Branch Checkpoint Isolation (`train_skrl.py`, `start_tmux_training.sh`):** Configured automated branch-prefixed experiment directory (`logs/ppo_skrl_<branch>/`) so branch runs never collide with `main`.
   6. **Warm-Start Transfer:** Resumed from landmark peak checkpoint `agent_4141500_peak.pt` on `feature/realsense-realistic-kinematics`.
 
+### Issue 108: Intersection Pre-Braking Alignment & Understeer Washout Resolution
+- **Problem:**
+  1. In `./debug.sh --sector 4`, the car survived past the stop bar into the intersection (reaching Step 193), but crashed into the outer white curb.
+  2. The policy entered the 1.2m radius corner at **0.85 – 0.90 m/s**, causing massive centrifugal understeer ($a_c \approx 0.68\text{ g}$) even under full left steering lock (`Steer: +0.66`).
+  3. `curvature_speed_reward` (weight 180.0) commanded $0.68\text{--}0.85\text{ m/s}$ based on turn curvature $\kappa = 0.24$, conflicting with and overpowering `intersection_expert_reward` (weight 100.0) which commanded $0.35\text{ m/s}$.
+- **Resolution:**
+  1. **Speed Target Alignment (`rewards.py`)**: Enforced a strict $0.35\text{ m/s}$ target corner speed inside the intersection approach corridor ($X \in [-7.0, -2.0], Y \in [-7.5, -3.8]$ or `dist_g < 1.50m`), providing +213.8 pts/step reward incentive to brake before the turn.
+  2. **Kinematic Verification (`test_manual_left_turn.py`)**: Confirmed 350-step PhysX transit through the intersection at $0.35\text{--}0.40\text{ m/s}$ with $14.6\text{ cm}$ white and $23.5\text{ cm}$ yellow clearances.
+  3. **Resumption without Rollback**: Warm-started training cleanly from `agent_3337500.pt` (all-time peak baseline) on 20 camera envs in tmux session `training` with autonomous sentinel active.
+
+### Issue 109: Runway Premature Turn Token Remediation, Curriculum Balancing & Clean Baseline Rollback
+- **Problem:**
+  1. In `./debug.sh`, vehicle in Sector 2 steered hard left (`Steer: +0.72 to +0.88`), straddled/crossed the double yellow line (`Yellow: 2.2cm`), and locked brakes to $0.00\text{ m/s}$ until stagnation timeout.
+  2. Multi-checkpoint headless evaluation (`tests/compare_corner1_checkpoints.py`) confirmed that overnight model `agent_3437500.pt` suffered from destructive left-steering bias on straight runways, crashing into the yellow line at Step 90 (`Yellow: 2.3cm`), whereas baseline `agent_3337500.pt` drove cleanly with centered steering (`-0.04 to +0.03`, `White: 18.5cm`, `Yellow: 22.2cm`), traversed 312 waypoints, and survived 301 steps.
+- **Root Cause:**
+  1. Premature turn token in `road_manager.py`: `in_c1_turn` and `in_c4_turn` triggered 2.0 to 2.5 meters before curves began.
+  2. Curriculum over-immersion: 90% left turn spawns trained the actor MLP to immediately crank the wheel hard left (+0.80 to +0.95) whenever `turn_token = -1.0`.
+  3. Yellow line straddling penalty: `too_close_y` penalized driving forward on the line by -420 pts/s vs -40 pts/s for parking.
+- **Resolution:**
+  1. Rolled back active model to `agent_3337500.pt` by quarantining `20261001-212131` to `corrupted_20261001-212131_left_bias`.
+  2. Tightened turn token bounding boxes in `road_manager.py` so straight runways command `turn_token = 0.0` (Lane Follow) and only trigger `turn_token = -1.0` when curves actually begin ($Y < -5.5$ for C1, $X > -5.2$ for Intersection, $X < -14.6$ for C4).
+  3. Rebalanced `curriculum_sectors.json` to uniform 20% across all 5 sectors.
+  4. Adjusted `autonomous_sentinel.py` `CRAWLING_TRAP` threshold from $0.40\text{ m/s} \to 0.25\text{ m/s}$.
+
+### Issue 110: 20-Environment Camera VRAM Leak Elimination & Detached Sentinel Self-Healing
+- **Problem:**
+  1. During 20-camera environment training (`--enable_cameras`), GPU VRAM grew monotonically by ~5.56 MB per step (~1,112 MB per 200 steps). After ~6,000 steps, VRAM exceeded 12 GB, triggering fatal `torch.OutOfMemoryError` and killing Isaac Sim.
+  2. When the Autonomous Sentinel attempted to self-heal and restart training via `subprocess.run(["./start_tmux_training.sh"])`, the script executed `tmux kill-session -t training`. Because the Sentinel was running inside a tmux pane sharing the server, killing the session killed the Sentinel daemon itself, causing a restart suicide.
+- **Root Cause:**
+  1. **ObservationManager Sensor Cloning:** In `arcpro_env_cfg.py`, `tiled_camera = ObsTerm(func=mdp.image, ...)` caused IsaacLab's `ObservationManager.compute_group` to invoke `.clone()` on line 395 and cache the $20 \times 224 \times 224 \times 3$ uint8 tensor (2.87 MiB) in `ObservationManager._obs_buffer` and `base_env.obs_buf` every step. Execution frames and internal dictionary buffers retained references to previous steps across simulation iterations.
+  2. **Dynamic Tensor Concatenation:** In `arcproLab/agents/skrl_wrappers.py`, `torch.cat([visual_flat, vec], dim=1)` dynamically allocated a new $20 \times 25,100$ float32 tensor (~1.95 MiB) on every single step.
+  3. **Tmux Process Hierarchy:** The Sentinel executed restart commands synchronously within its own tmux session group without POSIX session detachment.
+- **Resolution (CTA Swarm `run_20261007_150359_1a3126` - 2/2 PASSED):**
+  1. **Direct Static Sensor Reading (`arcpro_env_cfg.py`, `skrl_wrappers.py`):** Removed `tiled_camera` from `ObservationCfg.PolicyCfg` in `arcpro_env_cfg.py`. Updated `SKRLFlattenWrapper._flatten_obs()` to read directly from Isaac Sim's static GPU texture buffer: `base_env.scene.sensors["tiled_camera"].data.output["rgb"]`. This completely eliminated all tensor cloning and dictionary caching inside `ObservationManager`.
+  2. **Preallocated Observation Output Buffer (`skrl_wrappers.py`):** Preallocated a single static tensor buffer `self._flat_obs_buffer` of shape `(num_envs, 25100)` in `SKRLFlattenWrapper` and updated it in-place using `.copy_()`, completely eliminating dynamic `torch.cat` allocations.
+  3. **Detached Sentinel Process Isolation (`autonomous_sentinel.py`, `start_tmux_training.sh`):** Replaced synchronous restarts with `subprocess.Popen(..., start_new_session=True, env=clean_env)` with `RUNNING_DETACHED=1` and stripped `TMUX` variables, ensuring the restarter survives `tmux kill-session`.
+  4. **Adversarial Gate Verification (`tests/test_vram_leak_gate.py`):** Ran 200 adversarial test steps across 20 RGB environments. VRAM delta dropped from **+1,112.82 MB down to +4.11 MB (<0.02 MB/step)**, passing the gate with exit code 0.
+  5. **Training Resumption:** Cleanly resumed 20-env fleet training under Sentinel from `agent_3337500.pt` with stable VRAM at 5.39 GB / 12.28 GB (>6.8 GB free headroom).
+
+### Issue 111: Straightaway Over-Speed Damping, Rightward Drift Remediation & Champion Rollback
+- **Problem:**
+  1. Rollout telemetry hit a plateau where max episode length was capped at `872 steps` ($8.72\text{m}$, $\approx 17\%$ of the 50.72m circuit), while rolling mean episode length stayed anchored at $\approx 200\text{ steps}$.
+  2. Between Step 3.5875M and Step 3.6375M, the policy learned to sprint at $0.94\text{ m/s}$ down straightaways, causing high-speed suspension bounce, visual blur, and a $-22\text{ cm}$ rightward steering drift that repeatedly clipped the outer white line ($W < 1.7\text{ cm}$).
+- **Diagnosis (Headless Multi-Sector Audit via `tests/audit_multi_sector_plateau.py`):**
+  1. Candidate evaluation across Sectors 1, 2, and 4 revealed that pre-recycle milestone **`agent_3587500.pt` was the 100% survivor on Corner 1** ($400$ steps, zero collisions, $12.8\text{ cm}$ white / $21.0\text{ cm}$ yellow clearance, $605$ waypoints, $0.77\text{ m/s}$ average speed).
+  2. On Sector 1, `agent_3587500.pt` traversed $487$ steps ($760$ waypoints) smoothly along the runway.
+  3. Meanwhile, `agent_3637500.pt` regressed to $45$ steps on Sector 2 and clipped the outer white curb at $300$ steps on Sector 1 due to high speed ($0.94\text{ m/s}$) and right-drift.
+- **Resolution (CTA Swarm `run_20261009_004524_1cf812` - 2/2 PASSED):**
+  1. **Quarantine:** Quarantined regressed run `20261008-150421` to `corrupted_20261008-150421_right_bias`.
+  2. **Landmark Archival:** Immortalized `agent_3587500.pt` as landmark champion `archive/landmark_checkpoints/agent_3587500_c1_champion.pt`.
+  3. **Speed Stabilization (`rewards.py`):** Reduced straightaway target speed from $0.85\text{ m/s} \to 0.70\text{ m/s}$ (`target_speed = torch.clamp(0.70 - (effective_kappa * 0.50), min=0.35, max=0.70)`), preventing straightaway over-speeding, high-speed lateral drift accumulation, and understeer washout into turns.
+  4. **Sentinel Hardening (`autonomous_sentinel.py`):** Updated `get_current_run_checkpoint()` to ignore `corrupted` directories and prioritize newest `agent_*.pt` over stale `best_agent.pt`.
+  5. **Regression Verification:** Ran `tests/test_cornering_remediation.py` with 4/4 tests PASSED.
+  6. **Resumption:** Cleanly warm-started 20-env fleet training from `agent_3587500.pt` in tmux session `training` with autonomous Sentinel active and VRAM at 5.34 GB / 12.28 GB (>6.9 GB free headroom).
+
+### Issue 112: Intersection Approach Permeability, Turn Token Anticipation & Asymmetric Curvature Slack
+- **Problem (Observed during GUI Evaluation of `agent_3687500.pt` via `debug.sh`):**
+  1. **Corner White Line Straddling:** Vehicle drifted outward onto the white boundary in curves, riding the curb with outer wheels over the line.
+  2. **Straightaway Premature Reset:** When cruising down Leg 2 straightaway ($Y = -7.118$), the vehicle terminated unexpectedly before reaching the intersection stop line.
+  3. **Intersection Turn Washout:** At Sector 4 intersection entry, the vehicle failed to steer tightly enough into the 90-degree left turn, drifting into the eastern grass cliff.
+- **Forensic Diagnosis & Mathematical Analysis:**
+  1. **Straightaway Reset Root Cause:** Leg 2 gate points start at $X = -6.32\text{ m}$. In `terminations.py`, `in_permissive_box` was gated strictly at $X \ge -6.2\text{ m}$. An approaching car at $X \in [-7.0, -6.2]$ encountered painted stop markings and gate thresholds without active gate permeability, triggering hair-trigger $dist_w < 0.018\text{ m}$ resets.
+  2. **Intersection Washout Root Cause:** In `road_manager.py`, `in_c2_turn` only activated at $X > -5.2\text{ m}$ and prematurely terminated at $Y \le -5.5\text{ m}$. Because the turn centerline arc spans $X \in [-6.3, -2.3]$ and $Y \in [-7.1, -2.4]$, `turn_token = -1.0` (LEFT) fired 1.1m too late and cut off mid-turn, reverting to $0.0$ (Straight) and directing the car off-road.
+  3. **Curb Straddling Root Cause:** `lateral_error_reward` had symmetric curvature slack $clamp(\kappa \times 0.08, 0, 0.10)$, forgiving up to $10\text{ cm}$ of outward drift towards the white line. Furthermore, `boundary_penalty` only activated when the chassis was within $16\text{ cm}$ ($2\text{ cm}$ tire clearance).
+- **Resolution Deployed:**
+  1. **Intersection Permeability Alignment (`terminations.py`):** Expanded `in_permissive_box` to $X \in [-7.0, -2.15]$ and $Y \in [-7.5, -2.4]$, and added explicit gate proximity permeability `dist_g < 0.60\text{ m}` with $|lat\_err| \le 0.40\text{ m}$ corridor and east cliff guard ($X > -2.08\text{ m}$).
+  2. **Turn Token Lead-Time & Arc Coverage (`road_manager.py`):** Configured `in_c2_turn` to activate at $X > -6.8\text{ m}$ and persist through $Y \le -2.4\text{ m}$, providing early turn anticipation and continuous left guidance through the entire $90^\circ$ transit into the Northbound straight.
+  3. **Asymmetric Curvature Slack & Stricter Outer Boundary (`rewards.py`):** Restricted curvature slack to inward apex-cutting ($lat\_err > 0$, max $3\text{ cm}$) while enforcing strict $0\text{ cm}$ slack for outward curb drift ($lat\_err \le 0$). Advanced white line warning distance from $16\text{ cm} \to 18\text{ cm}$ to penalize tire proximity within $4\text{ cm}$. Synchronized intersection pre-braking zone ($0.35\text{ m/s}$) to $X \in [-7.0, -2.0], Y \in [-7.5, -2.4]$.
+  4. **Kinematic & Syntax Verification:** Verified 350-step cornering transit via `tests/test_manual_left_turn.py` (0 collisions, $14.6\text{ cm}$ white / $21.7\text{ cm}$ yellow clearance). All modules compile with exit code 0.
+
+### Issue 113: Historical Forensic Audit — Curriculum Mid-Corner Apex Immersion Trap, Coverage Gaps & Survivor Bias
+- **Task Reference:** ClearSet Swarm Run `run_20261012_180256_b9e2b9` (Task `T-4.3.1-HIST`).
+- **Forensic Diagnosis & Historical Analysis:**
+  1. **Sector 3 Origin & Apex Immersion Trap:**
+     - In commit `88f4077` / `c057584` and reinstated in Task 4.2.4/4.2.6 (`RESUME HERE.md`), Sector 3 was placed at `X = -16.065, Y = -6.807, yaw = -45.0° (-0.7854 rad)` (WP #1201), named "Corner 1 Apex Immersion".
+     - **Rationale:** Because the policy repeatedly stalled at Corner 1 across 5M steps (Issues 19, 20, 97, 98, 100, 104), developers attempted an aggressive "corner immersion" strategy to force learning mid-apex recovery without re-driving the 11m West straightaway.
+     - **Why it failed (0% Cold-Start Survival):**
+       - Spawning a non-holonomic, Ackermann-steered car ($L=0.33\text{m}$) at a standstill (`vel=0`) with neutral steering (`steer=0`) inside a $R=0.45\text{m}$ hairpin ($\kappa=2.23\text{m}^{-1}$) requires instantaneous maximum steering lock ($\delta=39^\circ$).
+       - The RealSense D455 camera (90° HFOV, 15° pitch down) loses all visibility of the inner yellow curb at yaw=-45°, creating an unobservable POMDP under feedforward MLP observations.
+       - Dropping into a narrow 40.5cm lane with only 3.7cm tire margin guarantees boundary crossing within 20–35 steps during warmup and settling.
+  2. **Curriculum Coverage Blind Spots (The Dead Zones):**
+     - Moving Sector 3 from the exit straight (`X = -12.000, Y = -7.100, yaw = 0.0°` in commit `6428a54`) into Corner 1 apex, combined with Sector 4 placed at intersection entry (`X = -6.000, Y = -7.118`), created an **8.87m dead zone (863 waypoints)** on Leg 2 Eastbound where no car ever spawned.
+     - Spawning Sector 5 at `X = -13.548, Y = 7.116` (1.45m before Corner 4) left a **6.7m to 15m unmonitored gap** on the North Straightaway return leg.
+  3. **Why the Blind Spots Were Never Caught (Aggregate Telemetry vs Deterministic Isolation):**
+     - Live fleet training logged rolling averages (`ep_len_mean`, `ep_rew_mean`) across 20 environments simultaneously.
+     - High-scoring straightaway runs from Sector 1 (500–800 steps, +3,500 pts) diluted and concealed the instant 20–40 step deaths in Sectors 2, 3, and 4.
+     - The autonomous sentinels only checked fleet-wide rolling speed and max episode length, lacking per-sector survival breakdown.
+  4. **The All-Time Record Paradox (1,832 Steps / +7,605 Reward vs 0% Cold-Start Survival):**
+     - The all-time record (Step 4,051,565, `logs/skrl_phase1_20261012_015552.log`) originated exclusively from Sector 1 (Start Line).
+     - Cars starting at Sector 1 possess 11m of straight runway to settle suspension, center in the lane, build dynamic momentum (0.70 m/s), populate action history (`prev_action`), and leverage lookahead curvature anticipation before entering Corner 1.
+     - In contrast, deterministic cold-start sector audits (`tests/heavy_invasive_audit.py`) exposed that Sectors 2, 3, and 4 had 0% survival from a dead stop. The headline record was a product of survivor bias.
+- **Historical Architectural Directives:**
+  1. Never spawn inside a curve apex; all curriculum sectors MUST provide a minimum of 1.5–2.0m of straight runway before turn entry.
+  2. Restore Sector 3 to Leg 2 Eastbound Post-C1 Exit (`X = -12.000, Y = -7.100, yaw = 0.0°`) and Sector 5 to early North Straight (`X = -8.000, Y = 7.100, yaw = 180°`) to guarantee 100% circuit coverage.
+  3. Continuous testing must rely on deterministic sector isolation audits rather than fleet-wide rolling averages.
+
+
+
+### Issue 114: Circuit-Wide Turn Anticipation, Pre-Braking Alignment, Sprint Clamping & Landmark Rollback
+- **Problem (Deterministic Audit of Checkpoint 4,187,500 & Landmark Champion in Visual Evaluation):**
+  1. Across 5M steps of training, the policy never achieved a complete deterministic circuit lap (50.72m / 5,000 waypoints).
+  2. In Sector 1 deterministic audit, the vehicle sprinted at 0.92 m/s down the 11m straight, charged into Corner 1 at 0.84 m/s (where centrifugal acceleration $a_c = 1.41\text{ g}$ exceeds tire grip $\mu \approx 0.8$), clipped the yellow apex (Yellow: 2.3cm), understeered outward, and reset at Step 857 (WP 1,325 / 5,000).
+  3. In Sector 2, landmark champion `agent_3587500_c1_champion.pt` also entered Corner 1 at 0.92 m/s, clipped the yellow line at Step 170 (Yellow: 0.0cm), and crashed into the outer white curb at Step 283 (White: 2.7cm).
+  4. In Sector 3, the vehicle sprinted Eastbound at 0.90 m/s and crashed into the yellow line at Step 264 upon reaching the Corner 2 intersection.
+  5. In Sector 4, the vehicle charged North at 0.80 m/s into the sweeping bend, clipping the yellow line at Step 139.
+- **Root Cause Analysis:**
+  1. **Zero Lead-Time Turn Token (`road_manager.py`):** `in_c1_turn` activated only at $Y < -6.30\text{ m}$ (0.75m before apex $Y = -7.05\text{ m}$), holding `turn_token = 0.0` (Straightaway) until mid-corner.
+  2. **Straightaway Sprint Bribe Dominance (`rewards.py`, `arcpro_env_cfg.py`):** `progress_reward` (+80 weight) heavily incentivized max-throttle sprinting (+355 pts/step vs +138 pts/step for braking), while speed tracking lacked straightaway overspeed penalties. Accumulating +175,000 pts down straights made the -2,400 pts crash cost negligible.
+  3. **Narrow Pre-Braking Corridor:** Corner speed targets (0.35 m/s) activated only 1.2m before corners, leaving insufficient stopping distance from 0.92 m/s.
+- **Resolution Deployed:**
+  1. **Advanced Turn Token Anticipation (`road_manager.py`):** Extended `in_c1_turn` to $Y < -5.20\text{ m}$, `in_c2_turn` to $X > -7.20\text{ m}$, and `in_c4_turn` to $X < -14.00\text{ m}$, providing 1.0–1.2m of advance turn token signaling into camera view.
+  2. **Two-Stage Overspeed Enforcement (`rewards.py`):** Added straightaway overspeed penalty ($>0.70\text{ m/s}$) and strengthened corner overspeed penalty ($>0.42\text{ m/s}$), providing a +79.2 pts/sec MDP advantage for decelerating into corners.
+  3. **Expanded Corner Pre-Braking Zones (`rewards.py`):** Extended `in_c1` ($Y \le -5.00$), `in_inter` ($X \ge -7.20$), and `in_c4` ($X \le -13.50$).
+  4. **Progress Reward Rebalancing (`arcpro_env_cfg.py`):** Reduced `progress_reward` weight from 80.0 to 50.0 so speed tracking (180.0) and boundary avoidance (60.0) dominate.
+  5. **Curriculum Immersion (`curriculum_sectors.json`):** Set `lookahead_distance` to 2.0m and focused sector distribution on turn entry sectors (Sector 1: 15%, Sector 2: 30%, Sector 3: 25%, Sector 4: 20%, Sector 5: 10%).
+  6. **Weight Rollback & Quarantine:** Quarantined all flawed overspeed runs into `archive/pre_braking_overspeed_runs/`. Rollback target resolved cleanly to verified champion `agent_3587500_c1_champion.pt`.
+
+### Issue 115: Straightaway High-Speed Drift Suppression, Repulsive Median Barrier & Speed Clamp
+- **Problem (Side-by-Side Golden Oracle Benchmark & Sector 3 Verification):**
+  1. Side-by-side benchmark (`tests/compare_intersection_oracle.py`) verified that the policy successfully navigates Corner 2 intersection from approach ($X = -5.80\text{ m}$) with 0 collisions and surviving all 350 steps.
+  2. However, when spawned at Sector 3 ($X = -12.50\text{ m}$), the vehicle sprinted down the 6.7m Leg 2 straightaway at $0.92\text{ m/s}$ (commanding max throttle).
+  3. Over 240 steps at $0.92\text{ m/s}$, slight steering bias ($+0.02\text{ rad}$) accumulated into a $+16.9\text{ cm}$ leftward lateral drift. On a narrow 44cm lane (vehicle width 28cm with wheels), this pushed the left tire into the double yellow line, triggering a boundary reset at Step 246 ($X = -9.41\text{ m}$) — 2.4m before reaching the intersection.
+- **Root Cause Analysis:**
+  1. Straightaway target speed was clamped at $0.70\text{ m/s}$ with a weak overspeed multiplier ($1.5$), so earning $+50.0$ progress points per step at $0.92\text{ m/s}$ far outweighed the $-59.4$ pts/step overspeed penalty.
+  2. `boundary_penalty` warning distance was $18\text{ cm}$ ($4\text{ cm}$ wheel clearance) with equal $80.0$ penalty for both lines. When drifting left toward the double yellow median, the penalty was negligible until tire contact was imminent.
+  3. `lane_centering_reward` exponential factor was $-16.0$, allowing too much tolerance for subtle straightaway drifting.
+- **Resolution Deployed (`arcproLab/mdp/rewards.py`):**
+  1. **Straightaway Speed Clamp (`curvature_speed_reward`):** Reduced maximum straightaway cruising speed from $0.70\text{ m/s} \to 0.65\text{ m/s}$ (`target_speed = torch.clamp(0.65 - (effective_kappa * 0.50), min=0.35, max=0.65)`).
+  2. **High-Gradient Overspeed Barrier:** Increased straightaway overspeed penalty multiplier from $1.5 \to 3.5$ (`straight_overspeed = torch.clamp(current_speed - 0.65, min=0.0)`), wiping out the mathematical profit of sprinting above $0.65\text{ m/s}$.
+  3. **Asymmetric Median Boundary Repulsion (`boundary_penalty`):** Expanded yellow line warning margin from $18\text{ cm} \to 19\text{ cm}$ ($5\text{ cm}$ wheel clearance) and raised yellow penalty weight from $80.0 \to 120.0$ (`-(too_close_y * 120.0 + too_close_w * 80.0)`), establishing a steep repulsive gradient away from the oncoming traffic line.
+  4. **Strict Lane Centering (`lane_centering_reward`):** Tightened exponential centering factor from $-16.0 \to -20.0$ (`exp(-20.0 * |dist_y - dist_w|)`).
+### Issue 116: Permissive Box Trap Elimination, Double-Yellow Median Unmasking, Turn Token Track Alignment & Corner Pre-Braking
+- **Problem (User Observation & Deterministic Isolation of Sectors 2 & 4):**
+  1. In Sector 4 GUI/headless runs, the robot navigated the Corner 2 intersection, but once on the North straightaway ($Y \in [-5.0, -4.0]$), it made a slow, deliberate left turn across the double yellow lines into oncoming traffic, resetting at Step 351.
+  2. In Sector 2, the vehicle accelerated down Leg 1 South to 0.87 m/s, clipped the yellow line at Step 175 ($Y = -6.13$), and upon exiting Corner 1 at 0.88 m/s, understeered wide and crashed into the outer white curb at Step 303 ($X = -14.55$, White: 2.5cm).
+- **Root Cause Analysis:**
+  1. **Permissive Box Zero-Penalty Trap (`terminations.py`, `rewards.py`):** To avoid resets on painted stop lines, a $5.2\text{m} \times 5.1\text{m}$ rectangular box ($X \in [-7.2, -2.0], Y \in [-7.5, -2.4]$) completely zeroed out `boundary_penalty` and disabled `dist_y < dyn_threshold_y` resets. The MDP taught the agent that crossing the double yellow line carried zero penalty and zero risk of termination.
+  2. **Phantom Turn Token on Straight Asphalt (`road_manager.py`):** Corner 2 left turn physically ends at $Y = -3.60\text{ m}$ (pointing straight North). However, `in_c2_turn` broadcast `turn_token = -1.0` (LEFT) until $Y = -2.40\text{ m}$ (1.2m of straight road). Furthermore, `in_bend_turn` fired at $Y = 1.20\text{ m}$ (1.0m before the sweeping bend curve starts at $Y = 2.20\text{ m}$). The policy, acting as a turn token puppet, obeyed the turn commands and steered left on straightaways.
+  3. **Centrifugal Understeer Washout from Corner 1 & 2:** Vehicles entered $R = 1.2\text{ m}$ corners at $>0.85\text{ m/s}$ ($a_c \approx 0.75\text{ g}$). Corner overspeed penalties were too weak (2.5 multiplier) to force deceleration from 0.88 m/s to 0.35 m/s before the apex.
+- **Resolution Deployed:**
+  1. **Uncompromised Yellow Boundary Enforcement (`terminations.py`, `rewards.py`):**
+     - Completely eliminated the permissive bounding box trap. The double yellow median line is NEVER masked anywhere on the circuit.
+     - Permeability is strictly restricted to the transverse white stop line at intersection entry ($X \in [-6.5, -4.5], Y \in [-7.5, -6.5], dist_g < 0.60\text{ m}$).
+     - Elevated yellow line boundary penalty weight from 120.0 to 160.0 with continuous repulsive gradient.
+  2. **Track-Aligned Turn Tokens (`road_manager.py`):**
+     - Tightened `in_c2_turn` to end cleanly at $Y \le -3.60\text{ m}$ (the moment the car points North).
+     - Gated `in_bend_turn` to activate at $Y \ge 2.20\text{ m}$ (where curvature actually begins).
+     - Full North straightaway ($Y \in [-3.60, 2.20]$) broadcasts `turn_token = 0.0` (Lane Follow).
+     - Advanced `in_c1_turn` to $Y < -5.60\text{ m}$ for clean turn anticipation.
+  3. **High-Gradient Corner Overspeed Suppression (`rewards.py`):**
+     - Expanded corner pre-braking zones for C1 ($Y \le -4.80$), C2 ($X \ge -7.80$), and Road Bend ($Y \ge 2.00$).
+     - Clamped corner overspeed threshold to 0.40 m/s and raised penalty multiplier from 2.5 to 4.0, providing strict MDP advantage for decelerating to 0.35 m/s before turn entry.
+  4. **Verification:**
+     - Regression suite `tests/test_cornering_remediation.py` PASSED 4/4.
+     - Kinematic transit `tests/test_manual_left_turn.py` completed all 350 steps through Corner 2 intersection with 14.7cm white and 19.4cm yellow clearances (zero collisions).

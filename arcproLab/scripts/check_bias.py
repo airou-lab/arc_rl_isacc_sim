@@ -11,22 +11,24 @@ simulation_app = app_launcher.app
 import os
 import sys
 import torch
+
 # Add arcproLab to path
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab.utils.math import euler_xyz_from_quat
 from arcpro_env_cfg import ARCProEnvCfg
 
+
 def main():
     log_file = "bias_report.txt"
     with open(log_file, "w") as f:
         f.write("Starting Bias Report\n")
         f.flush()
-        
+
         print("[Bias Check] Starting environment creation...")
         env_cfg = ARCProEnvCfg()
         env_cfg.scene.num_envs = 1
-        
+
         try:
             env = ManagerBasedRLEnv(cfg=env_cfg)
             print("[Bias Check] Environment created.")
@@ -36,22 +38,22 @@ def main():
             simulation_app.close()
             return
 
-        f.write("="*60 + "\n")
+        f.write("=" * 60 + "\n")
         f.write("PHYSICAL BIAS AUDIT\n")
-        f.write("="*60 + "\n")
-        
+        f.write("=" * 60 + "\n")
+
         print("[Bias Check] Resetting environment...")
         env.reset()
-        
+
         # Action [Steer, Throttle, (Unused)]
         action = torch.zeros((1, 3), device=env.device)
-        action[0, 1] = 0.5 
-        
+        action[0, 1] = 0.5
+
         f.write(f"Applying action: {action}\n")
-        
+
         for i in range(101):
             env.step(action)
-            
+
             if i % 10 == 0:
                 root_pos = env.scene["robot"].data.root_pos_w[0]
                 quat = env.scene["robot"].data.root_quat_w[0]
@@ -63,18 +65,19 @@ def main():
                 print(out, end="")
 
         final_y = env.scene["robot"].data.root_pos_w[0, 1].item()
-        f.write("-"*60 + "\n")
+        f.write("-" * 60 + "\n")
         if abs(final_y) > 0.05:
             direction = "RIGHT" if final_y < 0 else "LEFT"
             f.write(f"BIAS DETECTED: Car drifts {direction} (Y pos: {final_y:.4f})\n")
         else:
             f.write(f"NO SIGNIFICANT BIAS: Y position is {final_y:.4f}\n")
-        
-        f.write("="*60 + "\n")
+
+        f.write("=" * 60 + "\n")
         f.flush()
 
     env.close()
     simulation_app.close()
+
 
 if __name__ == "__main__":
     main()

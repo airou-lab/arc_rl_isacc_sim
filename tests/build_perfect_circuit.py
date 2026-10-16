@@ -2,34 +2,56 @@ import numpy as np
 from scipy.spatial import cKDTree
 from scipy.interpolate import splprep, splev, interp1d
 
+
 def generate_hairpin_circuit(num_pts=5000):
-    data = np.load('arcproLab/mdp/track_boundaries_1x.npz')
-    yellow = data['yellow'][:, :2]
-    white = data['white'][:, :2]
+    data = np.load("arcproLab/mdp/track_boundaries_1x.npz")
+    yellow = data["yellow"][:, :2]
+    white = data["white"][:, :2]
     tree_y = cKDTree(yellow)
     tree_w = cKDTree(white)
 
-    # 1. West Runway: (-16.197, 5.50) down to (-16.197, -5.50)
-    # Direction: South (-Y)
-    y_west = np.linspace(5.50, -5.50, 40)
-    seg1 = np.column_stack([np.full_like(y_west, -16.197), y_west])
+    # Re-centered Corner Radii (0.50m) perfectly centered in 0.43m lane
+    r_c1 = 0.50
+    r_c4 = 0.50
+    lane_x_west = -16.205
+    lane_y_south = -7.100
+    lane_y_north = 7.100
 
-    # 2. Corner 1: Smooth 90-deg left turn from (-16.197, -5.50) to (-14.50, -7.10)
+    # 1. West Runway: (-16.205, 7.10 - r_c4) down to (-16.205, -7.10 + r_c1)
+    # Direction: South (-Y)
+    y_start_c1 = lane_y_south + r_c1
+    y_end_c4 = lane_y_north - r_c4
+    y_west = np.linspace(y_end_c4, y_start_c1, 50)
+    seg1 = np.column_stack([np.full_like(y_west, lane_x_west), y_west])
+
+    # 2. Corner 1: Smooth 90-deg left turn from (-16.205, y_start_c1) to (-16.205 + r_c1, -7.10)
     # Direction: South -> East
+    c1_center = np.array([lane_x_west + r_c1, y_start_c1])
     t1 = np.linspace(np.pi, 1.5 * np.pi, 30)
-    c1_x = -14.50 + 1.697 * np.cos(t1)
-    c1_y = -5.50 + 1.600 * np.sin(t1)
+    c1_x = c1_center[0] + r_c1 * np.cos(t1)
+    c1_y = c1_center[1] + r_c1 * np.sin(t1)
     seg2 = np.column_stack([c1_x, c1_y])
 
-    # 3. South Runway: (-14.50, -7.10) to (-6.00, -7.10)
+    # 3. South Runway: (-16.205 + r_c1, -7.10) to (-6.00, -7.10)
     # Direction: East (+X)
-    x_south = np.linspace(-14.50, -6.00, 35)
-    seg3 = np.column_stack([x_south, np.full_like(x_south, -7.10)])
+    x_start_c1 = lane_x_west + r_c1
+    x_south = np.linspace(x_start_c1, -6.00, 35)
+    seg3 = np.column_stack([x_south, np.full_like(x_south, lane_y_south)])
 
     # 4. Hairpin Curve (Outside Lane): (-6.00, -7.10) around apex (-2.34, 0.0) to (-6.00, 6.82)
     # Extract exact outside-lane midpoints
-    mask_hy = (yellow[:, 0] >= -6.0) & (yellow[:, 0] <= 0.0) & (yellow[:, 1] >= -7.5) & (yellow[:, 1] <= 7.5)
-    mask_hw = (white[:, 0] >= -6.0) & (white[:, 0] <= 0.0) & (white[:, 1] >= -7.5) & (white[:, 1] <= 7.5)
+    mask_hy = (
+        (yellow[:, 0] >= -6.0)
+        & (yellow[:, 0] <= 0.0)
+        & (yellow[:, 1] >= -7.5)
+        & (yellow[:, 1] <= 7.5)
+    )
+    mask_hw = (
+        (white[:, 0] >= -6.0)
+        & (white[:, 0] <= 0.0)
+        & (white[:, 1] >= -7.5)
+        & (white[:, 1] <= 7.5)
+    )
     hy, hw = yellow[mask_hy], white[mask_hw]
     tree_hw = cKDTree(hw)
 
@@ -40,7 +62,7 @@ def generate_hairpin_circuit(num_pts=5000):
     hy_sorted = hy[order]
 
     # Sample ~60 points along the yellow curve between Y = -6.5 and Y = 5.5
-    sample_idxs = np.linspace(0, len(hy_sorted)-1, 60, dtype=int)
+    sample_idxs = np.linspace(0, len(hy_sorted) - 1, 60, dtype=int)
     hp_mids = []
     for py in hy_sorted[sample_idxs]:
         # Outer white is further from center than py
@@ -55,24 +77,28 @@ def generate_hairpin_circuit(num_pts=5000):
     hp_mids = np.array(hp_mids)
 
     # 5. North Transition and Runway:
-    # From hairpin exit (-6.00, 6.82) to (-8.00, 7.10) to (-14.50, 7.10)
+    # From hairpin exit (-6.00, 6.82) to (-8.00, 7.10) to (lane_x_west + r_c4, 7.10)
     # Transition points:
-    trans_pts = np.array([
-        [-6.016, 6.816],
-        [-6.445, 6.937],
-        [-6.975, 7.038],
-        [-7.489, 7.085],
-        [-8.000, 7.100],
-    ])
-    x_north = np.linspace(-8.00, -14.50, 30)
-    seg5_straight = np.column_stack([x_north, np.full_like(x_north, 7.10)])
+    trans_pts = np.array(
+        [
+            [-6.016, 6.816],
+            [-6.445, 6.937],
+            [-6.975, 7.038],
+            [-7.489, 7.085],
+            [-8.000, 7.100],
+        ]
+    )
+    x_end_c4 = lane_x_west + r_c4
+    x_north = np.linspace(-8.00, x_end_c4, 30)
+    seg5_straight = np.column_stack([x_north, np.full_like(x_north, lane_y_north)])
     seg5 = np.vstack([trans_pts, seg5_straight])
 
-    # 6. Corner 4: Smooth 90-deg left turn from (-14.50, 7.10) to (-16.197, 5.50)
+    # 6. Corner 4: Smooth 90-deg left turn from (lane_x_west + r_c4, 7.10) to (-16.205, 7.10 - r_c4)
     # Direction: West -> South
+    c4_center = np.array([x_end_c4, y_end_c4])
     t4 = np.linspace(0.5 * np.pi, np.pi, 30)
-    c4_x = -14.50 + 1.697 * np.cos(t4)
-    c4_y = 5.50 + 1.600 * np.sin(t4)
+    c4_x = c4_center[0] + r_c4 * np.cos(t4)
+    c4_y = c4_center[1] + r_c4 * np.sin(t4)
     seg6 = np.column_stack([c4_x, c4_y])
 
     # Combine anchor points
@@ -92,13 +118,15 @@ def generate_hairpin_circuit(num_pts=5000):
     dense_pts = np.column_stack([x_dense, y_dense])
 
     # Calculate cumulative distance for equidistant sampling
-    step_dists = np.linalg.norm(np.diff(dense_pts, axis=0, append=dense_pts[:1]), axis=1)
+    step_dists = np.linalg.norm(
+        np.diff(dense_pts, axis=0, append=dense_pts[:1]), axis=1
+    )
     cum_dist = np.insert(np.cumsum(step_dists), 0, 0.0)[:-1]
     total_length = cum_dist[-1] + step_dists[-1]
 
     target_distances = np.linspace(0, total_length, num_pts, endpoint=False)
-    fx = interp1d(cum_dist, x_dense, kind='cubic', fill_value='extrapolate')
-    fy = interp1d(cum_dist, y_dense, kind='cubic', fill_value='extrapolate')
+    fx = interp1d(cum_dist, x_dense, kind="cubic", fill_value="extrapolate")
+    fy = interp1d(cum_dist, y_dense, kind="cubic", fill_value="extrapolate")
 
     x_fine = fx(target_distances)
     y_fine = fy(target_distances)
@@ -131,27 +159,36 @@ def generate_hairpin_circuit(num_pts=5000):
     print(f"=== Perfect Hairpin Circuit: {num_pts} Waypoints ===")
     print(f"Track Total Length: {total_length:.3f} m")
     print(f"Waypoint Spacing:   {total_length / num_pts * 100:.2f} cm")
-    print(f"Dist to Yellow:     min={d_y.min():.3f}m, max={d_y.max():.3f}m, mean={d_y.mean():.3f}m")
-    print(f"Dist to White:      min={d_w.min():.3f}m, max={d_w.max():.3f}m, mean={d_w.mean():.3f}m")
-    print(f"Max Yaw Step:       {np.max(np.abs(dyaw)):.5f} rad ({np.degrees(np.max(np.abs(dyaw))):.3f} deg)")
+    print(
+        f"Dist to Yellow:     min={d_y.min():.3f}m, max={d_y.max():.3f}m, mean={d_y.mean():.3f}m"
+    )
+    print(
+        f"Dist to White:      min={d_w.min():.3f}m, max={d_w.max():.3f}m, mean={d_w.mean():.3f}m"
+    )
+    print(
+        f"Max Yaw Step:       {np.max(np.abs(dyaw)):.5f} rad ({np.degrees(np.max(np.abs(dyaw))):.3f} deg)"
+    )
     print(f"Loop Closure Error: {np.linalg.norm(pts_fine[0] - pts_fine[-1]):.5f} m")
 
     wps = np.column_stack([x_fine, y_fine, wp_yaw])
 
-    # Roll array so that WP 0 is precisely at the Start Line (-16.197, 5.50)
-    start_target = np.array([-16.197, 5.50])
+    # Roll array so that WP 0 is precisely at the Start Line (-16.205, 5.50)
+    start_target = np.array([-16.205, 5.50])
     dists_to_start = np.linalg.norm(wps[:, :2] - start_target, axis=1)
     start_idx = np.argmin(dists_to_start)
     wps = np.roll(wps, -start_idx, axis=0)
 
     # Re-verify rolled WP 0
-    print(f"Rolled WP 0 to exact Start Line: {wps[0, :2]} (target {start_target}) | error: {np.linalg.norm(wps[0, :2] - start_target):.5f}m")
+    print(
+        f"Rolled WP 0 to exact Start Line: {wps[0, :2]} (target {start_target}) | error: {np.linalg.norm(wps[0, :2] - start_target):.5f}m"
+    )
 
     return wps
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     res = generate_hairpin_circuit(5000)
-    out_path = 'arcproLab/mdp/track_centerline.npy'
+    out_path = "arcproLab/mdp/track_centerline.npy"
     np.save(out_path, res)
     print(f"Successfully saved {len(res)} waypoints to {out_path}")
     print("Start waypoint:", res[0])

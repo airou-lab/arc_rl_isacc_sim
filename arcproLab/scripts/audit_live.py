@@ -29,6 +29,7 @@ from arcpro_env_cfg import ARCProEnvCfg
 import omni.usd
 from pxr import UsdGeom
 
+
 def main():
     # 1. Setup Environment
     env_cfg = ARCProEnvCfg()
@@ -40,11 +41,11 @@ def main():
 
     # 2. Create Environment (This spawns the robot)
     env = ManagerBasedRLEnv(cfg=env_cfg)
-    
+
     # 3. Traverse Live Stage
     stage = omni.usd.get_context().get_stage()
     print("\n--- Traversing Live Stage ---")
-    
+
     for prim in stage.Traverse():
         path = str(prim.GetPath())
         if "Robot" in path or "Track" in path:
@@ -53,6 +54,7 @@ def main():
 
     env.close()
     simulation_app.close()
+
 
 if __name__ == "__main__":
     main()

@@ -20,6 +20,7 @@ simulation_app = app_launcher.app
 
 import os
 import sys
+
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
@@ -27,31 +28,33 @@ from isaaclab.envs import ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
 from mdp.track_manager import get_track_manager
 
+
 def main():
     env_cfg = ARCProEnvCfg()
     env_cfg.scene.num_envs = 1
-    env_cfg.enable_cameras = True 
+    env_cfg.enable_cameras = True
     env = ManagerBasedRLEnv(cfg=env_cfg)
 
     tm = get_track_manager(device=env.device)
-    
-    print("\n" + "="*50)
+
+    print("\n" + "=" * 50)
     print("ARCPro INTERACTIVE Audit Active")
     print("ROBOT IS AUTO-CRAWLING FORWARD")
     print("RED: Boundaries | GREEN: Intersections | CYAN: Path")
-    print("="*50 + "\n")
+    print("=" * 50 + "\n")
 
     # Simple loop - no complex keyboard for now to avoid crashes
     while simulation_app.is_running():
         # [Steer, Throttle, Brake]
         # Crawl at 0.3 throttle to test lines
         actions = torch.zeros((env.num_envs, 3), device=env.device)
-        actions[:, 1] = 0.3 
-        
+        actions[:, 1] = 0.3
+
         env.step(actions)
         tm.refresh_visuals()
 
     env.close()
+
 
 if __name__ == "__main__":
     main()

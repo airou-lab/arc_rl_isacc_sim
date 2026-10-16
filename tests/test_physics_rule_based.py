@@ -11,6 +11,7 @@ simulation_app = app_launcher.app
 from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
+
 def main():
     env_cfg = ARCProEnvCfg()
     env_cfg.scene.num_envs = 1
@@ -20,32 +21,35 @@ def main():
     env_cfg.__post_init__()
     # Increase episode length so we can observe it
     env_cfg.episode_length_s = 100.0
-    
+
     env = ManagerBasedRLEnv(cfg=env_cfg, render_mode="human")
-    
+
     obs, _ = env.reset()
-    
+
     print("Testing rule-based driving...")
     print("Driving straight for 100 steps...")
-    
+
     actions = torch.zeros((1, 2), device=env.device)
-    
+
     # 0 = steering, 1 = drive
     for i in range(100):
-        actions[:, 0] = 0.0 # straight
-        actions[:, 1] = 0.5 # half throttle (approx 20 rad/s = 1 m/s)
+        actions[:, 0] = 0.0  # straight
+        actions[:, 1] = 0.5  # half throttle (approx 20 rad/s = 1 m/s)
         env.step(actions)
-        
+
     print("Chassis pos after straight:", env.scene["robot"].data.root_pos_w)
-    
+
     print("Turning right gently for 100 steps...")
     for i in range(100):
-        actions[:, 0] = -0.5 # half steer right
-        actions[:, 1] = 0.5 # half throttle
+        actions[:, 0] = -0.5  # half steer right
+        actions[:, 1] = 0.5  # half throttle
         env.step(actions)
-        
+
     print("Chassis pos after turn:", env.scene["robot"].data.root_pos_w)
-    print("Simulation complete. The physics are correct if it moved forward and then turned right.")
+    print(
+        "Simulation complete. The physics are correct if it moved forward and then turned right."
+    )
+
 
 if __name__ == "__main__":
     main()

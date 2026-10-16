@@ -1,8 +1,11 @@
 #!/bin/bash
 # If invoked from inside tmux session 'training', detach execution to prevent suicide
-if [ -n "$TMUX" ] && tmux display-message -p '#S' 2>/dev/null | grep -q "^training$"; then
-    nohup bash "$0" "$@" > /tmp/start_tmux.log 2>&1 &
-    exit 0
+if [ -n "$TMUX" ] && [ "${RUNNING_DETACHED:-0}" != "1" ]; then
+    CURRENT_SESSION=$(tmux display-message -p '#S' 2>/dev/null || true)
+    if [ "$CURRENT_SESSION" = "training" ]; then
+        RUNNING_DETACHED=1 env -u TMUX nohup bash "$0" "$@" > /tmp/start_tmux.log 2>&1 &
+        exit 0
+    fi
 fi
 
 # Kill any existing training session
@@ -20,7 +23,7 @@ fi
 tmux new-session -d -s training
 
 # Automatically resume from specified checkpoint or the newest saved checkpoint
-if [ "${1:-}" = "--fresh" ] || [ "${1:-}" = "--scratch" ]; then
+if [ "${1:-}" = "--fresh" ] || [ "${1:-}" = "--scratch" ] || [ "${1:-}" = "clean" ] || [ "${1:-}" = "--clean" ]; then
     LATEST_CKPT=""
     echo "Starting clean training from step 0 (fresh start)."
 elif [ -n "${1:-}" ]; then
@@ -32,9 +35,19 @@ else
     if [ "$BRANCH" = "main" ] || [ ! -d "$LOG_SUBDIR" ]; then
         LOG_SUBDIR="logs/ppo_skrl"
     fi
-    LATEST_CKPT=$(find "$LOG_SUBDIR" -name "agent_*.pt" -printf "%T@ %p\n" 2>/dev/null | sort -n | tail -n 1 | awk '{print $2}')
+    LATEST_CKPT=$(find "$LOG_SUBDIR" -name "agent_*.pt" ! -path "*corrupted*" -printf "%T@ %p\n" 2>/dev/null | sort -n | tail -n 1 | awk '{print $2}')
     if [ -z "$LATEST_CKPT" ]; then
-        LATEST_CKPT=$(find "$LOG_SUBDIR" -name "best_agent.pt" -printf "%T@ %p\n" 2>/dev/null | sort -n | tail -n 1 | awk '{print $2}')
+        LATEST_CKPT=$(find "$LOG_SUBDIR" -name "best_agent.pt" ! -path "*corrupted*" -printf "%T@ %p\n" 2>/dev/null | sort -n | tail -n 1 | awk '{print $2}')
+    fi
+    if [ -z "$LATEST_CKPT" ]; then
+        CHAMPION="archive/landmark_checkpoints/agent_3587500_c1_champion.pt"
+        if [ ! -f "$CHAMPION" ]; then
+            CHAMPION="archive/landmark_checkpoints/agent_2587500_corner_plateau_baseline.pt"
+        fi
+        if [ -f "$CHAMPION" ]; then
+            LATEST_CKPT="$CHAMPION"
+            echo "No active checkpoints in $LOG_SUBDIR. Falling back to certified champion: $LATEST_CKPT"
+        fi
     fi
 fi
 RESUME_FLAG=""
@@ -44,12 +57,12 @@ if [ ! -z "$LATEST_CKPT" ]; then
 fi
 
 # Pane 0: Start the actual training, pipe output to tee so it logs AND shows on screen
-tmux send-keys -t training:0.0 "export TORCH_USE_CUDA_DSA=1; export PYTHONUNBUFFERED=1; /home/arika/IsaacLab/isaaclab.sh -p arcproLab/scripts/train_skrl.py --num_envs 20 --headless --enable_cameras --total_timesteps 5000000 $RESUME_FLAG | tee logs/skrl_phase1.log" C-m
+tmux send-keys -t training:0.0 "export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; export PYTHONUNBUFFERED=1; /home/arika/IsaacLab/isaaclab.sh -p arcproLab/scripts/train_skrl.py --num_envs 20 --headless --enable_cameras --total_timesteps 5000000 $RESUME_FLAG 2>&1 | tee logs/skrl_phase1.log; echo 'Training process finished with exit code '\$?; bash" C-m
 
 # Pane 1: Split vertically and start the autonomous self-healing sentinel
 tmux split-window -t training:0 -v
 # Give Isaac Sim 20 seconds to initialize simulation before starting the sentinel
-tmux send-keys -t training:0.1 'sleep 20 && python3 arcproLab/scripts/autonomous_sentinel.py --daemon --interval 15.0' C-m
+tmux send-keys -t training:0.1 'sleep 20 && python3 arcproLab/scripts/autonomous_sentinel.py --daemon --interval 30.0' C-m
 
-echo "Started 20-env SKRL training (~10GB VRAM) + autonomous sentinel in tmux."
+echo "Started 20-env SKRL training (~8.5GB VRAM / CPU Streaming Architecture) + autonomous sentinel in tmux."
 echo "Run 'tmux attach -t training' to view it live!"

@@ -1,0 +1,37 @@
+# ClearSet Codebase Map & RAG Query Guide
+clearset_version: '1.0'
+database: '.cs/cs_codebase.db'
+last_updated: '2026-10-14T20:19:44.487973+00:00Z'
+git_commit: '56f7644876c09fe7412b600fc2c50e0a524f5276'
+stats:
+  total_indexed_files: 182
+  total_symbols: 768
+
+domain_tags:
+  api:
+    category: 'layer'
+    matching_entities: 1
+    sample_targets: ["tests/verify_rerouted_track.py"]
+  config:
+    category: 'config'
+    matching_entities: 12
+    sample_targets: ["arcproLab/policy_stack/config/intersection_topology.json", "arcproLab/policy_stack/config/__init__.py", "arcpro-rl-course/modules/02-env-cfg.html", "arcproLab/arcpro_env_cfg.py", "arcproLab/mdp/curriculum_config.py"]
+  database:
+    category: 'layer'
+    matching_entities: 4
+    sample_targets: ["arcproLab/models/road_following_model.pth", "arcproLab/agents/skrl_models.py", "arcproLab/policy_stack/baselines/dave2/model.py", "arcproLab/scripts/init_gsd_db.py"]
+  robotics:
+    category: 'domain'
+    matching_entities: 3
+    sample_targets: ["arcproLab/arcpro_robot_cfg.py", "arcproLab/scripts/test_intersection_crossing.py", "arcproLab/scripts/list_robot_joints.py"]
+  testing:
+    category: 'layer'
+    matching_entities: 37
+    sample_targets: ["arcproLab/policy_stack/pytest.ini", "arcproLab/policy_stack/tests/__init__.py", "arcproLab/test_rewards.py", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/tests/test_intersection_worker.py"]
+
+query_templates:
+  find_symbol: "SELECT file_path, name, kind, signature, line_start FROM symbols WHERE name LIKE '%{SYMBOL}%';"
+  find_callers: "SELECT source_id, relation_type, details FROM relationships WHERE target_id = '{SYMBOL}' AND relation_type = 'calls';"
+  find_imports: "SELECT target_id, relation_type, details FROM relationships WHERE source_id = '{FILE}' AND relation_type = 'imports';"
+  search_fts: "SELECT file_path, symbol_name, kind, signature FROM codebase_fts WHERE codebase_fts MATCH '{KEYWORD}' LIMIT 20;"
+  find_by_tag: "SELECT target_id, target_type, category FROM tags WHERE tag_name = '{TAG}';"

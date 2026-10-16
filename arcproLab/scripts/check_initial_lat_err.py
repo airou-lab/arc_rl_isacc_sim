@@ -30,7 +30,8 @@ from isaaclab.envs import ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
 from mdp.track_manager import get_track_manager
 import omni.usd
-from pxr import Usd, UsdGeom, UsdShade, Gf
+from pxr import Usd, UsdGeom
+
 
 def main():
     # 1. Setup Environment
@@ -42,45 +43,57 @@ def main():
 
     env = ManagerBasedRLEnv(cfg=env_cfg)
     env.reset()
-    
+
     # 2. Get Math Data
     asset = env.scene["robot"]
     pos = asset.data.root_pos_w - env.scene.env_origins
     q = asset.data.root_quat_w
-    yaw = torch.atan2(2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1.0 - 2.0 * (q[:, 2]**2 + q[:, 3]**2))
-    
+    yaw = torch.atan2(
+        2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]),
+        1.0 - 2.0 * (q[:, 2] ** 2 + q[:, 3] ** 2),
+    )
+
     tm = get_track_manager(device=env.device)
     lat_err, _ = tm.compute_errors(pos, yaw)
     closest_wp = tm.get_closest_waypoint_data(pos)
-    
+
     print(f"\n--- Initial State Audit ---")
     print(f"Robot Local Pos: {pos[0, :2].cpu().numpy()}")
     print(f"Closest WP Pos: {closest_wp[0, :2].cpu().numpy()}")
     print(f"Initial LatErr: {lat_err[0].item():.4f}m")
-    
+
     # 3. Find Physical Yellow Line in USD
     stage = omni.usd.get_context().get_stage()
     yellow_x = []
     for prim in stage.Traverse():
         path = str(prim.GetPath())
-        if "/World/envs/env_0/Track" in path and "yellow" in path.lower() and prim.IsA(UsdGeom.Mesh):
-            xform = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+        if (
+            "/World/envs/env_0/Track" in path
+            and "yellow" in path.lower()
+            and prim.IsA(UsdGeom.Mesh)
+        ):
+            xform = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(
+                Usd.TimeCode.Default()
+            )
             points = UsdGeom.Mesh(prim).GetPointsAttr().Get()
             for p in points:
                 p_world = xform.Transform(p)
                 # Only look at points near spawn Y (5.56)
                 if abs(p_world[1] - 5.56) < 0.5:
                     yellow_x.append(p_world[0])
-    
+
     if yellow_x:
         avg_yellow_x = np.mean(yellow_x)
         print(f"Physical Yellow Line X (near spawn): {avg_yellow_x:.4f}")
-        print(f"Calculated Offset (Robot X - Yellow X): {pos[0, 0].item() - avg_yellow_x:.4f}m")
+        print(
+            f"Calculated Offset (Robot X - Yellow X): {pos[0, 0].item() - avg_yellow_x:.4f}m"
+        )
     else:
         print("Could not find Yellow Line mesh near spawn.")
 
     env.close()
     simulation_app.close()
+
 
 if __name__ == "__main__":
     main()

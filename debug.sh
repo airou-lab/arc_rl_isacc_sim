@@ -16,12 +16,14 @@ fi
 echo "============================================"
 echo "  ARCPro RL - GUI Debug Viewer"
 echo "  Script: play_skrl.py"
-echo "  Tip: add --checkpoint /path/to/agent.pt to override auto-detection"
+echo "  Tip: defaults to latest clean checkpoint (best_agent.pt)"
+echo "  Tip: add --checkpoint pre_reroute to test centered lane-following & intersection turn"
+echo "  Tip: add --sector 1..5 to force specific sector (1=Start, 2=C1, 3=Leg2, 4=Inter, 5=North)"
+echo "  Tip: add --checkpoint champion to test legacy champion checkpoint"
 echo "============================================"
 echo ""
 
 exec "$ISAACLAB_PATH" -p "$PROJECT_DIR/arcproLab/scripts/play_skrl.py" \
     --num_envs 1 \
     --enable_cameras \
-    --debug \
     "$@"

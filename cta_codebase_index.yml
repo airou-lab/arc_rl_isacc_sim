@@ -1,28 +1,32 @@
 # CTA Codebase Map & RAG Query Guide
 cta_version: '1.0'
 database: '.cta/cta_codebase.db'
-last_updated: '2026-09-11T17:21:16.272074+00:00Z'
-git_commit: '440614ef38af92cf40e0b93c4618671b89114a1d'
+last_updated: '2026-10-09T23:57:10.951991+00:00Z'
+git_commit: '56f7644876c09fe7412b600fc2c50e0a524f5276'
 stats:
-  total_indexed_files: 157
-  total_symbols: 689
+  total_indexed_files: 175
+  total_symbols: 735
 
 domain_tags:
+  api:
+    category: 'layer'
+    matching_entities: 1
+    sample_targets: ["tests/verify_rerouted_track.py"]
   config:
     category: 'config'
     matching_entities: 12
-    sample_targets: ["arcproLab/arcpro_env_cfg.py", "arcproLab/mdp/curriculum_config.py", "arcproLab/policy_stack/agent/agent_env_wrapper.py", "arcproLab/policy_stack/agent/config.py", "arcproLab/policy_stack/tests/mock_env_utils.py"]
+    sample_targets: ["arcproLab/mdp/curriculum_config.py", "arcproLab/policy_stack/agent/agent_env_wrapper.py", "arcproLab/policy_stack/agent/config.py", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/envs/registry.py"]
   database:
     category: 'layer'
-    matching_entities: 4
-    sample_targets: ["arcproLab/agents/skrl_models.py", "arcproLab/policy_stack/baselines/dave2/model.py", "arcproLab/scripts/init_gsd_db.py", "arcproLab/models/road_following_model.pth"]
+    matching_entities: 5
+    sample_targets: ["cta_turns.db", "arcproLab/agents/skrl_models.py", "arcproLab/policy_stack/baselines/dave2/model.py", "arcproLab/scripts/init_gsd_db.py", "arcproLab/models/road_following_model.pth"]
   robotics:
     category: 'domain'
     matching_entities: 3
     sample_targets: ["arcproLab/arcpro_robot_cfg.py", "arcproLab/scripts/test_intersection_crossing.py", "arcproLab/scripts/list_robot_joints.py"]
   testing:
     category: 'layer'
-    matching_entities: 24
+    matching_entities: 34
     sample_targets: ["arcproLab/test_rewards.py", "arcproLab/policy_stack/pytest.ini", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/tests/test_intersection_worker.py", "arcproLab/policy_stack/tests/test_intersection_node_server.py"]
 
 query_templates:
