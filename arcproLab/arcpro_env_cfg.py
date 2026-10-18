@@ -221,10 +221,10 @@ class TerminationCfg:
         func=mdp_done.ground_contact_termination,
         params={"sensor_cfg": SceneEntityCfg("ground_contact"), "threshold": 100.0},
     )
-    # Hard Height Bounds: Instant reset if car falls through track (Z < -0.05m) or flips/flies (Z > 0.50m)
+    # Hard Height Bounds: Instant reset if car falls through track (Z < -0.05m) or flips/flies (Z > 3.50m)
     height_bounds = DoneTerm(
         func=mdp_done.height_termination,
-        params={"threshold": -0.05, "max_height": 0.50},
+        params={"threshold": -0.05, "max_height": 3.50},
     )
     # Stagnation: Reset if stuck against a wall
     stagnation = DoneTerm(func=mdp_done.stagnation_termination)

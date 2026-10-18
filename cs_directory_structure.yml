@@ -1,6 +1,6 @@
 # ClearSet Codebase Directory Structure & Architectural Layout
 clearset_version: '1.0'
-last_updated: '2026-10-14T20:19:44.488334+00:00Z'
+last_updated: '2026-10-18T22:50:45.681922+00:00Z'
 root: '.'
 
 directories:
@@ -15,15 +15,15 @@ directories:
   arcproLab:
     layer: 'testing'
     tags: ["testing", "robotics", "config"]
-    primary_files: ["arcproLab/README.md", "arcproLab/__init__.py", "arcproLab/test_rewards.py", "arcproLab/verify.py", "arcproLab/arcpro_robot_cfg.py"]
+    primary_files: ["arcproLab/test_rewards.py", "arcproLab/verify.py", "arcproLab/arcpro_robot_cfg.py", "arcproLab/arcpro_env_cfg.py", "arcproLab/README.md"]
   arcproLab/agents:
     layer: 'database'
     tags: ["database"]
-    primary_files: ["arcproLab/agents/README.md", "arcproLab/agents/skrl_models.py", "arcproLab/agents/skrl_wrappers.py"]
+    primary_files: ["arcproLab/agents/skrl_models.py", "arcproLab/agents/README.md", "arcproLab/agents/skrl_wrappers.py"]
   arcproLab/mdp:
     layer: 'config'
     tags: ["config"]
-    primary_files: ["arcproLab/mdp/README.md", "arcproLab/mdp/__init__.py", "arcproLab/mdp/track_boundaries_1x.npz.bak", "arcproLab/mdp/spawner.py", "arcproLab/mdp/actions.py"]
+    primary_files: ["arcproLab/mdp/track_boundaries_1x.npz.bak", "arcproLab/mdp/spawner.py", "arcproLab/mdp/actions.py", "arcproLab/mdp/curriculum_config.py", "arcproLab/mdp/rewards.py"]
   arcproLab/models:
     layer: 'database'
     tags: ["database"]
@@ -31,7 +31,7 @@ directories:
   arcproLab/policy_stack:
     layer: 'testing'
     tags: ["testing"]
-    primary_files: ["arcproLab/policy_stack/pytest.ini", "arcproLab/policy_stack/README_REWARDS.md", "arcproLab/policy_stack/lane_detector.py"]
+    primary_files: ["arcproLab/policy_stack/README_REWARDS.md", "arcproLab/policy_stack/pytest.ini", "arcproLab/policy_stack/lane_detector.py"]
   arcproLab/policy_stack/agent:
     layer: 'config'
     tags: ["config"]
@@ -51,23 +51,23 @@ directories:
   arcproLab/policy_stack/losses:
     layer: 'general'
     tags: []
-    primary_files: ["arcproLab/policy_stack/losses/__init__.py", "arcproLab/policy_stack/losses/waypoint_losses.py"]
+    primary_files: ["arcproLab/policy_stack/losses/waypoint_losses.py", "arcproLab/policy_stack/losses/__init__.py"]
   arcproLab/policy_stack/policies:
     layer: 'general'
     tags: []
-    primary_files: ["arcproLab/policy_stack/policies/__init__.py", "arcproLab/policy_stack/policies/fusion_policy.py", "arcproLab/policy_stack/policies/hierarchical_policy.py"]
+    primary_files: ["arcproLab/policy_stack/policies/fusion_policy.py", "arcproLab/policy_stack/policies/hierarchical_policy.py", "arcproLab/policy_stack/policies/__init__.py"]
   arcproLab/policy_stack/tests:
     layer: 'testing'
     tags: ["testing", "config"]
-    primary_files: ["arcproLab/policy_stack/tests/__init__.py", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/tests/test_intersection_worker.py", "arcproLab/policy_stack/tests/test_intersection_node_server.py", "arcproLab/policy_stack/tests/test_intersection_full.py"]
+    primary_files: ["arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/tests/test_intersection_worker.py", "arcproLab/policy_stack/tests/test_intersection_node_server.py", "arcproLab/policy_stack/tests/test_intersection_full.py", "arcproLab/policy_stack/tests/conftest.py"]
   arcproLab/policy_stack/wrappers:
     layer: 'general'
     tags: []
-    primary_files: ["arcproLab/policy_stack/wrappers/__init__.py", "arcproLab/policy_stack/wrappers/waypoint_tracking_wrapper.py", "arcproLab/policy_stack/wrappers/intersection_reward_wrapper.py"]
+    primary_files: ["arcproLab/policy_stack/wrappers/waypoint_tracking_wrapper.py", "arcproLab/policy_stack/wrappers/intersection_reward_wrapper.py", "arcproLab/policy_stack/wrappers/__init__.py"]
   arcproLab/scripts:
     layer: 'testing'
     tags: ["testing", "robotics", "config", "database"]
-    primary_files: ["arcproLab/scripts/README.md", "arcproLab/scripts/verify_markers.py", "arcproLab/scripts/deep_verify.py", "arcproLab/scripts/debug_kinematics.py", "arcproLab/scripts/test_terminations.py"]
+    primary_files: ["arcproLab/scripts/verify_markers.py", "arcproLab/scripts/deep_verify.py", "arcproLab/scripts/debug_kinematics.py", "arcproLab/scripts/test_terminations.py", "arcproLab/scripts/audit_assets.py"]
   runs/26-10-05_16-05-53-872359_PPO:
     layer: 'general'
     tags: []

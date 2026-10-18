@@ -116,15 +116,21 @@ def white_line_contact(
 def height_termination(
     env: ManagerBasedRLEnv,
     threshold: float = -0.05,
-    max_height: float = 0.50,
+    max_height: float = 3.50,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
 ) -> torch.Tensor:
-    """Terminates if the robot flips, falls below a threshold, or flies too high."""
+    """
+    Terminates if the robot falls below the track surface (local Z < threshold) or flips/flies (local Z > max_height).
+    Accommodates 3D elevation tracks up to Z = 2.5m with headroom.
+    """
     asset = env.scene[asset_cfg.name]
-    z_pos = asset.data.root_pos_w[:, 2]
+    env_origins = env.scene.env_origins
+    local_z = asset.data.root_pos_w[:, 2] - env_origins[:, 2]
     # Add a grace period to prevent immediate failures on spawn settling
     is_spawn = env.episode_length_buf < 20
-    return (~is_spawn) & ((z_pos < threshold) | (z_pos > max_height))
+    fallen = local_z < threshold
+    flying = local_z > max_height
+    return (~is_spawn) & (fallen | flying)
 
 
 def stagnation_termination(
@@ -211,20 +217,4 @@ def ground_contact_termination(
     return (~is_spawn) & (max_force > threshold)
 
 
-def height_termination(
-    env: ManagerBasedRLEnv,
-    threshold: float = -0.05,
-    max_height: float = 0.50,
-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-) -> torch.Tensor:
-    """
-    Terminates if the robot falls below the track surface (Z < threshold) or flips/flies (Z > max_height).
-    Acts as an un-bypassable geometric guard against terrain mesh voids and physics tunneling.
-    """
-    asset = env.scene[asset_cfg.name]
-    env_origins = env.scene.env_origins
-    local_z = asset.data.root_pos_w[:, 2] - env_origins[:, 2]
-    fallen = local_z < threshold
-    flying = local_z > max_height
-    return fallen | flying
 

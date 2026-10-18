@@ -12,6 +12,29 @@ class SKRLFlattenWrapper(Wrapper):
         super().__init__(env)
         self._step_counter = 0
         if self._env.cfg.enable_cameras:
+            # 1. Fused YUV Linear Preprocessing Layer (ITU-R BT.601)
+            # Isolates luminance (white road boundaries) on Y, and chrominance (yellow median) on U, V
+            self.yuv_conv = nn.Conv2d(3, 3, kernel_size=1, bias=False).to("cuda:0")
+            yuv_weights = torch.tensor(
+                [
+                    [0.299, 0.587, 0.114],
+                    [-0.14713, -0.28886, 0.436],
+                    [0.615, -0.51499, -0.10001],
+                ],
+                dtype=torch.float32,
+            ).unsqueeze(-1).unsqueeze(-1)
+            self.yuv_conv.weight.data.copy_(yuv_weights)
+            self.yuv_conv.weight.requires_grad = False
+            self.yuv_conv.eval()
+
+            # YUV normalization: Y in [0, 1] centered at 0.5, U/V in [-0.5, 0.5] centered at 0.0
+            self.yuv_mean = (
+                torch.tensor([0.5, 0.0, 0.0]).view(1, 3, 1, 1).to("cuda:0")
+            )
+            self.yuv_std = (
+                torch.tensor([0.5, 0.5, 0.5]).view(1, 3, 1, 1).to("cuda:0")
+            )
+
             base = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1).to("cuda:0")
             for param in base.parameters():
                 param.requires_grad = False
@@ -26,10 +49,6 @@ class SKRLFlattenWrapper(Wrapper):
                 base.layer4,
             ).to("cuda:0")
             self.resnet_conv.eval()
-            self.mean = (
-                torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1).to("cuda:0")
-            )
-            self.std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).to("cuda:0")
 
     @property
     def observation_space(self):
@@ -124,8 +143,10 @@ class SKRLFlattenWrapper(Wrapper):
                     img = img.permute(0, 3, 1, 2)
                 if img.max() > 1.0:
                     img = img / 255.0
-                img = (img - self.mean) / self.std
-                feat_map = self.resnet_conv(img)  # (B, 512, 7, 7)
+                # Convert RGB to YUV and normalize
+                yuv = self.yuv_conv(img)
+                norm_img = (yuv - self.yuv_mean) / self.yuv_std
+                feat_map = self.resnet_conv(norm_img)  # (B, 512, 7, 7)
                 visual_flat = feat_map.flatten(start_dim=1)  # (B, 25088)
 
                 num_envs = vec.shape[0]
@@ -141,7 +162,7 @@ class SKRLFlattenWrapper(Wrapper):
 
                 self._flat_obs_buffer[:, :25088].copy_(visual_flat)
                 self._flat_obs_buffer[:, 25088:].copy_(vec)
-                del img, feat_map, visual_flat
+                del img, yuv, norm_img, feat_map, visual_flat
                 return self._flat_obs_buffer
 
         return vec

@@ -864,3 +864,33 @@ At the 500k milestone, the agent's episode lengths reached up to ~723, but the e
   4. **Verification:**
      - Regression suite `tests/test_cornering_remediation.py` PASSED 4/4.
      - Kinematic transit `tests/test_manual_left_turn.py` completed all 350 steps through Corner 2 intersection with 14.7cm white and 19.4cm yellow clearances (zero collisions).
+
+### Issue 117: Spatial Softmax Keypoint Bottleneck, Fused YUV Chrominance Preprocessing, Forward Sightline Preservation & 3D Hill Elevation Unlock
+- **Problem (User Observation & Deep CTA Swarm Diagnosis):**
+  1. **Visual Representation Redundancy & Sample Inefficiency:** The vision policy flattened $512 \times 7 \times 7$ ResNet feature maps into dense linear layers ($1,568 \to 256$), consuming $453,282$ trainable parameters. Backpropagation through 450k parameters from scalar PPO rewards required excessive sample counts, slowing convergence and causing difficulty discriminating the double yellow median from white boundaries under track specular glare.
+  2. **Physical 3D Elevation Hill False Reset:** In Sector 4/5, the vehicle successfully entered the turn with centered steering and healthy margins ($LatErr = -3.3\text{ cm}$, $DistW = 15.2\text{ cm}$, $DistY = 25.4\text{ cm}$), but terminated abruptly at Step 337. Invasive audit revealed that the USD track ascends a 3D elevation hill to $Z = 2.50\text{ m}$. An artificial flat-track ceiling `max_height = 0.50m` in `height_termination` falsely killed the vehicle as it climbed.
+  3. **Downward Camera Blindness Risk:** Proposals to physically tilt the camera down ($30^\circ\text{–}45^\circ$) were evaluated and rejected; tilting down eliminates the upper $+14^\circ$ sightline above the horizon, blinding the vehicle to oncoming curves, obstacles, and stop lines.
+- **Root Cause Analysis:**
+  1. Dense fully connected layers discard 2D spatial arrangement, forcing the network to learn positional invariance from scratch.
+  2. Standard ImageNet RGB normalization treats R, G, B symmetrically. Yellow ($R=0.90, G=0.75, B=0.05$) vs White ($R=0.92, G=0.92, B=0.92$) differs primarily in chrominance (B vs R+G), but Euclidean RGB distance between White and Yellow is small compared to glare.
+  3. `arcpro_env_cfg.py` and `terminations.py` had duplicate `height_termination` definitions hardcoded to $0.50\text{ m}$.
+- **Resolution Deployed:**
+  1. **Levine et al. (JMLR 2016) 2D Spatial Softmax Keypoints (`arcproLab/agents/skrl_models.py`):**
+     - Replaced dense spatial FC layer with differentiable `SpatialSoftmax2d` module.
+     - Projects $(B, 512, 7, 7) \to (B, 32, 7, 7)$ via $1 \times 1$ conv, then extracts 32 continuous 2D $(x, y)$ coordinate keypoints in $[-1.0, 1.0]$.
+     - Concatenates 64 keypoint coordinates with 12 onboard telemetry features ($76\text{ dims}$) into a compact policy control head ($Linear(76, 64) \to ReLU \to Linear(64, 2)$).
+     - Reduces actor trainable parameters from $453,282 \to 21,476$ (**$-95.3\%$ parameter reduction**).
+  2. **Fused ITU-R BT.601 YUV Linear Preprocessing Layer (`arcproLab/agents/skrl_wrappers.py`):**
+     - Integrated a frozen $1 \times 1$ conv layer with the ITU-R BT.601 matrix:
+       $$Y = 0.299 R + 0.587 G + 0.114 B, \quad U = -0.147 R - 0.289 G + 0.436 B, \quad V = 0.615 R - 0.515 G - 0.100 B$$
+     - Normalized with `mean=[0.5, 0.0, 0.0]`, `std=[0.5, 0.5, 0.5]`.
+     - Isolates the yellow median line on chrominance channels ($U = -0.327, V = +0.162$) with infinite SNR against white line and asphalt luminance ($U \approx 0.0, V \approx 0.0$).
+  3. **3D Track Elevation Ceiling Unlock (`arcproLab/arcpro_env_cfg.py`, `arcproLab/mdp/terminations.py`):**
+     - Raised `max_height` from $0.50\text{ m} \to 3.50\text{ m}$, providing $1.0\text{ m}$ of clearance above the $Z=2.50\text{ m}$ hill apex.
+     - Deduplicated `height_termination`, computing local Z relative to `env_origins` while preserving the 20-step spawn settling grace period.
+  4. **Preserved Realistic Forward Camera Pitch ($15^\circ$):**
+     - Maintained bumper mount `pos=(0.22, 0.0, 0.18)` and `rot=(0.9914, 0.0, 0.1305, 0.0)` ($15^\circ$ downward pitch).
+     - Preserves road coverage starting at $0.20\text{ m}$ ahead while retaining $+14^\circ$ field of view above the horizon for forward lookahead.
+  5. **Verification:**
+     - Regression suite `tests/test_cornering_remediation.py` PASSED 4/4.
+     - Architecture upgrade suite `tests/test_vision_architecture_upgrade.py` PASSED 4/4 (analytical autograd verified, 21,476 parameters confirmed, YUV chrominance verified, elevation bounds verified).

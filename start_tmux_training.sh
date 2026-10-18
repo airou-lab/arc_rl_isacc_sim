@@ -57,12 +57,12 @@ if [ ! -z "$LATEST_CKPT" ]; then
 fi
 
 # Pane 0: Start the actual training, pipe output to tee so it logs AND shows on screen
-tmux send-keys -t training:0.0 "export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; export PYTHONUNBUFFERED=1; /home/arika/IsaacLab/isaaclab.sh -p arcproLab/scripts/train_skrl.py --num_envs 20 --headless --enable_cameras --total_timesteps 5000000 $RESUME_FLAG 2>&1 | tee logs/skrl_phase1.log; echo 'Training process finished with exit code '\$?; bash" C-m
+tmux send-keys -t training:0.0 "export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True; export PYTHONUNBUFFERED=1; /home/arika/IsaacLab/isaaclab.sh -p arcproLab/scripts/train_skrl.py --num_envs 48 --headless --enable_cameras --total_timesteps 5000000 $RESUME_FLAG 2>&1 | tee logs/skrl_phase1.log; echo 'Training process finished with exit code '\$?; bash" C-m
 
 # Pane 1: Split vertically and start the autonomous self-healing sentinel
 tmux split-window -t training:0 -v
 # Give Isaac Sim 20 seconds to initialize simulation before starting the sentinel
 tmux send-keys -t training:0.1 'sleep 20 && python3 arcproLab/scripts/autonomous_sentinel.py --daemon --interval 30.0' C-m
 
-echo "Started 20-env SKRL training (~8.5GB VRAM / CPU Streaming Architecture) + autonomous sentinel in tmux."
+echo "Started 48-env SKRL training (~7.8GB VRAM / CPU Streaming Architecture) + autonomous sentinel in tmux."
 echo "Run 'tmux attach -t training' to view it live!"

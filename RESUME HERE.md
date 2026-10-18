@@ -1,34 +1,39 @@
 # CLEARSET RESUME HERE
 
 ## Active Execution State
-- **MILESTONE**: M004: Pure Vision Closed-Loop Lap Navigation
-- **Phase**: Phase 4.3: Balanced Full-Circuit Curriculum & Physical Boundary Robustness
-- **Task**: Task 4.3.6: Sector 4 Geometry Relocation, Height Termination & Champion Rollback
-- **Next Todo**: User visual inspection via ./debug.sh --sector 3 / ./debug.sh --sector 4; resume fleet training from agent_3587500_c1_champion.pt.
-- **Checkpoint Timestamp**: 2026-10-15T02:37:00.000000+00:00Z
-- **Git Commit**: 56f7644876c09fe7412b600fc2c50e0a524f5276
+- **MILESTONE**: M005: 48-Env Fleet Training & Full-Circuit Lap Mastery
+- **Phase**: Phase 3: Autonomous Fleet Training Supervision & Sector 4 Convergence
+- **Task**: Task 3.1: Supervise 48-camera fleet training (crossing 10M+ transitions) toward full lap milestone
+- **Next Todo**: Monitor 48-env training in tmux session 'training'; execute dual headless audit (Oracle & 5-sector) at Step 200k.
+- **Checkpoint Timestamp**: 2026-10-18T17:50:00.000000+00:00Z
+- **Git Commit**: 686561e0d658b26eeff1891886407bc48375f77f
+- **Roadmap Specification**: [`.planning/ROADMAP.md`](.planning/ROADMAP.md)
+
+## Strategic Milestone Pipeline
+1. **M005 (CURRENT)**: 48-Env High-Density Fleet Training & Full-Circuit Lap Mastery (>1,840 steps / 50.72m circuit).
+2. **M006 (NEXT)**: Smart Intersection Signals & Dynamic Traffic Light Coordination (`go_signal_manager.py` FSM, `intersection_node_server.py`, stop-bar dwell compliance).
+3. **M007 (UPCOMING)**: Multi-Robot Fleet Interaction & Forward Obstacle Detection / Avoidance (RealSense 32-bin depth corridor slicing, TTC headway penalty, opponent traffic, radar Doppler / 120 FPS MIPI abstraction).
 
 ## Persistent State Data Sources
-- **Turn Actions Database**: `.cta/cta_turns.db`
-- **Codebase RAG Database**: `.cta/cta_codebase.db`
+- **Turn Actions Database**: `.cs/cs_turns.db` (or `.cta/cta_turns.db`)
+- **Codebase RAG Database**: `.cs/cs_codebase.db` (or `.cta/cta_codebase.db`)
 - **Codebase Index Guide**: `cs_codebase_index.yml`
 - **Directory Structure**: `cs_directory_structure.yml`
+- **Full Project Roadmap**: `.planning/ROADMAP.md`
 
 ## Recent Completed Actions
-- **ROLLBACK** [SUCCESS]: Executed Option B rollback; quarantined Oct 13-14 runs into archive/corrupted_void_spawns_20261013-14/ and set active checkpoint to certified landmark champion agent_3587500_c1_champion.pt
-- **VERIFICATION** [SUCCESS]: Single-env simulation verified agent_3587500_c1_champion.pt stepped 30 iterations with zero errors
-- **FIX** [SUCCESS]: Relocated Sector 4 from unmeshed void (-2.335, -0.500) to solid asphalt at Intersection Approach (-6.000, -7.118, yaw=0.0) in events.py
-- **FIX** [SUCCESS]: Implemented height_termination in terminations.py and registered height_bounds in arcpro_env_cfg.py (Z < -0.05m or Z > 0.50m triggers instant reset)
-- **VERIFICATION** [SUCCESS]: 20-env simulation audit confirmed 0/20 underground envs (Z in [0.077m, 0.118m]) and verified hard reset trigger when forced below ground
-- **AUDIT** [SUCCESS]: 150-step simulation audit on agent_3937500.pt achieved 100% survival rate (5/5 envs) with healthy line clearances (18-19cm white)
+- **AUDIT** [COMPLETED]: Dual headless audit of `agent_150000.pt` vs Golden Oracle Stanley controller and 5-sector regression suite.
+  - Sector 2 (Corner 1 hairpin): PASS (200/200, 0.63 m/s)
+  - Sector 3 (Leg 2 sprint): PASS (200/200, 0.90 m/s)
+  - Sector 5 (North straight & bend): PASS (200/200, 0.63 m/s)
+  - Sector 4 (Intersection turn-in): FAIL (Crashed @ Step 120, overspeeding at 0.78 m/s without left steering lock)
+- **PLANNING** [COMPLETED]: Formulated M005 $\to$ M006 $\to$ M007 ClearSet engineering roadmap and obstacle avoidance architecture.
+- **EXECUTION** [SUCCESS]: Resumed 48-env fleet training under Autonomous Sentinel with clean VRAM footprint (1.5 GB $\to$ 7.2 GB).
 
 ## Open Issues, Concerns & Learnings
-- **LEARNING** (Deterministic Policy Survival vs Stochastic Exploration Lengths): Strict eval-mode benchmarking on agent_3937500.pt confirmed the policy genuinely navigates 553 steps and 645 waypoints at 0.63 m/s (matching the rolling average Len 350-550 and WPs 600-690 reported in training). The outlier 1,000–1,600 step runs seen in live training benefit from Gaussian exploration noise nudging the vehicle away from shoulders; in deterministic mode, a slight straightaway drift bias accumulates over ~100 steps until the outer white line is touched on the West straight.
-- **LEARNING** (Straightaway Sprint Drift vs Cornering Mechanics Root Cause): Side-by-side benchmarking proved the policy had already learned Corner 2 intersection mechanics and navigates it cleanly with 0 collisions. The failure mode in Sector 3 audits was high-speed straightaway sprinting (0.92 m/s) on narrow 44cm lanes, accumulating +16.9cm leftward lateral error and clipping the double yellow line 2.4m before the turn entry. Lowering the cruising clamp to 0.65 m/s, increasing overspeed penalty to 3.5x, and bolstering yellow line margin to 19cm resolves this failure mode.
-- **LEARNING** (Intersection Corridor Envelope and Turn Token Prompt Cutoff): Proved that Sector 4 was prematurely terminated at step 369 because of a rigid 0.40m envelope limit in an 8m open intersection despite healthy line clearances. Furthermore, Corner 1 and Corner 4 turn tokens lingered 1.7m onto straightaways, commanding left turns into the double yellow line. Tightening shutoffs and expanding intersection corridor to 0.55m completely resolves these edge-case terminations.
-- **LEARNING** (Leg 2 Yellow Line Proximity Drift and Corner Pre-Braking Resolution): Heavy invasive audit revealed that asymmetrical boundary thresholds (16cm yellow vs 18cm white) encouraged yellow line hugging on Leg 2, while sub-linear speed tracking allowed 0.95 m/s sprinting into 1.2m radius turns. Symmetrizing thresholds to 18cm and adding corner overspeed suppression completely aligns braking and lane centering incentives.
-- **LEARNING** (Corner 1 & Corner 4 Centerline Waypoint Defect Resolution): Deep waypoint audit revealed that Corner 1 and Corner 4 previously used naive elliptical arcs with R=1.7m that crossed into the oncoming traffic lane and clipped directly on top of the double yellow line (dist_y = 0.09cm at WP 1254). Following the centerline forced the 28cm car to straddle the yellow line and trigger instant resets. Re-centered the arcs using radius 0.50m centered at (-15.705, -6.60) and (-15.705, 6.60), ensuring minimum clearance to both white and yellow lines is >= 17.7cm everywhere on the circuit (20.0cm yellow / 29.9cm white in C1).
-- **ISSUE** (Intersection Gate Box Discrepancy & Turn Token Sequence): Gate points begin at X=-6.32m on Leg 2. Setting in_permissive_box at X>=-6.2m left an 80cm gap (X in [-7.0, -6.2]) where the vehicle approaches the intersection stop markings with dist_g active but without gate permeability, causing instant straightaway termination before reaching intersection. In addition, turn_token=-1.0 must activate early at X>-6.8m and persist through Y<=-2.4m so the policy executes the 4.1m radius turn into the Northbound straight without washing out into the east cliff (X>-2.08m).
+- **LEARNING** (Intersection Turn-In Failure Root Cause & Golden Oracle Comparison): Side-by-side benchmarking proved the policy has mastered C1, Leg 2, and the North Bend, but treats the Sector 4 intersection entry as an ongoing straightaway sprint (0.78 - 0.88 m/s) while holding neutral/slight right steering (-0.04 to -0.12). Oracle initiates left lock (+0.21) at X=-5.8m. Active `intersection_expert_guidance` (+100.0) and -400.0 collision penalty are actively pulling policy toward pre-braking and early turn lock.
+- **LEARNING** (Sensor-Agnostic Obstacle Avoidance Architecture): Established 32-bin virtual range scan from horizontal RealSense depth corridor slicing (rows 90-130 min-pooling). Replaces heavy, high-latency monocular ViTs (DepthAnything) with <0.2ms zero-GPU compute, scaling seamlessly to automotive mmWave radar (Doppler velocity) and 120 FPS MIPI CSI-2 global shutter cameras.
+- **LEARNING** (Corner 1 & Corner 4 Centerline Waypoint Defect Resolution): Re-centered arcs using radius 0.50m centered at (-15.705, -6.60) and (-15.705, 6.60), ensuring minimum clearance to both white and yellow lines >= 17.7cm everywhere on the circuit.
 
 ## Resume Instructions
 1. Reset or clear the screen safely using `/clear` or `/cs-clear`.
