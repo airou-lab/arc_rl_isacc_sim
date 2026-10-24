@@ -4,8 +4,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import torch
-from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
+from isaaclab.managers import SceneEntityCfg
 from mdp.curriculum_config import get_lookahead_distance
 from mdp.track_manager import get_track_manager
 
@@ -205,21 +205,15 @@ def _compute_telemetry(
     env.extras["dist_w"] = dist_w
 
     # Asymmetric Actor-Critic (AAC) Routing:
-    # Slot 10 provides Lookahead Route Curvature (Pre-Braking Architecture), accessible to BOTH Actor and Critic.
-    # Slots 8, 9, 11 (lat_err, head_err, distance) remain privileged coordinates:
-    # - Actor receives strictly 0.0 (forces vision-only lane following via camera).
-    # - Critic receives unmasked values (provides low-variance value function baseline).
-    if not masked:
-        obs[:, 8] = env.extras["lat_err"]
-        obs[:, 9] = env.extras["head_err"]
-        obs[:, 10] = env.extras["lookahead_kappa"]
-        if "distance" in env.extras:
-            obs[:, 11] = env.extras["distance"]
-    else:
-        obs[:, 8] = 0.0
-        obs[:, 9] = 0.0
-        obs[:, 10] = env.extras["lookahead_kappa"]
-        obs[:, 11] = 0.0
+    # Populate full unmasked telemetry in the shared observation vector so ARCProCritic
+    # (which slices state[:, -12:] from RandomMemory) receives ground-truth privileged state.
+    # ARCProActor strictly masks slots [8, 9, 11] (lat_err, head_err, distance) to 0.0
+    # inside ARCProActor.compute() before self.policy_head, remaining 100% vision-driven.
+    obs[:, 8] = env.extras["lat_err"]
+    obs[:, 9] = env.extras["head_err"]
+    obs[:, 10] = env.extras["lookahead_kappa"]
+    if "distance" in env.extras:
+        obs[:, 11] = env.extras["distance"]
 
     # Final verification for NaNs
     nan_mask = torch.isnan(obs)

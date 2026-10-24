@@ -1,5 +1,6 @@
-import torch
 import argparse
+
+import torch
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Rule based physics test")
@@ -8,8 +9,9 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 from isaaclab.envs import ManagerBasedRLEnv
+
+from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 
 def main():

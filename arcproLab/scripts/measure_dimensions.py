@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Dimension measurement diagnostic.")
@@ -13,15 +14,16 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import sys
 import os
+import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-import torch
 import omni.usd
-from pxr import UsdGeom
+import torch
 from isaaclab.envs import ManagerBasedRLEnv
+from pxr import UsdGeom
+
 from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 

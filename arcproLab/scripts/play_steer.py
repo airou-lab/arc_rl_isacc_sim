@@ -1,4 +1,5 @@
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Play SKRL ARCPro Policy")
@@ -16,8 +17,8 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import sys
 import os
+import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
@@ -34,11 +35,12 @@ from isaaclab.envs import ManagerBasedRLEnv
 
 print("Importing ARCPro modules...")
 sys.stdout.flush()
-from arcproLab.arcpro_env_cfg import ARCProEnvCfg
-from skrl.envs.wrappers.torch import IsaacLabWrapper
-from arcproLab.agents.skrl_wrappers import SKRLFlattenWrapper
-
 import traceback
+
+from skrl.envs.wrappers.torch import IsaacLabWrapper
+
+from arcproLab.agents.skrl_wrappers import SKRLFlattenWrapper
+from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 try:
     print("Configuring environment...")

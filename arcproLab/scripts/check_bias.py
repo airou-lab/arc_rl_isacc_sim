@@ -1,4 +1,5 @@
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Check for steering/physical bias.")
@@ -10,13 +11,14 @@ simulation_app = app_launcher.app
 
 import os
 import sys
+
 import torch
 
 # Add arcproLab to path
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from arcpro_env_cfg import ARCProEnvCfg
 from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab.utils.math import euler_xyz_from_quat
-from arcpro_env_cfg import ARCProEnvCfg
 
 
 def main():

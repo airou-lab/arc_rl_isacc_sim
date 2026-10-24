@@ -1,4 +1,5 @@
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
@@ -14,8 +15,9 @@ simulation_app = app_launcher.app
 
 try:
     from pxr import Usd, UsdGeom
+
     print("SUCCESS: pxr imported after AppLauncher")
 except ImportError as e:
     print(f"FAILURE: {e}")
-    
+
 simulation_app.close()

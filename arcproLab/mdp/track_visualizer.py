@@ -6,6 +6,7 @@
 """USD Debug Sphere Markers Visualization for Track Boundaries and Centerline."""
 
 import os
+
 import numpy as np
 import torch
 
@@ -21,10 +22,10 @@ def refresh_track_visuals(tm, target_lane_offset: float = 0.0) -> None:
                     wp_np, device=tm.device, dtype=torch.float32
                 )
 
-        from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
         import isaaclab.sim as sim_utils
-        from pxr import UsdGeom, Gf, Usd
         import omni.usd
+        from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
+        from pxr import Gf, Usd, UsdGeom
 
         stage = omni.usd.get_context().get_stage()
         env0_prim = stage.GetPrimAtPath("/World/envs/env_0")
@@ -68,9 +69,7 @@ def refresh_track_visuals(tm, target_lane_offset: float = 0.0) -> None:
             if pts is None or len(pts) == 0:
                 return None
             if isinstance(pts, np.ndarray):
-                pts_t = torch.from_numpy(pts).to(
-                    device=tm.device, dtype=torch.float32
-                )
+                pts_t = torch.from_numpy(pts).to(device=tm.device, dtype=torch.float32)
             else:
                 pts_t = pts.to(device=tm.device, dtype=torch.float32)
 

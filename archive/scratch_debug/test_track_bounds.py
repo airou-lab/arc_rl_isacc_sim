@@ -1,9 +1,6 @@
-import os
-import sys
-import torch
+import argparse
 
 from isaaclab.app import AppLauncher
-import argparse
 
 parser = argparse.ArgumentParser()
 AppLauncher.add_app_launcher_args(parser)
@@ -12,6 +9,7 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 from isaaclab.envs import ManagerBasedEnv
+
 from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 env_cfg = ARCProEnvCfg()
@@ -24,6 +22,7 @@ env = ManagerBasedEnv(cfg=env_cfg)
 # Get Track Bounding Box
 import omni.usd
 from pxr import UsdGeom
+
 stage = omni.usd.get_context().get_stage()
 track_prim = stage.GetPrimAtPath("/World/envs/env_0/Track")
 if track_prim.IsValid():

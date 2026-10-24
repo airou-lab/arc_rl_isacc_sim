@@ -1,4 +1,5 @@
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Play SKRL ARCPro Policy and Save Frames")
@@ -9,7 +10,12 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import sys, os, cv2, numpy as np, torch
+import os
+import sys
+
+import cv2
+import numpy as np
+import torch
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
@@ -25,12 +31,13 @@ if args_cli.checkpoint is None:
                 c.append(os.path.join(r, n))
     args_cli.checkpoint = max(c, key=os.path.getmtime) if c else None
 
+from agents.skrl_wrappers import SKRLFlattenWrapper
 from isaaclab.envs import ManagerBasedRLEnv
 from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
-from arcproLab.arcpro_env_cfg import ARCProEnvCfg
-from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic
 from skrl.envs.wrappers.torch import IsaacLabWrapper
-from agents.skrl_wrappers import SKRLFlattenWrapper
+
+from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic
+from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 env_cfg = ARCProEnvCfg()
 env_cfg.scene.num_envs = 1

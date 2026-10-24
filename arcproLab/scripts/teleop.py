@@ -1,4 +1,5 @@
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Teleop ARCPro F1Tenth")
@@ -7,16 +8,18 @@ AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 
-import torch
-import sys
 import os
+import sys
+
 import pygame
+import torch
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 sys.path.insert(0, ROOT_DIR)
 
 from isaaclab.envs import ManagerBasedRLEnv
+
 from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 

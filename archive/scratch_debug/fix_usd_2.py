@@ -1,4 +1,5 @@
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser()
@@ -9,6 +10,7 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 from pxr import Usd, UsdGeom
+
 stage = Usd.Stage.Open("arcproLab/assets/robot/F1Tenth_Metric.usd")
 
 for prim_path in ["/Robot/Wheel_FL", "/Robot/Wheel_RL", "/Robot/Joint_Steer_L"]:

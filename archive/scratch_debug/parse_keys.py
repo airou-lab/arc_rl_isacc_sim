@@ -1,5 +1,8 @@
-import sys, glob
+import glob
+import sys
+
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
+
 files = glob.glob("logs/ppo_skrl/*/*/*tfevents*")
 if not files:
     print("No files found.")

@@ -11,14 +11,14 @@ visualization in track_visualizer.py, core runtime navigation in this module.
 """
 
 import os
+
 import numpy as np
 import torch
 
 from .track_usd_extractor import (
     collect_raw_marker_points_from_stage,
-    finalize_group as _finalize_group,
-    get_mesh_info as _get_mesh_info,
-    punch_holes as _punch_holes,
+)
+from .track_usd_extractor import (
     sample_waypoints as _sample_waypoints,
 )
 from .track_visualizer import refresh_track_visuals
@@ -147,11 +147,7 @@ class TrackManager:
 
     def save_cache(self):
         try:
-            y = (
-                self.raw_yellow_pts
-                if self.raw_yellow_pts is not None
-                else np.array([])
-            )
+            y = self.raw_yellow_pts if self.raw_yellow_pts is not None else np.array([])
             w = self.raw_white_pts if self.raw_white_pts is not None else np.array([])
             g = self.raw_gate_pts if self.raw_gate_pts is not None else np.array([])
             np.savez(self.cache_path, yellow=y, white=w, gate=g)
@@ -195,9 +191,9 @@ class TrackManager:
 
         # Gates distance (permeable)
         if self.gate_tensor is not None:
-            dist_g = torch.min(
-                torch.cdist(pos[:, :2], self.gate_tensor[:, :2]), dim=1
-            )[0]
+            dist_g = torch.min(torch.cdist(pos[:, :2], self.gate_tensor[:, :2]), dim=1)[
+                0
+            ]
         else:
             dist_g = torch.ones_like(dist_y) * 10.0
 
@@ -311,12 +307,12 @@ class TrackManager:
         cos_y = torch.cos(-yaw)
         sin_y = torch.sin(-yaw)
 
-        local_x = (
-            rel_pos[:, :, 0] * cos_y.unsqueeze(1) - rel_pos[:, :, 1] * sin_y.unsqueeze(1)
-        )
-        local_y = (
-            rel_pos[:, :, 0] * sin_y.unsqueeze(1) + rel_pos[:, :, 1] * cos_y.unsqueeze(1)
-        )
+        local_x = rel_pos[:, :, 0] * cos_y.unsqueeze(1) - rel_pos[
+            :, :, 1
+        ] * sin_y.unsqueeze(1)
+        local_y = rel_pos[:, :, 0] * sin_y.unsqueeze(1) + rel_pos[
+            :, :, 1
+        ] * cos_y.unsqueeze(1)
 
         return torch.stack((local_x, local_y), dim=-1).view(num_envs, -1)
 
@@ -378,19 +374,27 @@ class TrackManager:
             dir_float = dir_sign.to(dtype=torch.float32)
         else:
             val = -1 if float(track_dir) < 0 else 1
-            dir_sign = torch.full((num_envs,), val, device=self.device, dtype=torch.long)
+            dir_sign = torch.full(
+                (num_envs,), val, device=self.device, dtype=torch.long
+            )
             dir_float = dir_sign.to(dtype=torch.float32)
 
-        lookahead_indices = (
-            self.last_indices.to(device=self.device, dtype=torch.long)
-            + dir_sign * step_offset
-        ) % num_wps
-        lookahead_indices = (lookahead_indices + num_wps) % num_wps
+        fracs = torch.linspace(0.0, 1.0, steps=5, device=self.device)
+        step_offsets = torch.round(fracs * step_offset).to(dtype=torch.long)
 
-        kappa_wp = self.curvature_tensor[lookahead_indices].to(
+        base_indices = self.last_indices.to(
+            device=self.device, dtype=torch.long
+        ).unsqueeze(1)
+        window_indices = (
+            base_indices + dir_sign.unsqueeze(1) * step_offsets.unsqueeze(0)
+        ) % num_wps
+        window_indices = (window_indices + num_wps) % num_wps
+
+        kappa_window = self.curvature_tensor[window_indices].to(
             device=self.device, dtype=torch.float32
-        )
-        signed_curvature = kappa_wp * dir_float
+        ) * dir_float.unsqueeze(1)
+        max_idx = torch.argmax(torch.abs(kappa_window), dim=1, keepdim=True)
+        signed_curvature = torch.gather(kappa_window, dim=1, index=max_idx).squeeze(1)
 
         signed_curvature = torch.nan_to_num(
             signed_curvature, nan=0.0, posinf=3.0, neginf=-3.0

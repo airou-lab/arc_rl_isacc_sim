@@ -1,4 +1,5 @@
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(
@@ -11,18 +12,19 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.abspath("."))
 sys.path.insert(0, os.path.abspath("arcproLab"))
 
-import torch
 import gc
-from isaaclab.envs import ManagerBasedRLEnv
-from arcpro_env_cfg import ARCProEnvCfg
-from skrl.envs.wrappers.torch import IsaacLabWrapper
+
+import torch
 from agents.skrl_wrappers import SKRLFlattenWrapper
+from arcpro_env_cfg import ARCProEnvCfg
+from isaaclab.envs import ManagerBasedRLEnv
+from skrl.envs.wrappers.torch import IsaacLabWrapper
 
 
 def main():

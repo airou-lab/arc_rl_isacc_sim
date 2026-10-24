@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
@@ -17,8 +18,9 @@ simulation_app = app_launcher.app
 
 import os
 import sys
-import torch
+
 import numpy as np
+import torch
 
 # Add arcproLab to sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -26,10 +28,10 @@ ARCPRO_LAB_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if ARCPRO_LAB_DIR not in sys.path:
     sys.path.append(ARCPRO_LAB_DIR)
 
-from isaaclab.envs import ManagerBasedRLEnv
-from arcpro_env_cfg import ARCProEnvCfg
-from mdp.track_manager import get_track_manager
 import omni.usd
+from arcpro_env_cfg import ARCProEnvCfg
+from isaaclab.envs import ManagerBasedRLEnv
+from mdp.track_manager import get_track_manager
 from pxr import Usd, UsdGeom
 
 

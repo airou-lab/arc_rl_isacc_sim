@@ -3,12 +3,12 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-from pxr import Usd
+import re
+
 import isaaclab.sim as sim_utils
 import isaaclab.sim.schemas as schemas
 from isaaclab.sim.utils import clone, get_current_stage
-import re
-from pxr import UsdGeom
+from pxr import Usd, UsdGeom
 
 
 @clone
@@ -54,7 +54,7 @@ def spawn_f1tenth(
                     )
 
                     # Lower Center of Mass slightly to prevent flipping without clipping
-                    from pxr import UsdPhysics, Gf
+                    from pxr import Gf, UsdPhysics
 
                     mass_api = UsdPhysics.MassAPI.Apply(child)
                     if child_name == "Chassis":

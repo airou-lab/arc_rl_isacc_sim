@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Test intersection permeability.")
@@ -22,10 +23,11 @@ args_cli.enable_cameras = True
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import torch
 import os
 import sys
+
 import numpy as np
+import torch
 
 # Add arcproLab to sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))

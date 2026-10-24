@@ -1,10 +1,11 @@
-import torch
-import gymnasium as gym
 from dataclasses import dataclass, field
+
+import gymnasium as gym
+import isaaclab.envs.mdp.actions.actions_cfg as actions_cfg
+import torch
+from isaaclab.assets import Articulation
 from isaaclab.envs import ManagerBasedEnv
 from isaaclab.managers.action_manager import ActionTerm, ActionTermCfg
-from isaaclab.assets import Articulation
-import isaaclab.envs.mdp.actions.actions_cfg as actions_cfg
 
 
 @dataclass

@@ -1,4 +1,5 @@
 import torch
+
 B = 8
 vel = torch.rand(B)
 go_signal = torch.ones(B, 1)

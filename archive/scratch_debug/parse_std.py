@@ -1,5 +1,7 @@
-import sys, glob
+import glob
+
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
+
 files = glob.glob("logs/ppo_skrl/*/*/*tfevents*")
 files.sort(key=lambda x: x)
 ea = EventAccumulator(files[-1])

@@ -7,8 +7,9 @@ Verifies whether the physical vehicle, Ackermann steering, and electronic differ
 can negotiate Corner 1 without triggering roadmark contact termination (dist_w, dist_y).
 """
 
-import sys
 import os
+import sys
+
 import torch
 
 WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -24,6 +25,7 @@ app_launcher = AppLauncher({"headless": True, "num_envs": 1})
 simulation_app = app_launcher.app
 
 from isaaclab.envs import ManagerBasedRLEnv
+
 from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 

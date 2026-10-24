@@ -1,6 +1,7 @@
-import sys
-from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 import glob
+
+from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
+
 files = glob.glob("logs/ppo_skrl/20260727-205933/*/*tfevents*")
 ea = EventAccumulator(files[0])
 ea.Reload()

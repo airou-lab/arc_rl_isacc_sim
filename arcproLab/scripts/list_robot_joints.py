@@ -1,4 +1,5 @@
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="List all joint names and indices.")
@@ -10,8 +11,9 @@ simulation_app = app_launcher.app
 
 import os
 import sys
+
 from isaaclab.assets import Articulation
-from isaaclab.sim import SimulationContext, SimulationCfg
+from isaaclab.sim import SimulationCfg, SimulationContext
 
 # Add arcproLab to path
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))

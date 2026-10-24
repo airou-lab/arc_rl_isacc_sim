@@ -1,4 +1,5 @@
 import torch
+
 B = 8
 vel = torch.zeros(B)
 cond = vel < 0.3

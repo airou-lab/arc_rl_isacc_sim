@@ -12,6 +12,7 @@ to pinpoint the exact mechanism and location of divergence.
 
 import os
 import sys
+
 import numpy as np
 
 WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -27,21 +28,20 @@ launcher_args = {"headless": True, "num_envs": 1, "enable_cameras": True}
 app_launcher = AppLauncher(launcher_args)
 simulation_app = app_launcher.app
 
-import torch
 import gymnasium as gym
-
-from isaaclab.envs import ManagerBasedRLEnv
-from arcproLab.arcpro_env_cfg import ARCProEnvCfg
-from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic
+import torch
 from agents.skrl_wrappers import SKRLFlattenWrapper
-from skrl.envs.wrappers.torch import IsaacLabWrapper
+from isaaclab.envs import ManagerBasedRLEnv
 from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
-import arcproLab.mdp.curriculum_config as curr_cfg
-import arcproLab.mdp.events as mdp_events
+from skrl.envs.wrappers.torch import IsaacLabWrapper
+
+from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic
+from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 
 class WarmupActionWrapper(gym.Wrapper):
     """Brakes during initial simulation warmup."""
+
     def __init__(self, env, warmup_steps=10):
         super().__init__(env)
         self.warmup_steps = warmup_steps
@@ -55,7 +55,9 @@ class WarmupActionWrapper(gym.Wrapper):
         return self.env.step(action)
 
 
-def teleport_to_intersection_approach(env, x: float = -5.800, y: float = -7.100, yaw: float = 0.0):
+def teleport_to_intersection_approach(
+    env, x: float = -5.800, y: float = -7.100, yaw: float = 0.0
+):
     """Deterministically teleports the vehicle to Corner 2 / Intersection Approach."""
     base_env = env.unwrapped
     robot = base_env.scene["robot"]
@@ -158,12 +160,8 @@ def run_oracle_controller(env, max_steps: int = 350):
             if "dist_yellow" in info
             else 0.0
         )
-        lat_err = (
-            float(info["lat_err"][0].item()) if "lat_err" in info else 0.0
-        )
-        head_err = (
-            float(info["head_err"][0].item()) if "head_err" in info else 0.0
-        )
+        lat_err = float(info["lat_err"][0].item()) if "lat_err" in info else 0.0
+        head_err = float(info["head_err"][0].item()) if "head_err" in info else 0.0
 
         # Closed-loop Stanley Steering (verified from test_manual_left_turn.py)
         steer_target = -2.5 * lat_err - 1.2 * head_err
@@ -240,12 +238,8 @@ def run_policy_controller(env, agent, checkpoint_path: str, max_steps: int = 350
             if "dist_yellow" in info
             else 0.0
         )
-        lat_err = (
-            float(info["lat_err"][0].item()) if "lat_err" in info else 0.0
-        )
-        head_err = (
-            float(info["head_err"][0].item()) if "head_err" in info else 0.0
-        )
+        lat_err = float(info["lat_err"][0].item()) if "lat_err" in info else 0.0
+        head_err = float(info["head_err"][0].item()) if "head_err" in info else 0.0
 
         with torch.no_grad():
             _, _, outputs = agent.act(obs, timestep=0, timesteps=0)
@@ -276,7 +270,7 @@ def run_policy_controller(env, agent, checkpoint_path: str, max_steps: int = 350
         is_trunc = bool(truncated[0].item())
         if is_term or is_trunc:
             done = True
-            outcome = f"CRASHED @ Step {step_count} (W: {dist_w_cm:.1f}cm, Y: {dist_y_cm:.1f}cm, LatErr: {lat_err*100:+.1f}cm)"
+            outcome = f"CRASHED @ Step {step_count} (W: {dist_w_cm:.1f}cm, Y: {dist_y_cm:.1f}cm, LatErr: {lat_err * 100:+.1f}cm)"
 
     if not done:
         outcome = f"COMPLETED {step_count} STEPS"
@@ -327,7 +321,9 @@ def main():
     oracle_telem, oracle_outcome = run_oracle_controller(env, max_steps=350)
 
     # 4. Run Controller 2: Neural Policy
-    policy_telem, policy_outcome = run_policy_controller(env, agent, ckpt_path, max_steps=350)
+    policy_telem, policy_outcome = run_policy_controller(
+        env, agent, ckpt_path, max_steps=350
+    )
 
     env.close()
 
@@ -343,7 +339,26 @@ def main():
     print(header)
     print("-" * 105)
 
-    sample_steps = [10, 25, 50, 75, 100, 125, 150, 175, 200, 225, 240, 246, 260, 280, 300, 320, 340, 350]
+    sample_steps = [
+        10,
+        25,
+        50,
+        75,
+        100,
+        125,
+        150,
+        175,
+        200,
+        225,
+        240,
+        246,
+        260,
+        280,
+        300,
+        320,
+        340,
+        350,
+    ]
     oracle_dict = {t["step"]: t for t in oracle_telem}
     policy_dict = {t["step"]: t for t in policy_telem}
 
@@ -357,7 +372,15 @@ def main():
         if o and p and divergence_step is None:
             lat_diff = abs(p["lat_err_cm"] - o["lat_err_cm"])
             if lat_diff > 5.0 and s > 20:
-                divergence_step = (s, o["x"], o["y"], p["speed"], o["speed"], p["lat_err_cm"], o["lat_err_cm"])
+                divergence_step = (
+                    s,
+                    o["x"],
+                    o["y"],
+                    p["speed"],
+                    o["speed"],
+                    p["lat_err_cm"],
+                    o["lat_err_cm"],
+                )
 
         if s in sample_steps or (p and s == len(policy_telem)):
             # Determine Track Zone
@@ -379,7 +402,9 @@ def main():
             p_st = f"{p['steer']:+.2f}" if p else "--"
             p_lat = f"{p['lat_err_cm']:+.1f}cm" if p else "--"
 
-            d_lat = f"{abs(p['lat_err_cm'] - o['lat_err_cm']):.1f}cm" if (o and p) else "--"
+            d_lat = (
+                f"{abs(p['lat_err_cm'] - o['lat_err_cm']):.1f}cm" if (o and p) else "--"
+            )
 
             print(
                 f"{s:<5d} | {zone:<12} | "
@@ -398,8 +423,12 @@ def main():
         d_s, d_x, d_y, d_pspd, d_ospd, d_plat, d_olat = divergence_step
         print(f"\n  CRITICAL DIVERGENCE DETECTED @ Step {d_s}:")
         print(f"    Location           : X = {d_x:.2f} m, Y = {d_y:.2f} m")
-        print(f"    Speed Discrepancy  : Policy = {d_pspd:.2f} m/s vs Oracle = {d_ospd:.2f} m/s (Δ = {d_pspd - d_ospd:+.2f} m/s)")
-        print(f"    Lateral Deviation  : Policy = {d_plat:+.1f} cm vs Oracle = {d_olat:+.1f} cm (Δ = {abs(d_plat - d_olat):.1f} cm)")
+        print(
+            f"    Speed Discrepancy  : Policy = {d_pspd:.2f} m/s vs Oracle = {d_ospd:.2f} m/s (Δ = {d_pspd - d_ospd:+.2f} m/s)"
+        )
+        print(
+            f"    Lateral Deviation  : Policy = {d_plat:+.1f} cm vs Oracle = {d_olat:+.1f} cm (Δ = {abs(d_plat - d_olat):.1f} cm)"
+        )
     print("=" * 70)
 
 

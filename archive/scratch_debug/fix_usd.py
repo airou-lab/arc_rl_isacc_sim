@@ -1,5 +1,6 @@
 import argparse
 import os
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser()
@@ -9,7 +10,7 @@ args_cli.headless = True
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-from pxr import Usd, UsdGeom, Gf
+from pxr import Gf, Usd, UsdGeom
 
 input_usd = "arcproLab/assets/robot/F1Tenth_Metric.usd"
 output_usd = "arcproLab/assets/robot/F1Tenth_Metric_Fixed.usd"
@@ -20,6 +21,7 @@ if os.path.exists(output_usd):
 
 # Copy the original file to the new location first to preserve everything else
 import shutil
+
 shutil.copy2(input_usd, output_usd)
 
 # Open the NEW file
@@ -34,13 +36,16 @@ else:
     # Check if there's already a rotate op
     rotate_op = None
     for op in xform.GetOrderedXformOps():
-        if op.GetOpType() in [UsdGeom.XformOp.TypeRotateXYZ, UsdGeom.XformOp.TypeRotateZ]:
+        if op.GetOpType() in [
+            UsdGeom.XformOp.TypeRotateXYZ,
+            UsdGeom.XformOp.TypeRotateZ,
+        ]:
             rotate_op = op
             break
-            
+
     if rotate_op is None:
         rotate_op = xform.AddRotateZOp()
-        
+
     current_rot = rotate_op.Get()
     if current_rot is None:
         if rotate_op.GetOpType() == UsdGeom.XformOp.TypeRotateXYZ:
@@ -52,7 +57,7 @@ else:
             rotate_op.Set(current_rot + Gf.Vec3f(0, 0, 180))
         else:
             rotate_op.Set(current_rot + 180)
-            
+
     stage.Save()
     print("Successfully rotated /Robot/Chassis/Geom 180 degrees in new file!")
 

@@ -4,6 +4,7 @@ This script loads the environment and runs a simple loop to verify spawning and 
 """
 
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
@@ -20,11 +21,11 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 """Rest of the imports"""
-import torch
 import gymnasium as gym
-from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
-from isaaclab.envs import ManagerBasedRLEnv
+import torch
 from arcpro_env_cfg import ARCProEnvCfg
+from isaaclab.envs import ManagerBasedRLEnv
+from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
 
 # Manual registration
 gym.register(

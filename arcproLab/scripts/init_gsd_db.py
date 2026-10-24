@@ -1,5 +1,5 @@
-import sqlite3
 import os
+import sqlite3
 
 db_path = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "../../../.gsd/archive.db")

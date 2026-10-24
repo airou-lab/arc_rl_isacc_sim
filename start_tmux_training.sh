@@ -10,8 +10,8 @@ fi
 
 # Kill any existing training session
 tmux kill-session -t training 2>/dev/null || true
-pkill -f train_policy.py 2>/dev/null || true
-pkill -f train_skrl.py 2>/dev/null || true
+pkill -f "[t]rain_policy.py" 2>/dev/null || true
+pkill -f "[t]rain_skrl.py" 2>/dev/null || true
 
 # Backup previous training log if it exists
 mkdir -p logs
@@ -25,6 +25,7 @@ tmux new-session -d -s training
 # Automatically resume from specified checkpoint or the newest saved checkpoint
 if [ "${1:-}" = "--fresh" ] || [ "${1:-}" = "--scratch" ] || [ "${1:-}" = "clean" ] || [ "${1:-}" = "--clean" ]; then
     LATEST_CKPT=""
+    rm -f logs/sentinel_state.json
     echo "Starting clean training from step 0 (fresh start)."
 elif [ -n "${1:-}" ]; then
     LATEST_CKPT="$1"
@@ -40,14 +41,7 @@ else
         LATEST_CKPT=$(find "$LOG_SUBDIR" -name "best_agent.pt" ! -path "*corrupted*" -printf "%T@ %p\n" 2>/dev/null | sort -n | tail -n 1 | awk '{print $2}')
     fi
     if [ -z "$LATEST_CKPT" ]; then
-        CHAMPION="archive/landmark_checkpoints/agent_3587500_c1_champion.pt"
-        if [ ! -f "$CHAMPION" ]; then
-            CHAMPION="archive/landmark_checkpoints/agent_2587500_corner_plateau_baseline.pt"
-        fi
-        if [ -f "$CHAMPION" ]; then
-            LATEST_CKPT="$CHAMPION"
-            echo "No active checkpoints in $LOG_SUBDIR. Falling back to certified champion: $LATEST_CKPT"
-        fi
+        echo "No active checkpoints found in $LOG_SUBDIR. Starting fresh training with current SpatialSoftmax2d architecture."
     fi
 fi
 RESUME_FLAG=""

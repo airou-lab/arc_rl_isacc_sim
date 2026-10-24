@@ -1,6 +1,8 @@
 # RESUME — Context for Next Agent Session
-**Last Updated:** 2026-09-08
+**Last Updated:** 2026-09-08 (Sections 3–4 updated 2026-10-23)
 **Active Branch:** `feature/realsense-realistic-kinematics`
+
+> **2026-10-23 NOTE:** Sections 1–2 are historical (old 453k-parameter dense architecture). The live state is in `RESUME HERE.md` at the repo root. Checkpoints from before 2026-10-21 (e.g. `agent_3587500_c1_champion.pt`, `agent_3687500.pt`, `agent_4141500_peak.pt`) **cannot be loaded** into the current 21k Spatial Softmax model (state-dict size mismatch, see Issue 118).
 
 ---
 
@@ -135,20 +137,18 @@
 
 ---
 
-## 3. Active Background Infrastructure
+## 3. Active Background Infrastructure (as of 2026-10-23)
 
-- **Training Session:** Cleanly stopped; GPU VRAM free (1.4 GB / 12.28 GB) ready for warm restart.
-- **Candidate Checkpoint to Resume:** [`logs/ppo_skrl_rollback_clean-baseline/20261009-111400/26-10-09_11-14-00-403874_TelemetryPPO/checkpoints/agent_3687500.pt`](file:///home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim/logs/ppo_skrl_rollback_clean-baseline/20261009-111400/26-10-09_11-14-00-403874_TelemetryPPO/checkpoints/agent_3687500.pt) (Crossed Step 3,688,748 / 73.8M transitions).
-- **Landmark Baselines:** Archived in [`archive/landmark_checkpoints/`](file:///home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim/archive/landmark_checkpoints/).
+- **Architecture:** 21,476-param Spatial Softmax actor (Issue 117). Fresh start 2026-10-21 16:33 (Issue 118).
+- **Training Session:** tmux `training` — pane 0.0 `train_skrl.py --num_envs 48 --headless --enable_cameras`, pane 0.1 `autonomous_sentinel.py --daemon --interval 30.0`. Target: 2M steps.
+- **Active Run:** `logs/ppo_skrl_rollback_clean-baseline/20261022-192651/` (step ~366k at 11:13 2026-10-23). Sentinel auto-restarts on VRAM > 11.5 GB (~every 12–14h) and resumes from the newest `agent_*.pt`, so a newer run dir may exist.
+- **Landmark Baselines:** Everything in [`archive/landmark_checkpoints/`](file:///home/arika/Documents/arcpro/arcpro_system/src/examples/ARCPro_RL/arc_rl_isacc_sim/archive/landmark_checkpoints/) is 453k-architecture and **incompatible** with the current model. Do not resume from it.
 
 ---
 
 ## 4. Next Steps for Incoming Agent / User
 
-1. **Launch Warm-Restarted Training**:
-   ```bash
-   ./start_tmux_training.sh logs/ppo_skrl_rollback_clean-baseline/20261009-111400/26-10-09_11-14-00-403874_TelemetryPPO/checkpoints/agent_3687500.pt
-   ```
-2. **Verify Fleet Telemetry & Sentinel**: Check `tmux attach -t training` or `logs/skrl_phase1.log`.
-3. **Evaluate in GUI**: Once trained on the new permeability and early turn token, verify full circuit lap via `./debug.sh`.
+1. **Check training:** `tail logs/skrl_phase1.log`, `tail logs/sentinel.log`, `nvidia-smi`. Do not restart unless it is down; if needed, `./start_tmux_training.sh` with no args auto-resumes from the newest checkpoint.
+2. **Open concern (cs_turns concern #35):** the deterministic policy does not turn at Sector 4. Probing the policy head with turn_token (input index 64) = -1.0 moves steering only +0.003..+0.006 rad (200k–350k). Re-probe each new checkpoint; if still ~0 by ~500k, investigate turn_token reward/obs coupling before training further.
+3. **GUI check:** `./debug.sh --sector 4` needs ~2.3 GB VRAM. Stop training first if VRAM is above ~9 GB.
 

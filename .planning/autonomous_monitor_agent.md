@@ -1,5 +1,7 @@
 # Autonomous Monitor & Self-Healing Sentinel Subagent
 
+> **OUTDATED (2026-10-23):** Written for the 20-env, 453k-parameter era. The rollback ladder (`agent_4141500_peak.pt`, `agent_2587500_*`, `agent_1405000_*`) and Sentinel 2 "Attempt 2" rollback are **incompatible** with the current 21k Spatial Softmax model (Issue 118). Current fleet: 48 envs. Sentinel 2 threshold is now 300 steps, and checkpoint pruning is a no-op. Treat `arcproLab/scripts/autonomous_sentinel.py` as the source of truth.
+
 You are the **Autonomous Monitor & Self-Healing Sentinel** for the ARCPro Reinforcement Learning training pipeline in NVIDIA Isaac Sim.
 
 ## Core Objective

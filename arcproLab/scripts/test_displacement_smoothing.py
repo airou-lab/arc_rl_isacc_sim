@@ -4,9 +4,10 @@ Test Normal Midpoint Projection Centering.
 """
 
 import os
+
 import numpy as np
-from scipy.spatial import cKDTree
 from scipy.ndimage import gaussian_filter1d
+from scipy.spatial import cKDTree
 
 
 def main():

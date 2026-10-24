@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Verify the 1.8m-2.7m Safe Zone visually.")
@@ -13,15 +14,16 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import sys
 import os
+import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 import torch
 from isaaclab.envs import ManagerBasedRLEnv
-from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 from mdp.track_manager import get_track_manager
+
+from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 
 def main():

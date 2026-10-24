@@ -9,6 +9,7 @@ the episode lengths reported during training.
 
 import os
 import sys
+
 import numpy as np
 
 WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -24,21 +25,22 @@ launcher_args = {"headless": True, "num_envs": 1, "enable_cameras": True}
 app_launcher = AppLauncher(launcher_args)
 simulation_app = app_launcher.app
 
-import torch
 import gymnasium as gym
-
-from isaaclab.envs import ManagerBasedRLEnv
-from arcproLab.arcpro_env_cfg import ARCProEnvCfg
-from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic
+import torch
 from agents.skrl_wrappers import SKRLFlattenWrapper
-from skrl.envs.wrappers.torch import IsaacLabWrapper
+from isaaclab.envs import ManagerBasedRLEnv
 from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
+from skrl.envs.wrappers.torch import IsaacLabWrapper
+
 import arcproLab.mdp.curriculum_config as curr_cfg
 import arcproLab.mdp.events as mdp_events
+from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic
+from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 
 class WarmupActionWrapper(gym.Wrapper):
     """Brakes during initial simulation warmup."""
+
     def __init__(self, env, warmup_steps=10):
         super().__init__(env)
         self.warmup_steps = warmup_steps
@@ -48,7 +50,7 @@ class WarmupActionWrapper(gym.Wrapper):
             mask = self.env.unwrapped.episode_length_buf < self.warmup_steps
             action = action.clone()
             action[mask, 0] = 0.0  # Steer centered
-            action[mask, 1] = -1.0 # Brake
+            action[mask, 1] = -1.0  # Brake
         return self.env.step(action)
 
 
@@ -139,7 +141,9 @@ def run_reach_evaluation(env, agent, ckpt_path: str, max_steps: int = 2500):
     ckpt_name = os.path.basename(ckpt_path)
     print("\n" + "=" * 90)
     print(f"  DETERMINISTIC EVALUATION: {ckpt_name}")
-    print(f"  Max Steps: {max_steps} | Mode: EVAL (Mean Actions) | Spawn: Sector 1 (Start Line)")
+    print(
+        f"  Max Steps: {max_steps} | Mode: EVAL (Mean Actions) | Spawn: Sector 1 (Start Line)"
+    )
     print("=" * 90)
 
     load_policy_weights(agent, ckpt_path)
@@ -180,9 +184,7 @@ def run_reach_evaluation(env, agent, ckpt_path: str, max_steps: int = 2500):
             else 0.0
         )
         dist_w = (
-            float(info["dist_white"][0].item()) * 100.0
-            if "dist_white" in info
-            else 0.0
+            float(info["dist_white"][0].item()) * 100.0 if "dist_white" in info else 0.0
         )
         dist_y = (
             float(info["dist_yellow"][0].item()) * 100.0
@@ -194,11 +196,7 @@ def run_reach_evaluation(env, agent, ckpt_path: str, max_steps: int = 2500):
             if "track_wp_delta" in info
             else 0.0
         )
-        lat_err = (
-            float(info["lat_err"][0].item()) * 100.0
-            if "lat_err" in info
-            else 0.0
-        )
+        lat_err = float(info["lat_err"][0].item()) * 100.0 if "lat_err" in info else 0.0
         rew_val = float(reward.float().mean().item())
 
         total_rew += rew_val
@@ -216,7 +214,34 @@ def run_reach_evaluation(env, agent, ckpt_path: str, max_steps: int = 2500):
         zone = get_zone_name(local_x, local_y)
 
         # Log periodically or at key milestones
-        if step_count in (1, 10, 25, 50, 100, 150, 200, 250, 300, 400, 500, 600, 750, 900, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400) or step_count % 100 == 0:
+        if (
+            step_count
+            in (
+                1,
+                10,
+                25,
+                50,
+                100,
+                150,
+                200,
+                250,
+                300,
+                400,
+                500,
+                600,
+                750,
+                900,
+                1000,
+                1200,
+                1400,
+                1600,
+                1800,
+                2000,
+                2200,
+                2400,
+            )
+            or step_count % 100 == 0
+        ):
             print(
                 f"{step_count:<6d} | {zone:<28} | ({local_x:6.2f}, {local_y:6.2f}) | {speed_val:5.2f}m/s | {steer_val:+5.2f} | {dist_w:5.1f}cm | {dist_y:5.1f}cm | {lat_err:+6.1f}cm | {wps_val:4.0f}"
             )
@@ -247,7 +272,9 @@ def run_reach_evaluation(env, agent, ckpt_path: str, max_steps: int = 2500):
     print(f"  Checkpoint Tested : {ckpt_name}")
     print(f"  Outcome           : {outcome}")
     print(f"  Total Steps       : {step_count} / {max_steps}")
-    print(f"  Avg Speed         : {np.mean(speeds):.2f} m/s (Max: {np.max(speeds):.2f} m/s)")
+    print(
+        f"  Avg Speed         : {np.mean(speeds):.2f} m/s (Max: {np.max(speeds):.2f} m/s)"
+    )
     print(f"  Min White Margin  : {min_dist_w:.1f} cm")
     print(f"  Min Yellow Margin : {min_dist_y:.1f} cm")
     print(f"  Cumulative WPs    : {max_wps:.0f} waypoints")

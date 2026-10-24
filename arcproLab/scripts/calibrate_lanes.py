@@ -1,4 +1,5 @@
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Lane Calibration Script")
@@ -8,10 +9,11 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
+import os
+import sys
+
 import torch
 from isaaclab.envs import ManagerBasedRLEnv
-import sys
-import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from arcpro_env_cfg import ARCProEnvCfg

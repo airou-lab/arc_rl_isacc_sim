@@ -6,6 +6,7 @@
 """Script to generate track waypoints from USD stage."""
 
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
@@ -18,15 +19,16 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import os
-import matplotlib.pyplot as plt
 import sys
+
+import matplotlib.pyplot as plt
 
 # Add parent directory to sys.path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from isaaclab.scene import InteractiveScene
-from isaaclab.sim import SimulationContext, SimulationCfg
 from arcpro_env_cfg import ARCProSceneCfg
+from isaaclab.scene import InteractiveScene
+from isaaclab.sim import SimulationCfg, SimulationContext
 from mdp.track_manager import get_track_manager
 
 

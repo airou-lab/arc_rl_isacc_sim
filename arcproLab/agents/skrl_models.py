@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from skrl.models.torch import Model, GaussianMixin, DeterministicMixin
+from skrl.models.torch import DeterministicMixin, GaussianMixin, Model
 
 
 class SpatialSoftmax2d(nn.Module):
@@ -9,6 +9,7 @@ class SpatialSoftmax2d(nn.Module):
     Grounded in Levine et al. (2016), JMLR.
     Transforms spatial feature maps (B, C, H, W) into continuous 2D coordinates (B, 2*C) in [-1, 1].
     """
+
     def __init__(self, height: int = 7, width: int = 7, temperature: float = 1.0):
         super().__init__()
         self.height = height
@@ -102,7 +103,12 @@ class ARCProActor(GaussianMixin, Model):
                 :,
                 self.num_visual_features : self.num_visual_features
                 + self.num_telemetry,
-            ]
+            ].clone()
+            # Strictly mask privileged coordinates (lat_err=8, head_err=9, distance=11) for Actor.
+            # Slot 10 (lookahead_kappa) remains unmasked for pre-braking.
+            telemetry[:, 8] = 0.0
+            telemetry[:, 9] = 0.0
+            telemetry[:, 11] = 0.0
 
             # 2D Spatial Keypoint Processing: (B, 512, 7, 7) -> (B, 32, 7, 7) -> (B, 64)
             visual_map = visual_flat.view(-1, 512, 7, 7)

@@ -1,4 +1,5 @@
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser()
@@ -8,8 +9,8 @@ args_cli = parser.parse_args()
 
 app_launcher = AppLauncher(args_cli)
 
-from isaaclab.envs import ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
+from isaaclab.envs import ManagerBasedRLEnv
 from skrl.envs.wrappers.torch import IsaacLabWrapper
 
 env_cfg = ARCProEnvCfg()

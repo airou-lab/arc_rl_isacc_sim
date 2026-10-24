@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Visualize DSLaneGate prims in the GUI.")
@@ -15,15 +16,15 @@ args_cli.headless = False
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import torch
-import omni.usd
-from pxr import Usd, UsdGeom
-from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
-import isaaclab.sim as sim_utils
-
 # Add both root and arcproLab to sys.path
 import os
 import sys
+
+import isaaclab.sim as sim_utils
+import omni.usd
+import torch
+from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
+from pxr import Usd, UsdGeom
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ARCPRO_LAB_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))

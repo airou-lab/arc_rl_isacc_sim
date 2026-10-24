@@ -1,6 +1,5 @@
-import sys
-import os
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser()
@@ -9,8 +8,8 @@ args_cli = parser.parse_args(["--enable_cameras", "--headless"])
 app_launcher = AppLauncher(args_cli)
 app_launcher.app
 
-import torch
 from isaaclab.envs import ManagerBasedRLEnv
+
 from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 env_cfg = ARCProEnvCfg()

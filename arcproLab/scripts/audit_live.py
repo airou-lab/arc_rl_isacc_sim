@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
@@ -24,9 +25,9 @@ ARCPRO_LAB_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if ARCPRO_LAB_DIR not in sys.path:
     sys.path.append(ARCPRO_LAB_DIR)
 
-from isaaclab.envs import ManagerBasedRLEnv
-from arcpro_env_cfg import ARCProEnvCfg
 import omni.usd
+from arcpro_env_cfg import ARCProEnvCfg
+from isaaclab.envs import ManagerBasedRLEnv
 from pxr import UsdGeom
 
 

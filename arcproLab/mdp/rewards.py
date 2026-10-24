@@ -4,8 +4,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import torch
-from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
+from isaaclab.managers import SceneEntityCfg
 from mdp.curriculum_config import get_lookahead_distance
 
 
@@ -207,7 +207,7 @@ def boundary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     """
     Penalizes the agent for crossing or being too close to white/yellow lines.
     Provides continuous gradient pushing the car toward lane center when wheels are <= 5cm from lines.
-    
+
     CRITICAL: The yellow median line is NEVER masked anywhere on the circuit!
     Crossing or approaching the yellow line ALWAYS incurs steep repulsive penalty.
     Only the transverse white stop line at intersection entry (dist_g < 0.60m and X in [-6.5, -4.5])
@@ -241,7 +241,9 @@ def boundary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
         & (local_pos[:, 1] >= -7.5)
         & (local_pos[:, 1] <= -6.5)
     )
-    masked_too_close_w = torch.where(in_stop_bar, torch.zeros_like(too_close_w), too_close_w)
+    masked_too_close_w = torch.where(
+        in_stop_bar, torch.zeros_like(too_close_w), too_close_w
+    )
 
     # Yellow penalty has steep 160.0 multiplier; White has 100.0 multiplier
     penalty = -(too_close_y * 160.0 + masked_too_close_w * 100.0)
@@ -341,9 +343,9 @@ def curvature_speed_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     )
     in_inter = (
         (local_pos[:, 0] >= -7.80)
-        & (local_pos[:, 0] <= -2.0)
+        & (local_pos[:, 0] <= -1.80)
         & (local_pos[:, 1] >= -7.5)
-        & (local_pos[:, 1] <= -3.60)
+        & (local_pos[:, 1] <= -2.20)
     )
     in_c1 = (local_pos[:, 0] <= -15.00) & (local_pos[:, 1] <= -4.80)
     in_c4 = (local_pos[:, 0] <= -13.50) & (local_pos[:, 1] >= 5.50)
@@ -434,8 +436,14 @@ def intersection_expert_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
         "dist_g", torch.ones(env.num_envs, device=env.device) * 10.0
     )
 
-    # Target geometric steering from Stanley controller
-    target_steer = torch.clamp(-2.5 * lat_err - 1.2 * head_err, min=-1.0, max=1.0)
+    # Target geometric steering: Ackermann kinematic curvature feedforward + Stanley PD feedback
+    kappa = env.extras.get("kappa", torch.zeros(env.num_envs, device=env.device))
+    track_dir = env.extras.get("track_dir", torch.ones(env.num_envs, device=env.device))
+    signed_kappa = kappa * track_dir
+    delta_ff = torch.atan(0.33 * signed_kappa) / 0.68
+    target_steer = torch.clamp(
+        delta_ff - 2.5 * lat_err - 1.2 * head_err, min=-1.0, max=1.0
+    )
     current_steer = env.action_manager.action[:, 0]
     steer_match = torch.exp(-4.0 * torch.square(current_steer - target_steer))
 
@@ -445,15 +453,17 @@ def intersection_expert_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
 
     guidance = steer_match * speed_match
 
-    # Active inside intersection zones (geometric bounding box or dist_g < 1.5m)
+    # Active inside corner guidance zones (Intersection, Corner 1, Corner 4, or gate points)
     robot = env.scene["robot"]
     env_origins = env.scene.env_origins
     local_pos = robot.data.root_pos_w[:, :2] - env_origins[:, :2]
     in_inter = (
-        (local_pos[:, 0] >= -7.0)
-        & (local_pos[:, 0] <= -2.0)
+        (local_pos[:, 0] >= -6.50)
+        & (local_pos[:, 0] <= -1.80)
         & (local_pos[:, 1] >= -7.5)
-        & (local_pos[:, 1] <= -3.60)
+        & (local_pos[:, 1] <= -2.20)
     )
-    in_zone = in_inter | (dist_g < 1.00)
+    in_c1 = (local_pos[:, 0] <= -14.20) & (local_pos[:, 1] <= -4.80)
+    in_c4 = (local_pos[:, 0] <= -13.50) & (local_pos[:, 1] >= 5.20)
+    in_zone = in_inter | in_c1 | in_c4 | (dist_g < 1.00)
     return torch.where(in_zone, guidance, torch.zeros_like(guidance))

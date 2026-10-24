@@ -1,5 +1,6 @@
-import torch
 import sys
+
+import torch
 
 sys.path.append("arcproLab")
 from mdp.track_manager import TrackManager

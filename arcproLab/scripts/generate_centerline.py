@@ -9,6 +9,7 @@ Restores smooth 0.3m spacing and simple chaining.
 """
 
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser()
@@ -24,8 +25,8 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import numpy as np
-from isaaclab.envs import ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
+from isaaclab.envs import ManagerBasedRLEnv
 from mdp.track_manager import get_track_manager
 
 

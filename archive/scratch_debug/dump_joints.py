@@ -1,4 +1,5 @@
 from pxr import Usd, UsdPhysics
+
 stage = Usd.Stage.Open("arcproLab/assets/robot/F1Tenth_Metric.usd")
 for prim in stage.Traverse():
     if prim.IsA(UsdPhysics.Joint):

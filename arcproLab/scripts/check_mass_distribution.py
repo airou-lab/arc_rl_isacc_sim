@@ -8,6 +8,7 @@ Script to check mass distribution of the robot articulation.
 """
 
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
@@ -21,9 +22,10 @@ simulation_app = app_launcher.app
 
 import os
 import sys
+
 import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation
-from isaaclab.sim import SimulationContext, SimulationCfg
+from isaaclab.sim import SimulationCfg, SimulationContext
 
 # Add arcproLab to path
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
@@ -64,7 +66,7 @@ def main():
     except AttributeError:
         # Fallback: manual USD traversal
         import omni.usd
-        from pxr import UsdPhysics, Usd
+        from pxr import Usd, UsdPhysics
 
         stage = omni.usd.get_context().get_stage()
         root_prim = stage.GetPrimAtPath("/World/Robot")
@@ -74,8 +76,8 @@ def main():
                 body_names.append(str(prim.GetPath()).replace("/World/Robot/", ""))
 
     # Link-by-link audit via USD
-    from pxr import UsdPhysics
     import omni.usd
+    from pxr import UsdPhysics
 
     stage = omni.usd.get_context().get_stage()
 

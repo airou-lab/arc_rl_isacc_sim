@@ -9,6 +9,7 @@ Usage: python arcproLab/scripts/verify_spawn.py --num_envs 1
 """
 
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
@@ -27,12 +28,13 @@ simulation_app = app_launcher.app
 
 """Rest of the script."""
 
-import torch
-import numpy as np
-from PIL import Image
-from isaaclab.envs import ManagerBasedRLEnv
-import sys
 import os
+import sys
+
+import numpy as np
+import torch
+from isaaclab.envs import ManagerBasedRLEnv
+from PIL import Image
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 

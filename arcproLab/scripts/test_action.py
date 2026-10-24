@@ -1,5 +1,6 @@
 import os
 import sys
+
 import torch
 
 # Setup paths
@@ -13,8 +14,8 @@ from isaaclab.app import AppLauncher
 app_launcher = AppLauncher({"headless": True, "num_envs": 1})
 simulation_app = app_launcher.app
 
-from isaaclab.envs import ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
+from isaaclab.envs import ManagerBasedRLEnv
 
 env_cfg = ARCProEnvCfg()
 env_cfg.scene.num_envs = 1

@@ -1,4 +1,5 @@
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Check action space.")
@@ -10,6 +11,7 @@ simulation_app = app_launcher.app
 
 import os
 import sys
+
 from isaaclab.envs import ManagerBasedRLEnv
 
 # Add arcproLab to path

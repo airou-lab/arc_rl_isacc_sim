@@ -1,6 +1,7 @@
-import torch
-import sys
 import os
+import sys
+
+import torch
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from isaaclab.app import AppLauncher
@@ -8,11 +9,10 @@ from isaaclab.app import AppLauncher
 app_launcher = AppLauncher({"headless": True})
 simulation_app = app_launcher.app
 
-from isaaclab.envs import ManagerBasedRLEnv
-from arcpro_env_cfg import ARCProEnvCfg
-from skrl.envs.wrappers.torch import IsaacLabWrapper
-
 from agents.skrl_wrappers import SKRLFlattenWrapper
+from arcpro_env_cfg import ARCProEnvCfg
+from isaaclab.envs import ManagerBasedRLEnv
+from skrl.envs.wrappers.torch import IsaacLabWrapper
 
 
 def main():

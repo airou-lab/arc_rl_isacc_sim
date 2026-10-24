@@ -1,6 +1,6 @@
 import numpy as np
+from scipy.interpolate import interp1d, splev, splprep
 from scipy.spatial import cKDTree
-from scipy.interpolate import splprep, splev, interp1d
 
 
 def generate_hairpin_circuit(num_pts=5000):

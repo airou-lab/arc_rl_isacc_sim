@@ -9,6 +9,7 @@ Robot auto-crawls forward to test stop-line resets.
 """
 
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser()
@@ -24,8 +25,8 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
-from isaaclab.envs import ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
+from isaaclab.envs import ManagerBasedRLEnv
 from mdp.track_manager import get_track_manager
 
 

@@ -1,4 +1,5 @@
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Play SKRL ARCPro Policy")
@@ -54,59 +55,22 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import sys
 import os
+import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
+ARCPRO_LAB_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
+if ARCPRO_LAB_DIR not in sys.path:
+    sys.path.insert(0, ARCPRO_LAB_DIR)
 
 # Auto-detect latest checkpoint across logs and archive directories
 search_dirs = [
     os.path.join(ROOT_DIR, "logs"),
     os.path.join(ROOT_DIR, "archive", "landmark_checkpoints"),
 ]
-
-champion_path = os.path.join(
-    ROOT_DIR, "archive", "landmark_checkpoints", "agent_4641500_realsense_champion.pt"
-)
-pre_reroute_path = os.path.join(
-    ROOT_DIR,
-    "archive",
-    "landmark_checkpoints",
-    "best_effort_pre_reroute_agent_3550000.pt",
-)
-
-# Explicit overrides: --checkpoint pre_reroute | champion
-if args_cli.checkpoint is not None and args_cli.checkpoint.strip().lower() in (
-    "pre_reroute",
-    "pre-reroute",
-    "prereroute",
-    "3550000",
-):
-    if os.path.exists(pre_reroute_path):
-        args_cli.checkpoint = pre_reroute_path
-        print(
-            f"[debug.sh] Using verified pre-reroute checkpoint: {args_cli.checkpoint}"
-        )
-    else:
-        print(
-            "[debug.sh] WARNING: Pre-reroute checkpoint not found. Falling back to latest."
-        )
-        args_cli.checkpoint = "latest"
-elif (
-    args_cli.checkpoint is not None
-    and args_cli.checkpoint.strip().lower() == "champion"
-):
-    if os.path.exists(champion_path):
-        args_cli.checkpoint = champion_path
-        print(f"[debug.sh] Using certified champion checkpoint: {args_cli.checkpoint}")
-    else:
-        print(
-            "[debug.sh] WARNING: Champion checkpoint not found. Falling back to latest."
-        )
-        args_cli.checkpoint = "latest"
 
 if args_cli.checkpoint is None or args_cli.checkpoint.strip().lower() in (
     "latest",
@@ -122,17 +86,12 @@ if args_cli.checkpoint is None or args_cli.checkpoint.strip().lower() in (
     if candidates:
         args_cli.checkpoint = max(candidates, key=os.path.getmtime)
         print(f"[debug.sh] Auto-detected latest checkpoint: {args_cli.checkpoint}")
-    elif os.path.exists(champion_path):
-        args_cli.checkpoint = champion_path
-        print(f"[debug.sh] Falling back to champion checkpoint: {args_cli.checkpoint}")
     else:
         print("[debug.sh] WARNING: No checkpoint found. Running with random weights.")
 elif not os.path.exists(args_cli.checkpoint):
-    # Support shortcuts like 'agent_36600.pt', '36600', 'champion', or 'straightaway'
+    # Support shortcuts like 'agent_50000.pt' or '50000'
     query = args_cli.checkpoint.strip()
     target = os.path.basename(query)
-    if "champion" in target.lower():
-        target = "agent_4641500_realsense_champion.pt"
 
     matches = []
     for s_dir in search_dirs:
@@ -140,7 +99,6 @@ elif not os.path.exists(args_cli.checkpoint):
             for root, dirs, files in os.walk(s_dir):
                 for f in files:
                     if f.endswith(".pt"):
-                        # Match exact filename, stripped query, or target
                         clean_query = query.replace(".pt", "")
                         if f == target or clean_query in f or target in f:
                             matches.append(os.path.join(root, f))
@@ -174,29 +132,13 @@ from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
 
 print("Importing ARCPro modules...")
 sys.stdout.flush()
-from arcproLab.arcpro_env_cfg import ARCProEnvCfg
-from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic
-from skrl.envs.wrappers.torch import IsaacLabWrapper
-import gymnasium as gym
-
-from agents.skrl_wrappers import SKRLFlattenWrapper
-
 import traceback
 
+from agents.skrl_wrappers import SKRLFlattenWrapper, WarmupActionWrapper
+from skrl.envs.wrappers.torch import IsaacLabWrapper
 
-class WarmupActionWrapper(gym.Wrapper):
-    def __init__(self, env, warmup_steps=10):
-        super().__init__(env)
-        self.warmup_steps = warmup_steps
-
-    def step(self, action):
-        if hasattr(self.env.unwrapped, "episode_length_buf"):
-            mask = self.env.unwrapped.episode_length_buf < self.warmup_steps
-            action = action.clone()
-            action[mask, 0] = 0.0  # Steer: 0.0 is center
-            action[mask, 1] = -1.0  # Throttle: action * (-20) - 20 = 0.0 (Stop)
-        return self.env.step(action)
-
+from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic
+from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 try:
     print("Configuring environment...")

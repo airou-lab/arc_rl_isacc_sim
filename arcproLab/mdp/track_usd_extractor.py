@@ -6,6 +6,7 @@
 """USD Mesh Extraction and Centerline Generation Utilities for Track Boundaries."""
 
 from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 
 
@@ -56,7 +57,9 @@ def finalize_group(data_list: List[Tuple[str, Dict]], name: str) -> np.ndarray:
     return final_pts
 
 
-def punch_holes(raw_pts: Optional[np.ndarray], gate_xy: np.ndarray, name: str) -> np.ndarray:
+def punch_holes(
+    raw_pts: Optional[np.ndarray], gate_xy: np.ndarray, name: str
+) -> np.ndarray:
     if raw_pts is None or len(raw_pts) == 0:
         raise ValueError(
             f"Cannot punch holes in {name}: points array is empty or None."
@@ -129,7 +132,9 @@ def sample_waypoints(y_pts: np.ndarray, w_pts: np.ndarray) -> np.ndarray:
     return final_wps
 
 
-def collect_raw_marker_points_from_stage() -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
+def collect_raw_marker_points_from_stage() -> Tuple[
+    np.ndarray, np.ndarray, Optional[np.ndarray]
+]:
     """Traverses USD stage env_0 to extract yellow lines, white lines, and gates."""
     import omni.usd
     from pxr import Usd, UsdGeom, UsdShade
@@ -139,9 +144,7 @@ def collect_raw_marker_points_from_stage() -> Tuple[np.ndarray, np.ndarray, Opti
     if not root_prim.IsValid():
         root_prim = stage.GetPseudoRoot()
     xform_cache = UsdGeom.XformCache()
-    env0_origin = xform_cache.GetLocalToWorldTransform(
-        root_prim
-    ).ExtractTranslation()
+    env0_origin = xform_cache.GetLocalToWorldTransform(root_prim).ExtractTranslation()
 
     y_data, w_data, g_data = [], [], []
 
@@ -163,9 +166,7 @@ def collect_raw_marker_points_from_stage() -> Tuple[np.ndarray, np.ndarray, Opti
         if is_gate_prim:
             gate_prim_paths.append(path_str)
             xform = UsdGeom.Xformable(prim)
-            world_transform = xform.ComputeLocalToWorldTransform(
-                Usd.TimeCode.Default()
-            )
+            world_transform = xform.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
             pw = world_transform.ExtractTranslation()
             pl = [
                 pw[0] - env0_origin[0],
@@ -217,9 +218,7 @@ def collect_raw_marker_points_from_stage() -> Tuple[np.ndarray, np.ndarray, Opti
         if len(gate_fallback_pts) > 0:
             mesh_center = np.mean(mesh_info["points"], axis=0)
             for g_pos in gate_fallback_pts:
-                if (
-                    np.linalg.norm(mesh_center - np.array(g_pos)) < 1.0
-                ):
+                if np.linalg.norm(mesh_center - np.array(g_pos)) < 1.0:
                     is_near_gate_marker = True
                     break
 
@@ -255,9 +254,7 @@ def collect_raw_marker_points_from_stage() -> Tuple[np.ndarray, np.ndarray, Opti
 
     raw_gate_pts = finalize_group(g_data, "Gate")
     if raw_gate_pts is None and len(gate_fallback_pts) > 0:
-        print(
-            "[TrackManager] No gate meshes found. Using prim centers as fallback."
-        )
+        print("[TrackManager] No gate meshes found. Using prim centers as fallback.")
         raw_gate_pts = np.array(gate_fallback_pts)
 
     if raw_gate_pts is not None:

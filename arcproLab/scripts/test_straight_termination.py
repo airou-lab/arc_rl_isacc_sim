@@ -1,4 +1,5 @@
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Test termination by driving straight.")
@@ -8,10 +9,11 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import torch
+import math
 import os
 import sys
-import math
+
+import torch
 
 # Add arcproLab to path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))

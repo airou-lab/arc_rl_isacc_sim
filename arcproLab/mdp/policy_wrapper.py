@@ -3,12 +3,13 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-import torch
-import torchvision.models as models
-import torch.nn as nn
-from torchvision import transforms
 import os
 from typing import Tuple
+
+import torch
+import torch.nn as nn
+import torchvision.models as models
+from torchvision import transforms
 
 
 class PolicyWrapper:

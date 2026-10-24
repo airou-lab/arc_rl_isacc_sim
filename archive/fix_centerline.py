@@ -1,9 +1,9 @@
 import numpy as np
 
 # Load boundaries
-data = np.load('arcproLab/mdp/track_boundaries_1x.npz')
-yellow = data['yellow']
-white = data['white']
+data = np.load("arcproLab/mdp/track_boundaries_1x.npz")
+yellow = data["yellow"]
+white = data["white"]
 
 # We just need to generate a path starting near the car: X=-16.2, Y=5.5
 # and heading South (-Y).
@@ -32,27 +32,27 @@ dir_vec = np.array([0.0, -1.0])
 for _ in range(len(mids)):
     curr_p = chain[-1]
     dists = np.linalg.norm(mids - curr_p, axis=1)
-    
+
     # Penalize points behind us
     vecs = mids - curr_p
     vecs_norm = np.linalg.norm(vecs, axis=1)
     vecs_norm[vecs_norm == 0] = 1.0
     dirs = vecs / vecs_norm[:, None]
-    
+
     dots = np.sum(dirs * dir_vec, axis=1)
-    
+
     # We want dots close to 1
-    scores = dists - dots * 0.5 # Encourage moving in dir_vec
+    scores = dists - dots * 0.5  # Encourage moving in dir_vec
     scores[list(visited)] = 1e6
     scores[dists > 2.0] = 1e6
-    
+
     next_idx = np.argmin(scores)
     if scores[next_idx] > 1e5:
         break
-        
+
     chain.append(mids[next_idx])
     visited.add(next_idx)
-    
+
     # Update dir_vec for next step (momentum)
     dir_vec = dirs[next_idx]
 
@@ -62,13 +62,13 @@ print("Chain length:", len(chain))
 # Add yaw
 final_data = []
 for i in range(len(chain) - 1):
-    p1, p2 = chain[i], chain[i+1]
+    p1, p2 = chain[i], chain[i + 1]
     yaw = np.arctan2(p2[1] - p1[1], p2[0] - p1[0])
     final_data.append([p1[0], p1[1], yaw])
-    
+
 # duplicate last point
 final_data.append([chain[-1][0], chain[-1][1], final_data[-1][2]])
 
 final_data = np.array(final_data)
-np.save('arcproLab/mdp/track_centerline.npy', final_data)
+np.save("arcproLab/mdp/track_centerline.npy", final_data)
 print("Saved new track_centerline.npy!")

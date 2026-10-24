@@ -1,10 +1,11 @@
+import gc
+
+import gymnasium as gym
+import numpy as np
 import torch
 import torch.nn as nn
 from skrl.envs.wrappers.torch import Wrapper
-import numpy as np
-import gymnasium as gym
-from torchvision.models import resnet18, ResNet18_Weights
-import gc
+from torchvision.models import ResNet18_Weights, resnet18
 
 
 class SKRLFlattenWrapper(Wrapper):
@@ -15,25 +16,25 @@ class SKRLFlattenWrapper(Wrapper):
             # 1. Fused YUV Linear Preprocessing Layer (ITU-R BT.601)
             # Isolates luminance (white road boundaries) on Y, and chrominance (yellow median) on U, V
             self.yuv_conv = nn.Conv2d(3, 3, kernel_size=1, bias=False).to("cuda:0")
-            yuv_weights = torch.tensor(
-                [
-                    [0.299, 0.587, 0.114],
-                    [-0.14713, -0.28886, 0.436],
-                    [0.615, -0.51499, -0.10001],
-                ],
-                dtype=torch.float32,
-            ).unsqueeze(-1).unsqueeze(-1)
+            yuv_weights = (
+                torch.tensor(
+                    [
+                        [0.299, 0.587, 0.114],
+                        [-0.14713, -0.28886, 0.436],
+                        [0.615, -0.51499, -0.10001],
+                    ],
+                    dtype=torch.float32,
+                )
+                .unsqueeze(-1)
+                .unsqueeze(-1)
+            )
             self.yuv_conv.weight.data.copy_(yuv_weights)
             self.yuv_conv.weight.requires_grad = False
             self.yuv_conv.eval()
 
             # YUV normalization: Y in [0, 1] centered at 0.5, U/V in [-0.5, 0.5] centered at 0.0
-            self.yuv_mean = (
-                torch.tensor([0.5, 0.0, 0.0]).view(1, 3, 1, 1).to("cuda:0")
-            )
-            self.yuv_std = (
-                torch.tensor([0.5, 0.5, 0.5]).view(1, 3, 1, 1).to("cuda:0")
-            )
+            self.yuv_mean = torch.tensor([0.5, 0.0, 0.0]).view(1, 3, 1, 1).to("cuda:0")
+            self.yuv_std = torch.tensor([0.5, 0.5, 0.5]).view(1, 3, 1, 1).to("cuda:0")
 
             base = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1).to("cuda:0")
             for param in base.parameters():
@@ -152,18 +153,31 @@ class SKRLFlattenWrapper(Wrapper):
                 num_envs = vec.shape[0]
                 total_dim = 25088 + vec.shape[1]
                 if (
-                    not hasattr(self, "_flat_obs_buffer")
-                    or self._flat_obs_buffer is None
-                    or self._flat_obs_buffer.shape != (num_envs, total_dim)
+                    not hasattr(self, "_flat_obs_buffers")
+                    or self._flat_obs_buffers is None
+                    or self._flat_obs_buffers[0].shape != (num_envs, total_dim)
                 ):
-                    self._flat_obs_buffer = torch.zeros(
-                        (num_envs, total_dim), device=vec.device, dtype=torch.float32
-                    )
+                    self._flat_obs_buffers = [
+                        torch.zeros(
+                            (num_envs, total_dim),
+                            device=vec.device,
+                            dtype=torch.float32,
+                        ),
+                        torch.zeros(
+                            (num_envs, total_dim),
+                            device=vec.device,
+                            dtype=torch.float32,
+                        ),
+                    ]
+                    self._buf_idx = 0
 
-                self._flat_obs_buffer[:, :25088].copy_(visual_flat)
-                self._flat_obs_buffer[:, 25088:].copy_(vec)
+                self._buf_idx = (self._buf_idx + 1) % 2
+                buf = self._flat_obs_buffers[self._buf_idx]
+                buf[:, :25088].copy_(visual_flat)
+                buf[:, 25088:].copy_(vec)
+                self._flat_obs_buffer = buf
                 del img, yuv, norm_img, feat_map, visual_flat
-                return self._flat_obs_buffer
+                return buf
 
         return vec
 
@@ -183,3 +197,17 @@ class SKRLFlattenWrapper(Wrapper):
 
     def close(self):
         self._env.close()
+
+
+class WarmupActionWrapper(gym.Wrapper):
+    def __init__(self, env, warmup_steps=10):
+        super().__init__(env)
+        self.warmup_steps = warmup_steps
+
+    def step(self, action):
+        if hasattr(self.env.unwrapped, "episode_length_buf"):
+            mask = self.env.unwrapped.episode_length_buf < self.warmup_steps
+            action = action.clone()
+            action[mask, 0] = 0.0  # Steer: 0.0 is center
+            action[mask, 1] = -1.0  # Throttle: action * (-20) - 20 = 0.0 (Stop)
+        return self.env.step(action)

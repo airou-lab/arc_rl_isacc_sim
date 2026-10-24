@@ -1,5 +1,6 @@
-import sys
 import os
+import sys
+
 import torch
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -11,8 +12,9 @@ from isaaclab.app import AppLauncher
 app_launcher = AppLauncher({"headless": True, "num_envs": 1})
 simulation_app = app_launcher.app
 
-from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 from isaaclab.envs import ManagerBasedRLEnv
+
+from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 
 def main():

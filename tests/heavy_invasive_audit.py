@@ -14,9 +14,9 @@ spawns in the target sector. Invasively probes IsaacLab TerminationManager
 to record exact termination terms, boundary clearances, and trajectory histories.
 """
 
-import sys
-import os
 import json
+import os
+import sys
 import time
 
 WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -32,17 +32,17 @@ launcher_args = {"headless": True, "num_envs": 1, "enable_cameras": True}
 app_launcher = AppLauncher(launcher_args)
 simulation_app = app_launcher.app
 
-import torch
-import numpy as np
 import gymnasium as gym
-
+import numpy as np
+import torch
 from isaaclab.envs import ManagerBasedRLEnv
-from arcproLab.arcpro_env_cfg import ARCProEnvCfg
+from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
+from skrl.envs.wrappers.torch import IsaacLabWrapper
+
+import arcproLab.mdp.curriculum_config as curr_cfg
 from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic
 from arcproLab.agents.skrl_wrappers import SKRLFlattenWrapper
-from skrl.envs.wrappers.torch import IsaacLabWrapper
-from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
-import arcproLab.mdp.curriculum_config as curr_cfg
+from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 
 class WarmupActionWrapper(gym.Wrapper):

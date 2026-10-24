@@ -1,10 +1,10 @@
 {
   "sector_weights": [
-    0.108,
-    0.221,
-    0.332,
-    0.197,
-    0.142
+    0.147,
+    0.377,
+    0.056,
+    0.364,
+    0.056
   ],
   "lookahead_distance": 2.0,
   "speed_tracking_weight": 180.0,
@@ -16,5 +16,5 @@
     "4": "North Straight & Sweeping Bend (15%)",
     "5": "Top North Straight & Corner 4 Approach (10%)"
   },
-  "updated_at": "2026-10-17T13:51:18.015176Z"
+  "updated_at": "2026-10-24T17:08:48.078724Z"
 }

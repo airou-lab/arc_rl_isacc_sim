@@ -1,3 +1,5 @@
+> **DEPRECATED (2026-10-23):** Historical prompt from Aug 2026 (32-env, pre-Spatial-Softmax). Do **not** follow step 2 — `rm -rf logs/ppo_skrl/*` deletes checkpoints, the same failure as Issue 118. The live supervisor is `arcproLab/scripts/autonomous_sentinel.py`; current state is in `RESUME HERE.md`.
+
 Monitor the RL training process by reading the log at `logs/skrl_phase1.log` periodically. The training is running in a tmux session called 'training'. Use the `schedule` tool to set up a timer to check the log.
 
 Your objective is to trigger an analysis and auto-fix every 0.6M (600,000) timesteps, AND immediately notify the parent agent if the strict target (`ep_len_mean >= 600` AND `speed_mps > 0.6`) is met.

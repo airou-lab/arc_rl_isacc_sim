@@ -7,11 +7,11 @@ Verification Suite for Vision Architecture Upgrades:
 4. Elevation Termination: Permissive Z bounds accommodating 3D track hill up to Z = 2.5m.
 """
 
-import sys
 import os
+import sys
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if WORKSPACE_DIR not in sys.path:
@@ -21,8 +21,7 @@ from isaaclab.app import AppLauncher
 app_launcher = AppLauncher({"headless": True, "num_envs": 1})
 simulation_app = app_launcher.app
 
-from arcproLab.agents.skrl_models import SpatialSoftmax2d, ARCProActor
-from arcproLab.agents.skrl_wrappers import SKRLFlattenWrapper
+from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic, SpatialSoftmax2d
 from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 
@@ -36,15 +35,21 @@ def test_spatial_softmax():
     feat = torch.randn(B, C, H, W, device=device, requires_grad=True)
     coords = ssm(feat)
     assert coords.shape == (B, 64), f"Expected shape ({B}, 64), got {coords.shape}"
-    assert (coords >= -1.0).all() and (coords <= 1.0).all(), "Coordinates exceed [-1, 1]!"
-    print(f"[PASSED] SpatialSoftmax2d output shape: {coords.shape}, strictly bounded in [-1, 1]")
+    assert (coords >= -1.0).all() and (coords <= 1.0).all(), (
+        "Coordinates exceed [-1, 1]!"
+    )
+    print(
+        f"[PASSED] SpatialSoftmax2d output shape: {coords.shape}, strictly bounded in [-1, 1]"
+    )
 
     # 2. Gradient Flow
     loss = coords.sum()
     loss.backward()
     assert feat.grad is not None, "feat.grad is None!"
     assert feat.grad.norm().item() > 0.0, "feat.grad norm is 0!"
-    print(f"[PASSED] SpatialSoftmax2d analytical autograd: dLoss/dFeat norm = {feat.grad.norm().item():.4f}")
+    print(
+        f"[PASSED] SpatialSoftmax2d analytical autograd: dLoss/dFeat norm = {feat.grad.norm().item():.4f}"
+    )
 
 
 def test_actor_architecture():
@@ -68,18 +73,62 @@ def test_actor_architecture():
     print(f"  - policy_head (76 -> 64 -> 2):   {head_params:,} params")
     print(f"  - Total trainable parameters:     {total_trainable:,}")
 
-    assert total_trainable in (21474, 21476), f"Expected 21,474-21,476 parameters, got {total_trainable}"
-    print(f"[PASSED] Parameter count exactly matches theoretical specification: {total_trainable:,} parameters (-95% reduction)")
+    assert total_trainable in (21474, 21476), (
+        f"Expected 21,474-21,476 parameters, got {total_trainable}"
+    )
+    print(
+        f"[PASSED] Parameter count exactly matches theoretical specification: {total_trainable:,} parameters (-95% reduction)"
+    )
 
     # Forward pass verification
     dummy_obs = torch.randn(20, 25100, device=device)
     inputs = {"states": dummy_obs}
     action_mean, log_std, _ = actor.compute(inputs)
 
-    assert action_mean.shape == (20, 2), f"Expected action shape (20, 2), got {action_mean.shape}"
+    assert action_mean.shape == (20, 2), (
+        f"Expected action shape (20, 2), got {action_mean.shape}"
+    )
     assert not torch.isnan(action_mean).any(), "action_mean contains NaNs!"
-    assert (action_mean >= -1.0).all() and (action_mean <= 1.0).all(), "action_mean outside [-1, 1]!"
-    print(f"[PASSED] Forward pass successful: output shape {action_mean.shape}, zero NaNs, valid actions in [-1, 1]")
+    assert (action_mean >= -1.0).all() and (action_mean <= 1.0).all(), (
+        "action_mean outside [-1, 1]!"
+    )
+    print(
+        f"[PASSED] Forward pass successful: output shape {action_mean.shape}, zero NaNs, valid actions in [-1, 1]"
+    )
+
+    # Adversarial check: Actor Blindness & Non-Mutating Clone
+    obs_a = torch.randn(20, 25100, device=device)
+    obs_b = obs_a.clone()
+    obs_b[:, 25088 + 8] = 99.0    # lat_err
+    obs_b[:, 25088 + 9] = -99.0   # head_err
+    obs_b[:, 25088 + 11] = 500.0  # distance
+    act_a, _, _ = actor.compute({"states": obs_a})
+    act_b, _, _ = actor.compute({"states": obs_b})
+    assert torch.allclose(act_a, act_b, atol=1e-6), (
+        "ARCProActor output changed when privileged slots [8, 9, 11] were perturbed!"
+    )
+    assert obs_b[:, 25088 + 8].eq(99.0).all(), (
+        "ARCProActor.compute mutated input obs_b in-place!"
+    )
+    print(
+        "[PASSED] ARCProActor is 100% blind to privileged slots [8, 9, 11] and does not mutate input state"
+    )
+
+    # Critic privileged gradient check
+    critic = ARCProCritic(obs_space, act_space, device).to(device)
+    critic.zero_grad()
+    val, _ = critic.compute({"states": obs_b})
+    val.sum().backward()
+    priv_grad_sum = (
+        critic.critic_head[0].weight.grad[:, [8, 9, 10, 11]].abs().sum().item()
+    )
+    assert priv_grad_sum > 0.0, (
+        f"Expected non-zero Critic gradient on privileged slots [8, 9, 10, 11], got {priv_grad_sum}"
+    )
+    print(
+        f"[PASSED] ARCProCritic receives unmasked privileged state [8, 9, 10, 11]: grad L1 = {priv_grad_sum:.4f}"
+    )
+
 
 
 def test_yuv_chrominance_isolation():
@@ -87,14 +136,18 @@ def test_yuv_chrominance_isolation():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     yuv_conv = nn.Conv2d(3, 3, kernel_size=1, bias=False).to(device)
-    yuv_weights = torch.tensor(
-        [
-            [0.299, 0.587, 0.114],
-            [-0.14713, -0.28886, 0.436],
-            [0.615, -0.51499, -0.10001],
-        ],
-        dtype=torch.float32,
-    ).unsqueeze(-1).unsqueeze(-1)
+    yuv_weights = (
+        torch.tensor(
+            [
+                [0.299, 0.587, 0.114],
+                [-0.14713, -0.28886, 0.436],
+                [0.615, -0.51499, -0.10001],
+            ],
+            dtype=torch.float32,
+        )
+        .unsqueeze(-1)
+        .unsqueeze(-1)
+    )
     yuv_conv.weight.data.copy_(yuv_weights)
 
     # Test pixels: White line vs Yellow line vs Dark Asphalt
@@ -106,17 +159,29 @@ def test_yuv_chrominance_isolation():
     yuv_yellow = yuv_conv(yellow).squeeze().tolist()
     yuv_asphalt = yuv_conv(asphalt).squeeze().tolist()
 
-    print(f"  - White:   Y={yuv_white[0]:.3f}, U={yuv_white[1]:+.3f}, V={yuv_white[2]:+.3f}")
-    print(f"  - Yellow:  Y={yuv_yellow[0]:.3f}, U={yuv_yellow[1]:+.3f}, V={yuv_yellow[2]:+.3f}")
-    print(f"  - Asphalt: Y={yuv_asphalt[0]:.3f}, U={yuv_asphalt[1]:+.3f}, V={yuv_asphalt[2]:+.3f}")
+    print(
+        f"  - White:   Y={yuv_white[0]:.3f}, U={yuv_white[1]:+.3f}, V={yuv_white[2]:+.3f}"
+    )
+    print(
+        f"  - Yellow:  Y={yuv_yellow[0]:.3f}, U={yuv_yellow[1]:+.3f}, V={yuv_yellow[2]:+.3f}"
+    )
+    print(
+        f"  - Asphalt: Y={yuv_asphalt[0]:.3f}, U={yuv_asphalt[1]:+.3f}, V={yuv_asphalt[2]:+.3f}"
+    )
 
     # Yellow must have strong negative U and positive V
-    assert yuv_yellow[1] < -0.25, f"Yellow U chrominance should be < -0.25, got {yuv_yellow[1]}"
-    assert yuv_yellow[2] > +0.10, f"Yellow V chrominance should be > +0.10, got {yuv_yellow[2]}"
+    assert yuv_yellow[1] < -0.25, (
+        f"Yellow U chrominance should be < -0.25, got {yuv_yellow[1]}"
+    )
+    assert yuv_yellow[2] > +0.10, (
+        f"Yellow V chrominance should be > +0.10, got {yuv_yellow[2]}"
+    )
     # White and asphalt have near zero chrominance
     assert abs(yuv_white[1]) < 0.02 and abs(yuv_white[2]) < 0.02
     assert abs(yuv_asphalt[1]) < 0.02 and abs(yuv_asphalt[2]) < 0.02
-    print("[PASSED] ITU-R BT.601 YUV chrominance isolates yellow median line with infinite SNR!")
+    print(
+        "[PASSED] ITU-R BT.601 YUV chrominance isolates yellow median line with infinite SNR!"
+    )
 
 
 def test_elevation_bounds():
@@ -133,7 +198,9 @@ def test_elevation_bounds():
     # Track rises to Z = 2.5m on 3D hill. Car at Z = 2.5m must NOT terminate!
     car_z_hill = 2.50
     is_terminated_hill = (car_z_hill < min_h) or (car_z_hill > max_h)
-    assert not is_terminated_hill, f"Car on 3D hill (Z={car_z_hill}m) falsely terminated!"
+    assert not is_terminated_hill, (
+        f"Car on 3D hill (Z={car_z_hill}m) falsely terminated!"
+    )
 
     # Flipping/flying at Z = 3.6m must terminate
     car_z_fly = 3.60
@@ -145,7 +212,9 @@ def test_elevation_bounds():
     is_terminated_fall = (car_z_fall < min_h) or (car_z_fall > max_h)
     assert is_terminated_fall, "Fallen car (Z=-0.10m) was not terminated!"
 
-    print(f"[PASSED] Elevation bounds correctly set to max_height = {max_h}m (3D hill climbs safely without reset)")
+    print(
+        f"[PASSED] Elevation bounds correctly set to max_height = {max_h}m (3D hill climbs safely without reset)"
+    )
 
 
 if __name__ == "__main__":

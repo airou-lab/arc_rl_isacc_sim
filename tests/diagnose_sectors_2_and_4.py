@@ -7,6 +7,7 @@ Diagnostic script to isolate:
 
 import os
 import sys
+
 import numpy as np
 
 WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -22,16 +23,15 @@ launcher_args = {"headless": True, "num_envs": 1, "enable_cameras": True}
 app_launcher = AppLauncher(launcher_args)
 simulation_app = app_launcher.app
 
-import torch
 import gymnasium as gym
-
-from isaaclab.envs import ManagerBasedRLEnv
-from arcproLab.arcpro_env_cfg import ARCProEnvCfg
-from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic
+import torch
 from agents.skrl_wrappers import SKRLFlattenWrapper
-from skrl.envs.wrappers.torch import IsaacLabWrapper
+from isaaclab.envs import ManagerBasedRLEnv
 from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
-import arcproLab.mdp.events as mdp_events
+from skrl.envs.wrappers.torch import IsaacLabWrapper
+
+from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic
+from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 
 class WarmupActionWrapper(gym.Wrapper):
@@ -70,11 +70,15 @@ def find_latest_checkpoint() -> str:
     return ""
 
 
-def run_sector_diagnostic(env, agent, ckpt_path: str, sector: int, max_steps: int = 600):
+def run_sector_diagnostic(
+    env, agent, ckpt_path: str, sector: int, max_steps: int = 600
+):
     os.environ["ARCPRO_FORCE_SECTOR"] = str(sector)
     ckpt_name = os.path.basename(ckpt_path)
     print("\n" + "=" * 105)
-    print(f"  DIAGNOSTIC RUN: SECTOR {sector} | CHECKPOINT: {ckpt_name} | MAX STEPS: {max_steps}")
+    print(
+        f"  DIAGNOSTIC RUN: SECTOR {sector} | CHECKPOINT: {ckpt_name} | MAX STEPS: {max_steps}"
+    )
     print("=" * 105)
 
     obs, info = env.reset()
@@ -109,12 +113,26 @@ def run_sector_diagnostic(env, agent, ckpt_path: str, sector: int, max_steps: in
             if "speed_mps" in info
             else 0.0
         )
-        dist_w = float(info["dist_white"][0].item()) * 100.0 if "dist_white" in info else 0.0
-        dist_y = float(info["dist_yellow"][0].item()) * 100.0 if "dist_yellow" in info else 0.0
+        dist_w = (
+            float(info["dist_white"][0].item()) * 100.0 if "dist_white" in info else 0.0
+        )
+        dist_y = (
+            float(info["dist_yellow"][0].item()) * 100.0
+            if "dist_yellow" in info
+            else 0.0
+        )
         lat_err = float(info["lat_err"][0].item()) * 100.0 if "lat_err" in info else 0.0
-        head_err = float(info["head_err"][0].item()) * 180.0 / np.pi if "head_err" in info else 0.0
-        wps_val = float(info["track_wp_delta"].float().mean().item()) if "track_wp_delta" in info else 0.0
-        
+        head_err = (
+            float(info["head_err"][0].item()) * 180.0 / np.pi
+            if "head_err" in info
+            else 0.0
+        )
+        wps_val = (
+            float(info["track_wp_delta"].float().mean().item())
+            if "track_wp_delta" in info
+            else 0.0
+        )
+
         token_val = 0.0
         if hasattr(env.unwrapped, "extras") and "turn_token" in env.unwrapped.extras:
             token_val = float(env.unwrapped.extras["turn_token"][0].item())
@@ -126,7 +144,30 @@ def run_sector_diagnostic(env, agent, ckpt_path: str, sector: int, max_steps: in
         local_y = float(pos[1] - origin[1])
 
         # Log every 25 steps or when significant change happens
-        if step_count in (1, 10, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 350, 400, 450, 500) or step_count % 50 == 0:
+        if (
+            step_count
+            in (
+                1,
+                10,
+                25,
+                50,
+                75,
+                100,
+                125,
+                150,
+                175,
+                200,
+                225,
+                250,
+                275,
+                300,
+                350,
+                400,
+                450,
+                500,
+            )
+            or step_count % 50 == 0
+        ):
             print(
                 f"{step_count:<5d} | ({local_x:6.2f}, {local_y:6.2f}) | {speed_val:5.2f}m/s | {steer_val:+5.2f} | "
                 f"{dist_w:5.1f}cm | {dist_y:5.1f}cm | {lat_err:+6.1f}cm | {head_err:+6.1f}° | {token_val:+4.1f} | {wps_val:4.0f}"

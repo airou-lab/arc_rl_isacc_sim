@@ -1,4 +1,5 @@
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser()
@@ -8,7 +9,8 @@ args_cli.headless = True
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-from pxr import Usd, UsdGeom
+from pxr import Usd
+
 stage = Usd.Stage.Open("arcproLab/assets/robot/F1Tenth_Metric.usd")
 
 geom = stage.GetPrimAtPath("/Robot/Chassis/Geom")
@@ -18,7 +20,7 @@ print(f"Has payloads? {geom.HasAuthoredPayloads()}")
 
 for child in geom.GetChildren():
     print(child.GetPath())
-    
+
 # check if chassis has children
 chassis = stage.GetPrimAtPath("/Robot/Chassis")
 for child in chassis.GetChildren():

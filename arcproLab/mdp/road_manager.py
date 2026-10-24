@@ -107,26 +107,26 @@ class RoadManager:
             tokens = torch.zeros((self.num_envs, self.num_agents), device=self.device)
 
             # Circuit Turn Token Routing (Counter-Clockwise Circuit, all turns are LEFT):
-            # 1. Corner 1 Turn (Leg 1 South -> Leg 2 East): curve approach begins at Y < -5.60, completes at X >= -15.00
-            in_c1_turn = (local_pos[:, 0:1] < -15.00) & (local_pos[:, 1:2] < -5.60)
+            # 1. Corner 1 Turn (Leg 1 South -> Leg 2 East): curve approach begins at Y < -6.10, completes at X >= -15.00
+            in_c1_turn = (local_pos[:, 0:1] < -15.00) & (local_pos[:, 1:2] < -6.10)
             # 2. Corner 2 / Intersection Turn (Leg 2 East -> North Straight):
-            # Curve begins at X > -6.80, completes when vehicle enters North straight at Y >= -3.60
+            # Curve begins at X > -6.50, completes when vehicle enters North straight at Y >= -2.20
             in_c2_turn = (
-                (local_pos[:, 0:1] > -6.80)
-                & (local_pos[:, 0:1] < -2.0)
+                (local_pos[:, 0:1] > -6.50)
+                & (local_pos[:, 0:1] < -1.80)
                 & (local_pos[:, 1:2] >= -7.5)
-                & (local_pos[:, 1:2] <= -3.60)
+                & (local_pos[:, 1:2] <= -2.20)
             )
             # 3. Sweeping Road Bend Approach (North Straight -> Top Straight West):
-            # Curve begins at Y >= 2.20, completes at X <= -7.80, Y >= 6.80
+            # Curve begins at Y >= 2.40, completes at X <= -6.85
             in_bend_turn = (
-                (local_pos[:, 1:2] >= 2.20)
+                (local_pos[:, 1:2] >= 2.40)
                 & (local_pos[:, 1:2] <= 7.20)
-                & (local_pos[:, 0:1] > -7.80)
+                & (local_pos[:, 0:1] > -6.85)
                 & (local_pos[:, 0:1] < -2.0)
             )
-            # 4. Corner 4 Turn (Top Straight West -> Leg 1 South): curve approach begins at X < -14.50, completes at Y <= 5.50
-            in_c4_turn = (local_pos[:, 0:1] < -14.50) & (local_pos[:, 1:2] > 5.50)
+            # 4. Corner 4 Turn (Top Straight West -> Leg 1 South): curve approach begins at X < -14.75, completes at Y <= 6.15
+            in_c4_turn = (local_pos[:, 0:1] < -14.75) & (local_pos[:, 1:2] > 6.15)
 
             is_turning = in_c1_turn | in_c2_turn | in_bend_turn | in_c4_turn
             tokens = torch.where(

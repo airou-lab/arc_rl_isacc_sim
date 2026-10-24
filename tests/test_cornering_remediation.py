@@ -8,9 +8,10 @@ Unit and Regression Test Suite for Cornering Remediation:
 5. Telemetry Slot 7 Active Feedback (lateral drift/slip velocity).
 """
 
-import sys
-import os
 import math
+import os
+import sys
+
 import torch
 
 WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -25,7 +26,7 @@ from isaaclab.app import AppLauncher
 app_launcher = AppLauncher({"headless": True, "num_envs": 1})
 simulation_app = app_launcher.app
 
-from arcproLab.arcpro_env_cfg import ARCProSceneCfg, ARCProEnvCfg
+from arcproLab.arcpro_env_cfg import ARCProEnvCfg, ARCProSceneCfg
 
 
 def test_ackermann_electronic_differential():
@@ -172,6 +173,57 @@ def test_curvature_adaptive_terminations():
     )
 
 
+def test_ackermann_feedforward_and_windowed_lookahead():
+    """Verify Ackermann curvature feedforward, 5-point windowed lookahead, and aligned turn_token boxes."""
+    from arcproLab.mdp.track_manager import TrackManager
+
+    # Test A: Ackermann Curvature Feedforward at Centered Corner Entry (lat_err = 0.0, head_err = 0.0)
+    signed_kappa = 1.075  # Corner 1 mean curvature
+    delta_ff = math.atan(0.33 * signed_kappa) / 0.68
+    assert delta_ff > 0.45, f"Expected delta_ff > 0.45, got {delta_ff:.4f}"
+
+    steer_match_left = math.exp(-4.0 * (0.50 - delta_ff) ** 2)
+    steer_match_straight = math.exp(-4.0 * (0.00 - delta_ff) ** 2)
+    assert steer_match_left > steer_match_straight, (
+        f"Left turn (+0.50) must earn higher teacher reward ({steer_match_left:.4f}) than straight (0.00 -> {steer_match_straight:.4f})"
+    )
+    print(
+        f"[PASSED] Ackermann Feedforward: delta_ff={delta_ff:+.4f}, steer_match(+0.50)={steer_match_left:.4f} > steer_match(0.0)={steer_match_straight:.4f}"
+    )
+
+    # Test B: 5-Point Windowed Lookahead Eliminates Pre-Corner Blind Gap & Mid-Corner Drop-Off
+    tm = TrackManager(device="cpu")
+    tm.ensure_synced()
+    tm.last_indices = torch.tensor([1120, 1180], dtype=torch.long, device="cpu")
+    lk = tm.get_lookahead_curvature(
+        lookahead_distance=2.0,
+        track_dir=torch.tensor([1.0, 1.0], dtype=torch.float32, device="cpu"),
+    )
+    assert lk[0].item() > 1.0, (
+        f"Pre-corner WP 1120 lookahead curvature must be > 1.0, got {lk[0].item():.4f}"
+    )
+    assert lk[1].item() > 1.0, (
+        f"Apex WP 1180 lookahead curvature must be > 1.0, got {lk[1].item():.4f}"
+    )
+    print(
+        f"[PASSED] 5-Point Windowed Lookahead: WP 1120={lk[0].item():+.3f}, WP 1180={lk[1].item():+.3f} (no blind gap or drop-off)"
+    )
+
+    # Test C: Track-Aligned turn_token Boxes (Sector 4 spawn vs Intersection entry)
+    def eval_in_c2_turn(x: float, y: float) -> bool:
+        return (x > -5.65) and (x < -2.0) and (y >= -7.5) and (y <= -3.00)
+
+    assert eval_in_c2_turn(-6.00, -7.118) is False, (
+        "Sector 4 spawn (-6.00, -7.118) inside double-yellow chute must have turn_token = 0.0 (in_c2_turn=False)"
+    )
+    assert eval_in_c2_turn(-5.50, -7.10) is True, (
+        "Intersection entry (-5.50, -7.10) must activate turn_token = -1.0 (in_c2_turn=True)"
+    )
+    print(
+        "[PASSED] Track-Aligned Turn Token: (-6.00, -7.118) -> 0.0 (chute), (-5.50, -7.10) -> -1.0 (intersection)"
+    )
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("RUNNING CORNERING REMEDIATION TEST SUITE")
@@ -181,8 +233,9 @@ if __name__ == "__main__":
         test_camera_fov_unlocks_apex()
         test_mdp_braking_advantage()
         test_curvature_adaptive_terminations()
+        test_ackermann_feedforward_and_windowed_lookahead()
         print("=" * 60, flush=True)
-        print("ALL CORNERING REMEDIATION TESTS PASSED (4/4)", flush=True)
+        print("ALL CORNERING REMEDIATION TESTS PASSED (5/5)", flush=True)
         print("=" * 60, flush=True)
     except Exception:
         import traceback

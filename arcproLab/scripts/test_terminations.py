@@ -1,4 +1,5 @@
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Test termination triggers.")
@@ -8,18 +9,19 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import torch
 import os
 import sys
+
+import torch
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ARCPRO_LAB_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if ARCPRO_LAB_DIR not in sys.path:
     sys.path.append(ARCPRO_LAB_DIR)
 
+import mdp.terminations as mdp_done
 from arcpro_env_cfg import ARCProEnvCfg
 from isaaclab.envs import ManagerBasedRLEnv
-import mdp.terminations as mdp_done
 
 
 def main():

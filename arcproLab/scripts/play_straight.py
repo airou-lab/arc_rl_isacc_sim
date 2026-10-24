@@ -1,4 +1,5 @@
 import argparse
+
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Play SKRL ARCPro Policy")
@@ -16,8 +17,8 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import sys
 import os
+import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
@@ -34,11 +35,12 @@ from isaaclab.envs import ManagerBasedRLEnv
 
 print("Importing ARCPro modules...")
 sys.stdout.flush()
-from arcproLab.arcpro_env_cfg import ARCProEnvCfg
-from skrl.envs.wrappers.torch import IsaacLabWrapper
-from arcproLab.agents.skrl_wrappers import SKRLFlattenWrapper
-
 import traceback
+
+from skrl.envs.wrappers.torch import IsaacLabWrapper
+
+from arcproLab.agents.skrl_wrappers import SKRLFlattenWrapper
+from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 try:
     print("Configuring environment...")
@@ -79,16 +81,21 @@ try:
         action = torch.zeros((args_cli.num_envs, 2), device=env.device)
 
         # Wait 10 steps for the car to drop to the ground before driving
-        if step_count > 10:
+        if step_count <= 10:
+            action[:, 0] = 0.0  # Steer: center
+            action[:, 1] = -1.0  # Drive: 0.0 rad/s (Stop during drop)
+        else:
             action[:, 0] = 0.0  # Steer
             action[:, 1] = 1.0  # Drive (forward)
 
         obs, reward, terminated, truncated, info = env.step(action)
         step_count += 1
 
-        # Speed is index 3 in the telemetry obs vector (fwd velocity m/s)
+        # Speed is in info["speed_mps"] or index 3 of the 12-D telemetry tail (obs[:, -9])
         speed = (
-            float(obs[0, 3].item()) if obs.shape[-1] > 3 else float(obs[0, 0].item())
+            float(info["speed_mps"][0].item())
+            if "speed_mps" in info
+            else float(obs[0, -9].item())
         )
         rew_val = float(reward[0].item())
 
@@ -114,8 +121,7 @@ try:
             sys.stdout.flush()
 
         if done:
-            print(f"[RESET] Episode ended at step {step_count} — resetting.")
-            obs, info = env.reset()
+            print(f"[RESET] Episode ended at step {step_count} — auto-reset complete.")
             step_count = 0
             max_speed = 0.0
 

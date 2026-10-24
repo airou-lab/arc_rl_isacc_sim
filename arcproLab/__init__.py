@@ -1,4 +1,5 @@
 import gymnasium as gym
+
 from .arcpro_env_cfg import ARCProEnvCfg
 
 gym.register(

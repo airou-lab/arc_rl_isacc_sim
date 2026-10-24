@@ -6,8 +6,8 @@ and reports detailed telemetry: survival steps, speed profile, steering lock,
 line clearances, waypoints traversed, and outcome.
 """
 
-import sys
 import os
+import sys
 
 WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if WORKSPACE_DIR not in sys.path:
@@ -22,18 +22,18 @@ launcher_args = {"headless": True, "num_envs": 1, "enable_cameras": True}
 app_launcher = AppLauncher(launcher_args)
 simulation_app = app_launcher.app
 
-import torch
-import numpy as np
 import gymnasium as gym
-
-from isaaclab.envs import ManagerBasedRLEnv
-from arcproLab.arcpro_env_cfg import ARCProEnvCfg
-from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic
+import numpy as np
+import torch
 from agents.skrl_wrappers import SKRLFlattenWrapper
-from skrl.envs.wrappers.torch import IsaacLabWrapper
+from isaaclab.envs import ManagerBasedRLEnv
 from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
+from skrl.envs.wrappers.torch import IsaacLabWrapper
+
 import arcproLab.mdp.curriculum_config as curr_cfg
 import arcproLab.mdp.events as mdp_events
+from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic
+from arcproLab.arcpro_env_cfg import ARCProEnvCfg
 
 
 class WarmupActionWrapper(gym.Wrapper):

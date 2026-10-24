@@ -1,4 +1,5 @@
-from pxr import Usd, UsdGeom, UsdPhysics
+from pxr import Usd, UsdPhysics
+
 stage = Usd.Stage.Open("arcproLab/assets/robot/F1Tenth_Metric.usd")
 for p in stage.Traverse():
     if p.HasAPI(UsdPhysics.CollisionAPI):

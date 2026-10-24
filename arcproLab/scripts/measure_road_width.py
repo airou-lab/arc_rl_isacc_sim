@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
@@ -19,6 +20,7 @@ simulation_app = app_launcher.app
 
 import os
 import sys
+
 import torch
 
 # Add arcproLab to sys.path
@@ -27,8 +29,8 @@ ARCPRO_LAB_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if ARCPRO_LAB_DIR not in sys.path:
     sys.path.append(ARCPRO_LAB_DIR)
 
-from isaaclab.envs import ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
+from isaaclab.envs import ManagerBasedRLEnv
 
 
 def main():

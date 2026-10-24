@@ -1,5 +1,6 @@
 import os
 import sys
+
 import numpy as np
 from scipy.spatial import cKDTree
 
@@ -161,8 +162,8 @@ def verify():
 
     # 7. TrackManager Integration Gate
     sys.path.insert(0, "arcproLab")
-    from mdp.track_manager import TrackManager
     import torch
+    from mdp.track_manager import TrackManager
 
     class MockEnv:
         def __init__(self):

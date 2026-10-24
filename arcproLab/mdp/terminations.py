@@ -4,8 +4,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import torch
-from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
+from isaaclab.managers import SceneEntityCfg
 
 
 def white_line_contact(
@@ -49,9 +49,21 @@ def white_line_contact(
 
     env.extras["lat_err"] = lat_err
     env.extras["head_err"] = head_err
+    env.extras["kappa"] = kappa
 
     # Get boundary data
     dist_y, dist_w, dist_g = tm.compute_marker_distances(local_pos)
+    env.extras["dist_y"] = dist_y
+    env.extras["dist_w"] = dist_w
+    env.extras["dist_g"] = dist_g
+
+    # Pre-compute lookahead curvature so RewardManager has fresh step data
+    from mdp.curriculum_config import get_lookahead_distance
+
+    env.extras["lookahead_kappa"] = tm.get_lookahead_curvature(
+        lookahead_distance=get_lookahead_distance(),
+        track_dir=env.extras.get("track_dir"),
+    ).to(device=env.device, dtype=torch.float32)
 
     # 1. Boundary hit (Curvature-Adaptive Thresholds for 1.0x scale):
     # Accommodates Ackermann dynamic off-tracking (rear axle swept path expands by ~4.7cm in sharp turns):
@@ -92,17 +104,32 @@ def white_line_contact(
         (~is_corner) & (~in_stop_bar) & (lat_err < -0.25) & (dist_y > 0.38)
     )
 
+    # Open intersection envelope: where road marks break, allow up to 0.70m lateral drift
+    # while strictly enforcing physical boundary contacts (hit_white | hit_yellow).
+    # On straights and standard curves, enforce strict 0.45m envelope.
+    in_inter_box = (
+        (local_pos[:, 0] >= -6.50)
+        & (local_pos[:, 0] <= -1.80)
+        & (local_pos[:, 1] >= -7.50)
+        & (local_pos[:, 1] <= -2.20)
+    )
+    max_lat_err = torch.where(
+        in_inter_box,
+        torch.tensor(0.70, device=env.device),
+        torch.tensor(0.45, device=env.device),
+    )
+
     # Combined boundary hit:
     # 1. Yellow median contact is FATAL everywhere (no exceptions)
     # 2. White boundary contact is FATAL everywhere except the transverse stop bar
-    # 3. Off-road shoulder or lateral drift > 0.45m is FATAL
+    # 3. Off-road shoulder or lateral drift > max_lat_err is FATAL
     # 4. East cliff void is FATAL
     boundary_hit = (
         hit_white
         | hit_yellow
         | off_cliff_east
         | off_road_shoulder
-        | (torch.abs(lat_err) > 0.45)
+        | (torch.abs(lat_err) > max_lat_err)
     )
     masked_boundary_hit = boundary_hit
 
@@ -215,6 +242,3 @@ def ground_contact_termination(
 
     is_spawn = env.episode_length_buf < 20
     return (~is_spawn) & (max_force > threshold)
-
-
-

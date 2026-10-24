@@ -1,6 +1,7 @@
-import torch
 import os
 import sys
+
+import torch
 
 # Add arcproLab directory to sys path
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -11,8 +12,8 @@ from isaaclab.app import AppLauncher
 app_launcher = AppLauncher({"headless": True})
 simulation_app = app_launcher.app
 
-from isaaclab.envs import ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
+from isaaclab.envs import ManagerBasedRLEnv
 
 
 def main():

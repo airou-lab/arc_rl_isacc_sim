@@ -1,4 +1,5 @@
 import torch
+
 B = 8
 reward_buf = torch.zeros(B)
 val = torch.ones(B, B)

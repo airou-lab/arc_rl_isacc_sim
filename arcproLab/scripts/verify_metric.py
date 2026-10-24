@@ -8,6 +8,7 @@ Script to verify the SB3 policy in the Isaac Lab environment.
 """
 
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
@@ -27,9 +28,10 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 """Rest of the imports."""
-import torch
 import os
 import sys
+
+import torch
 
 # Add both root and arcproLab to sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -41,8 +43,8 @@ if ROOT_DIR not in sys.path:
 if ARCPRO_LAB_DIR not in sys.path:
     sys.path.append(ARCPRO_LAB_DIR)
 
-from isaaclab.envs import ManagerBasedRLEnv
 from arcpro_env_cfg import ARCProEnvCfg
+from isaaclab.envs import ManagerBasedRLEnv
 from mdp.policy_wrapper import PolicyWrapper
 from mdp.track_manager import get_track_manager
 
