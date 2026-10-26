@@ -262,17 +262,8 @@ class AutonomousSentinel:
             summary = "Policy Collapse detected: Warm-restarting training cleanly"
             restart_cmd = ["bash", START_SCRIPT]
 
-        try:
-            ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
-            with open(su.DIAGNOSIS_FILE, "w") as f:
-                f.write(
-                    f"# SENTINEL SELF-HEALING DIAGNOSIS\n\n**Timestamp**: {ts}\n\n"
-                    f"**Failure Detected**: `{failure_type}`\n\n"
-                    f"**Action Taken**: {summary}\n\n**Dry Run**: {self.dry_run}\n\n"
-                    f"```json\n{json.dumps(diagnostics, indent=2)}\n```\n"
-                )
-        except Exception as e:
-            self.logger.error(f"Failed to write diagnosis file: {e}")
+        su.write_diagnosis_file(failure_type, summary, diagnostics, self.dry_run)
+
 
         cnt = self.state.get("interventions_count", 0) + 1
         self.state["last_intervention_time"] = time.time()
@@ -395,9 +386,11 @@ class AutonomousSentinel:
         for _, _, old_key in candidates[1:]:
             if old_key not in audited_list:
                 audited_list.append(old_key)
+        su.process_checkpoint_probe_and_tuning(target_ckpt, target_key, self.logger)
+        audited_list.append(target_key)
         save_state(self.state)
-        self.audit_checkpoint(target_ckpt, auto_heal=True)
         return True
+
 
 
 def run_daemon(sentinel: AutonomousSentinel, interval_sec: float = 15.0) -> None:
@@ -447,12 +440,23 @@ def main() -> None:
     p.add_argument("--force", action="store_true", help="Bypass intervention cooldown")
     p.add_argument("--audit", type=str, default="", help="Audit checkpoint path")
     p.add_argument("--audit-latest", action="store_true", help="Audit latest ckpt")
+    p.add_argument("--probe", type=str, default="", help="Probe checkpoint path on CPU")
+    p.add_argument("--probe-latest", action="store_true", help="Probe latest ckpt on CPU")
     p.add_argument("--verbose", action="store_true", help="Enable debug logging")
     args = p.parse_args()
 
     logger = su.setup_logger(verbose=args.verbose)
     sentinel = AutonomousSentinel(logger=logger, dry_run=args.dry_run)
 
+    if args.probe or args.probe_latest:
+        target = args.probe or su.get_current_run_checkpoint()
+        if not target:
+            logger.error("No checkpoint found to probe.")
+            sys.exit(1)
+        res = su.process_checkpoint_probe_and_tuning(
+            target, su.format_checkpoint_key(target), logger
+        )
+        sys.exit(0 if res else 1)
     if args.audit or args.audit_latest:
         target = args.audit or su.get_current_run_checkpoint()
         if not target:
@@ -461,6 +465,7 @@ def main() -> None:
         logger.info(f"Manual regression audit requested for checkpoint: {target}")
         passed, _ = sentinel.audit_checkpoint(target, auto_heal=True)
         sys.exit(0 if passed else 1)
+
     if args.trigger:
         logger.info(f"Manual trigger requested for sentinel: {args.trigger}")
         _, _, diag = sentinel.run_health_check()

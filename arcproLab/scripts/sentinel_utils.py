@@ -23,6 +23,9 @@ CTA_DB_PATH = f"{WORKSPACE_ROOT}/.cta/cta_turns.db"
 CURRICULUM_CFG_PATH = f"{WORKSPACE_ROOT}/arcproLab/mdp/curriculum_sectors.json"
 START_SCRIPT = f"{WORKSPACE_ROOT}/start_tmux_training.sh"
 DEFAULT_COOLDOWN_SEC = 300.0
+VENV_PYTHON = f"{WORKSPACE_ROOT}/venv/bin/python"
+PROBE_SCRIPT = f"{WORKSPACE_ROOT}/arcproLab/scripts/checkpoint_probe.py"
+PROBE_LOG_PATH = f"{WORKSPACE_ROOT}/logs/checkpoint_probes.jsonl"
 
 
 @dataclass
@@ -284,6 +287,24 @@ def log_to_cta_db(
         print(f"[Sentinel] Failed to log to CTA database: {e}", file=sys.stderr)
 
 
+def write_diagnosis_file(
+    failure_type: str, summary: str, diagnostics: Dict[str, Any], dry_run: bool = False
+) -> None:
+    """Write markdown diagnosis file upon self-healing intervention."""
+    try:
+        ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        with open(DIAGNOSIS_FILE, "w") as f:
+            f.write(
+                f"# SENTINEL SELF-HEALING DIAGNOSIS\n\n**Timestamp**: {ts}\n\n"
+                f"**Failure Detected**: `{failure_type}`\n\n"
+                f"**Action Taken**: {summary}\n\n**Dry Run**: {dry_run}\n\n"
+                f"```json\n{json.dumps(diagnostics, indent=2)}\n```\n"
+            )
+    except Exception as e:
+        print(f"[Sentinel] Failed to write diagnosis file: {e}", file=sys.stderr)
+
+
+
 def print_status(sentinel: Any) -> int:
     """Print human-readable status summary and return exit code."""
     is_healthy, failures, diagnostics = sentinel.run_health_check()
@@ -310,3 +331,108 @@ def print_status(sentinel: Any) -> int:
         f"Audited Checkpoints: {sentinel.state.get('audited_checkpoints', [])}"
     )
     return 0 if is_healthy else 1
+
+
+def probe_checkpoint_bias(ckpt_path: str) -> Optional[Dict[str, Any]]:
+    """Instant CPU evaluation of policy steering bias and braking (~0.1s execution)."""
+    if not os.path.isfile(ckpt_path):
+        return None
+    py_bin = VENV_PYTHON if os.path.exists(VENV_PYTHON) else sys.executable
+    cmd = [py_bin, PROBE_SCRIPT, ckpt_path, "--json"]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        if res.returncode == 0 and res.stdout.strip():
+            metrics = json.loads(res.stdout.strip())
+            os.makedirs(os.path.dirname(PROBE_LOG_PATH), exist_ok=True)
+            with open(PROBE_LOG_PATH, "a") as f:
+                f.write(json.dumps(metrics) + "\n")
+            return metrics
+        elif res.stderr:
+            print(f"[Sentinel] Probe stderr: {res.stderr.strip()}", file=sys.stderr)
+    except Exception as e:
+        print(f"[Sentinel] Probe error on {ckpt_path}: {e}", file=sys.stderr)
+    return None
+
+
+def auto_tune_curriculum_bias(bias_metrics: Dict[str, Any]) -> Dict[str, Any]:
+    """Dynamically adjust curriculum sector weights based on probed policy bias."""
+    bias = bias_metrics.get("mu_neutral_steer", 0.0)
+    if bias > 0.08:
+        new_weights = [0.35, 0.15, 0.25, 0.15, 0.10]
+        reason = f"High left bias ({bias:+.4f} > 0.08): 60% straights immersion"
+    elif bias > 0.04:
+        new_weights = [0.30, 0.20, 0.20, 0.20, 0.10]
+        reason = f"Moderate left bias ({bias:+.4f} > 0.04): 50% straights immersion"
+    elif bias > 0.02:
+        new_weights = [0.25, 0.20, 0.20, 0.20, 0.15]
+        reason = f"Low left bias ({bias:+.4f} > 0.02): 45% straights centering"
+    elif bias < -0.04:
+        new_weights = [0.20, 0.35, 0.10, 0.25, 0.10]
+        reason = f"Right bias ({bias:+.4f} < -0.04): Corner immersion"
+    else:
+        new_weights = [0.20, 0.20, 0.20, 0.20, 0.20]
+        reason = f"Neutrality achieved ({bias:+.4f}): Uniform 20% distribution"
+
+    curr_weights = [0.20, 0.20, 0.20, 0.20, 0.20]
+    if os.path.exists(CURRICULUM_CFG_PATH):
+        try:
+            with open(CURRICULUM_CFG_PATH, "r") as f:
+                cfg = json.load(f)
+                curr_weights = cfg.get("sector_weights", curr_weights)
+        except Exception:
+            pass
+
+    tuned = [round(w, 2) for w in curr_weights] != [round(w, 2) for w in new_weights]
+    if tuned:
+        try:
+            sys.path.insert(0, os.path.abspath(os.path.join(WORKSPACE_ROOT, "arcproLab")))
+            from mdp.curriculum_config import update_curriculum_config
+
+            update_curriculum_config({"sector_weights": new_weights})
+            desc = f"Curriculum dynamic bias tune: {reason}"
+            log_to_cta_db("TUNE", desc, "SUCCESS", CURRICULUM_CFG_PATH, str(new_weights))
+        except Exception as e:
+            print(f"[Sentinel] Failed to update curriculum: {e}", file=sys.stderr)
+
+    return {
+        "old_weights": curr_weights,
+        "new_weights": new_weights,
+        "tuned": tuned,
+        "reason": reason,
+        "bias": bias,
+    }
+
+
+def process_checkpoint_probe_and_tuning(
+    ckpt_path: str, ckpt_key: str, logger: logging.Logger
+) -> Optional[Dict[str, Any]]:
+    """Probe checkpoint, log telemetry, and apply dynamic bias curriculum tuning."""
+    logger.info(f"🎯 Probing checkpoint weights (CPU): {ckpt_key}")
+    res = probe_checkpoint_bias(ckpt_path)
+    if not res:
+        logger.warning(f"Failed to probe checkpoint: {ckpt_key}")
+        return None
+
+    bias = res["mu_neutral_steer"]
+    t_steer = res["mu_turn_steer"]
+    d_steer = res["delta_turn_steer"]
+    brake = res["mu_turn_throt"]
+    sig = res["sigma_steer"]
+    status_tag = "🏆 TARGET MET" if res["is_neutral"] else "⚠️ ACTIVE BIAS"
+    logger.info(
+        f"[Probe] {ckpt_key} | Neutral Steer: {bias:+.4f} ({status_tag}) | "
+        f"Turn Steer: {t_steer:+.4f} (Δ={d_steer:+.4f}) | Pre-Brake: {brake:+.4f} | σ_steer: {sig:.4f}"
+    )
+
+    tuning = auto_tune_curriculum_bias(res)
+    if tuning and tuning.get("tuned"):
+        logger.info(
+            f"[Sentinel] 🔄 Dynamic Curriculum Tuned: {tuning['reason']} -> {tuning['new_weights']}"
+        )
+    if res["is_neutral"]:
+        logger.info(
+            f"🏆 Checkpoint {ckpt_key} has achieved straightaway neutrality (|bias| <= 0.02)! "
+            "Policy is ready for full-lap autonomous driving in debug.sh!"
+        )
+    return res
+
