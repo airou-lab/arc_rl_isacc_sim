@@ -110,9 +110,9 @@ class RoadManager:
             # 1. Corner 1 Turn (Leg 1 South -> Leg 2 East): curve approach begins at Y < -6.10, completes at X >= -15.00
             in_c1_turn = (local_pos[:, 0:1] < -15.00) & (local_pos[:, 1:2] < -6.10)
             # 2. Corner 2 / Intersection Turn (Leg 2 East -> North Straight):
-            # Curve begins at X > -6.50, completes when vehicle enters North straight at Y >= -2.20
+            # Curve begins at X > -5.65, completes when vehicle enters North straight at Y >= -2.20
             in_c2_turn = (
-                (local_pos[:, 0:1] > -6.50)
+                (local_pos[:, 0:1] > -5.65)
                 & (local_pos[:, 0:1] < -1.80)
                 & (local_pos[:, 1:2] >= -7.5)
                 & (local_pos[:, 1:2] <= -2.20)
