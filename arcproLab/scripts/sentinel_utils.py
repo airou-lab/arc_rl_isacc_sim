@@ -304,7 +304,6 @@ def write_diagnosis_file(
         print(f"[Sentinel] Failed to write diagnosis file: {e}", file=sys.stderr)
 
 
-
 def print_status(sentinel: Any) -> int:
     """Print human-readable status summary and return exit code."""
     is_healthy, failures, diagnostics = sentinel.run_health_check()
@@ -337,10 +336,18 @@ def probe_checkpoint_bias(ckpt_path: str) -> Optional[Dict[str, Any]]:
     """Instant CPU evaluation of policy steering bias and braking (~0.1s execution)."""
     if not os.path.isfile(ckpt_path):
         return None
-    py_bin = VENV_PYTHON if os.path.exists(VENV_PYTHON) else sys.executable
+    isaac_py = os.path.expanduser("~/IsaacLab/_isaac_sim/python.sh")
+    py_bin = (
+        VENV_PYTHON
+        if os.path.exists(VENV_PYTHON)
+        else (isaac_py if os.path.exists(isaac_py) else sys.executable)
+    )
     cmd = [py_bin, PROBE_SCRIPT, ckpt_path, "--json"]
+    clean_env = {k: v for k, v in os.environ.items() if not k.startswith("PYTHON")}
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        res = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=15, env=clean_env
+        )
         if res.returncode == 0 and res.stdout.strip():
             metrics = json.loads(res.stdout.strip())
             os.makedirs(os.path.dirname(PROBE_LOG_PATH), exist_ok=True)
@@ -358,11 +365,11 @@ def auto_tune_curriculum_bias(bias_metrics: Dict[str, Any]) -> Dict[str, Any]:
     """Dynamically adjust curriculum sector weights based on probed policy bias."""
     bias = bias_metrics.get("mu_neutral_steer", 0.0)
     if bias > 0.08:
-        new_weights = [0.35, 0.15, 0.25, 0.15, 0.10]
-        reason = f"High left bias ({bias:+.4f} > 0.08): 60% straights immersion"
-    elif bias > 0.04:
         new_weights = [0.30, 0.20, 0.20, 0.20, 0.10]
-        reason = f"Moderate left bias ({bias:+.4f} > 0.04): 50% straights immersion"
+        reason = f"High left bias ({bias:+.4f} > 0.08): 50% straights immersion"
+    elif bias > 0.04:
+        new_weights = [0.25, 0.20, 0.20, 0.25, 0.10]
+        reason = f"Moderate left bias ({bias:+.4f} > 0.04): 45% straights immersion"
     elif bias > 0.02:
         new_weights = [0.25, 0.20, 0.20, 0.20, 0.15]
         reason = f"Low left bias ({bias:+.4f} > 0.02): 45% straights centering"
@@ -385,12 +392,16 @@ def auto_tune_curriculum_bias(bias_metrics: Dict[str, Any]) -> Dict[str, Any]:
     tuned = [round(w, 2) for w in curr_weights] != [round(w, 2) for w in new_weights]
     if tuned:
         try:
-            sys.path.insert(0, os.path.abspath(os.path.join(WORKSPACE_ROOT, "arcproLab")))
+            sys.path.insert(
+                0, os.path.abspath(os.path.join(WORKSPACE_ROOT, "arcproLab"))
+            )
             from mdp.curriculum_config import update_curriculum_config
 
             update_curriculum_config({"sector_weights": new_weights})
             desc = f"Curriculum dynamic bias tune: {reason}"
-            log_to_cta_db("TUNE", desc, "SUCCESS", CURRICULUM_CFG_PATH, str(new_weights))
+            log_to_cta_db(
+                "TUNE", desc, "SUCCESS", CURRICULUM_CFG_PATH, str(new_weights)
+            )
         except Exception as e:
             print(f"[Sentinel] Failed to update curriculum: {e}", file=sys.stderr)
 
@@ -435,4 +446,3 @@ def process_checkpoint_probe_and_tuning(
             "Policy is ready for full-lap autonomous driving in debug.sh!"
         )
     return res
-

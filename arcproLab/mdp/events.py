@@ -17,7 +17,7 @@ def reset_robot_curriculum_spawn(
     Sector 1: Start Line (X = -16.200, Y = 5.500, yaw = -1.5708 [South])
     Sector 2: Corner 1 Runway Approach (X = -16.218, Y = -4.800, yaw = -1.5708 [South, 0.8m runway into C1])
     Sector 3: Corner 1 Apex Immersion (X = -15.800, Y = -6.557, yaw = -0.8260 [-47.3 deg])
-    Sector 4: Leg 2 Intersection Approach (X = -6.000, Y = -7.118, yaw = 0.0000 [East, 0.8m before turn])
+    Sector 4: Leg 2 Intersection Approach (X = -7.000, Y = -7.100, yaw = 0.0000 [East, 1.35m before turn])
     Sector 5: Corner 4 Runway Approach (X = -13.548, Y = 7.116, yaw = 3.14159 [West, 1.0m runway into C4])
     Applies ±1.0cm lateral jitter and ±2° heading noise to prevent open-loop memorization.
     """
@@ -34,7 +34,7 @@ def reset_robot_curriculum_spawn(
     # Sector 1: Start Line / West Runway (X = -16.201, Y = 5.500, yaw = -1.5708 [South])
     # Sector 2: Corner 1 Runway Approach (X = -16.204, Y = -4.300, yaw = -1.5708 [South, 2.0m runway into C1])
     # Sector 3: Leg 2 Post-C1 Exit & Runway (X = -12.500, Y = -7.100, yaw = 0.0000 [East, 6.5m runway into C2])
-    # Sector 4: Leg 2 Intersection Approach (X = -6.000, Y = -7.118, yaw = 0.0000 [East, 0.8m before C2 turn])
+    # Sector 4: Leg 2 Intersection Approach (X = -7.000, Y = -7.100, yaw = 0.0000 [East, 1.35m before C2 turn])
     # Sector 5: Top North Straight & C4 Approach (X = -10.500, Y = 7.100, yaw = 3.14159 [West, 4.5m into C4])
     forced_sector = os.environ.get("ARCPRO_FORCE_SECTOR")
     if forced_sector is not None and forced_sector.strip() in ("1", "2", "3", "4", "5"):
@@ -43,7 +43,7 @@ def reset_robot_curriculum_spawn(
             1: (-16.201, 5.500, -1.5708),
             2: (-16.204, -4.300, -1.5708),
             3: (-12.500, -7.100, 0.0000),
-            4: (-6.000, -7.118, 0.0000),
+            4: (-7.000, -7.100, 0.0000),
             5: (-10.500, 7.100, 3.14159),
         }
         cx, cy, cyaw = sector_coords[s_idx]
@@ -64,7 +64,7 @@ def reset_robot_curriculum_spawn(
                     torch.tensor(-12.500, device=env.device),
                     torch.where(
                         r < t4,
-                        torch.tensor(-6.000, device=env.device),
+                        torch.tensor(-7.000, device=env.device),
                         torch.tensor(-10.500, device=env.device),
                     ),
                 ),
@@ -82,7 +82,7 @@ def reset_robot_curriculum_spawn(
                     torch.tensor(-7.100, device=env.device),
                     torch.where(
                         r < t4,
-                        torch.tensor(-7.118, device=env.device),
+                        torch.tensor(-7.100, device=env.device),
                         torch.tensor(7.100, device=env.device),
                     ),
                 ),

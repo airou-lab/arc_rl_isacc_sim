@@ -220,6 +220,12 @@ class RewardCfg:
     # Curvature-Adaptive Target Speed Tracking
     speed_tracking = RewTerm(func=mdp_rew.curvature_speed_reward, weight=180.0)
 
+    # Straightaway Zero-Steering Regularization: Penalizes non-zero steering on straightaways when centered
+    # to eliminate CCW circuit steering bias drift without impeding cornering lock.
+    straight_zero_steer = RewTerm(
+        func=mdp_rew.straightaway_zero_steer_penalty, weight=40.0
+    )
+
 
 @configclass
 class TerminationCfg:

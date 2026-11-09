@@ -203,6 +203,7 @@ def _compute_telemetry(
     env.extras["dist_g"] = dist_g  # Masking signal for gate crossing
     env.extras["dist_y"] = dist_y
     env.extras["dist_w"] = dist_w
+    env.extras["turn_token"] = obs[:, 0]
 
     # Asymmetric Actor-Critic (AAC) Routing:
     # Populate full unmasked telemetry in the shared observation vector so ARCProCritic

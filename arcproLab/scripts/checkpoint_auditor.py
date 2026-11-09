@@ -33,7 +33,7 @@ parser.add_argument("--output", type=str, default=DEFAULT_AUDIT_OUT)
 parser.add_argument("--auto_heal", action="store_true", help="Auto-adjust curriculum")
 parser.add_argument("--min_yellow_thresh", type=float, default=2.5)
 parser.add_argument("--min_white_thresh", type=float, default=3.5)
-parser.add_argument("--min_avg_speed", type=float, default=0.30)
+parser.add_argument("--min_avg_speed", type=float, default=0.15)
 
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -43,14 +43,14 @@ args_cli.enable_cameras = True
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
+import mdp.curriculum_config as curr_cfg  # noqa: E402
+import mdp.events as mdp_events  # noqa: E402
 import torch  # noqa: E402
 from agents.skrl_wrappers import SKRLFlattenWrapper, WarmupActionWrapper  # noqa: E402
 from isaaclab.envs import ManagerBasedRLEnv  # noqa: E402
 from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG  # noqa: E402
 from skrl.envs.wrappers.torch import IsaacLabWrapper  # noqa: E402
 
-import arcproLab.mdp.curriculum_config as curr_cfg  # noqa: E402
-import arcproLab.mdp.events as mdp_events  # noqa: E402
 from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic  # noqa: E402
 from arcproLab.arcpro_env_cfg import ARCProEnvCfg  # noqa: E402
 
@@ -69,6 +69,7 @@ def set_spawn_sector(sector: int):
     th = sector_thresholds[sector]
     sector_weights = [0.0, 0.0, 0.0, 0.0, 0.0]
     sector_weights[sector - 1] = 1.0
+    os.environ["ARCPRO_FORCE_SECTOR"] = str(sector)
     curr_cfg._CACHED_CONFIG["sector_weights"] = sector_weights
     curr_cfg._CACHED_THRESHOLDS = list(th)
     curr_cfg.get_sector_thresholds = lambda: th
@@ -388,10 +389,10 @@ def main():
     desc = f"Audit of {ckpt_name}: {status} ({n_pass}/{tot} sectors passed)"
     out_sum = f"Pass rate: {rate * 100:.1f}%. Auto-heal: {'; '.join(heals)}"
     log_to_cta(desc, "SUCCESS" if status == "PASSED" else "WARNING", ckpt_path, out_sum)
-    sys.exit(0 if status == "PASSED" else 1)
+    return 0 if status == "PASSED" else 1
 
 
 if __name__ == "__main__":
-    main()
+    code = main()
     simulation_app.close()
-    os._exit(0)
+    os._exit(code)

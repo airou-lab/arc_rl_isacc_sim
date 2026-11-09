@@ -96,39 +96,65 @@ def test_actor_architecture():
         f"[PASSED] Forward pass successful: output shape {action_mean.shape}, zero NaNs, valid actions in [-1, 1]"
     )
 
-    # Adversarial check: Actor Blindness & Non-Mutating Clone
+    # Adversarial check: Actor Blindness, Unmasked Lookahead Curvature & Non-Mutating Clone
     obs_a = torch.randn(20, 25100, device=device)
+    obs_a[:, 25088 + 0] = 0.0  # straightaway turn_token == 0.0
     obs_b = obs_a.clone()
-    obs_b[:, 25088 + 8] = 99.0    # lat_err
-    obs_b[:, 25088 + 9] = -99.0   # head_err
-    obs_b[:, 25088 + 11] = 500.0  # distance
+    obs_b[:, 25088 + 5] = 0.85  # prev_steer (masked)
+    obs_b[:, 25088 + 6] = -1.00  # prev_drive (masked)
+    obs_b[:, 25088 + 8] = 99.0  # lat_err (masked)
+    obs_b[:, 25088 + 9] = -99.0  # head_err (masked)
+    obs_b[:, 25088 + 11] = 500.0  # distance (masked)
+    obs_b_telemetry_snapshot = obs_b[:, 25088:25100].clone()
     act_a, _, _ = actor.compute({"states": obs_a})
     act_b, _, _ = actor.compute({"states": obs_b})
     assert torch.allclose(act_a, act_b, atol=1e-6), (
-        "ARCProActor output changed when privileged slots [8, 9, 11] were perturbed!"
+        "ARCProActor output changed when masked slots [5, 6, 8, 9, 11] were perturbed!"
     )
-    assert obs_b[:, 25088 + 8].eq(99.0).all(), (
-        "ARCProActor.compute mutated input obs_b in-place!"
-    )
-    print(
-        "[PASSED] ARCProActor is 100% blind to privileged slots [8, 9, 11] and does not mutate input state"
+    assert torch.equal(obs_b[:, 25088:25100], obs_b_telemetry_snapshot), (
+        "ARCProActor.compute mutated input states[:, 25088:25100] in-place!"
     )
 
-    # Critic privileged gradient check
+    # Input gradient check on states[:, 25088 + i] with turn_token == 0.0
+    grad_states = obs_a.clone().detach().requires_grad_(True)
+    actor.zero_grad()
+    act_grad_out, _, _ = actor.compute({"states": grad_states})
+    act_grad_out.sum().backward()
+    assert grad_states.grad is not None, "grad_states.grad is None!"
+    for i in [5, 6, 8, 9, 11]:
+        slot_grad = grad_states.grad[:, 25088 + i].abs().sum().item()
+        assert slot_grad == 0.0, (
+            f"Expected zero input gradient on masked slot {i}, got {slot_grad}"
+        )
+    for i in [0, 10]:
+        slot_grad = grad_states.grad[:, 25088 + i].abs().sum().item()
+        assert slot_grad > 0.0, (
+            f"Expected non-zero input gradient on unmasked slot {i} when turn_token == 0.0, got {slot_grad}"
+        )
+    print(
+        "[PASSED] ARCProActor masks slots [5, 6, 8, 9, 11] (zero input grad), preserves unmasked slots [0, 10] when turn_token == 0.0, and does not mutate states[:, 25088:25100]"
+    )
+
+    # Critic privileged gradient check across all 12 unmasked slots
     critic = ARCProCritic(obs_space, act_space, device).to(device)
     critic.zero_grad()
-    val, _ = critic.compute({"states": obs_b})
+    critic_states = obs_b.clone().detach().requires_grad_(True)
+    val, _ = critic.compute({"states": critic_states})
     val.sum().backward()
+    for i in range(12):
+        c_slot_grad = critic_states.grad[:, 25088 + i].abs().sum().item()
+        assert c_slot_grad > 0.0, (
+            f"Expected non-zero Critic input gradient on slot {i}, got {c_slot_grad}"
+        )
     priv_grad_sum = (
-        critic.critic_head[0].weight.grad[:, [8, 9, 10, 11]].abs().sum().item()
+        critic.critic_head[0].weight.grad[:, [5, 6, 8, 9, 10, 11]].abs().sum().item()
     )
     assert priv_grad_sum > 0.0, (
-        f"Expected non-zero Critic gradient on privileged slots [8, 9, 10, 11], got {priv_grad_sum}"
+        f"Expected non-zero Critic gradient on slots [5, 6, 8, 9, 10, 11], got {priv_grad_sum}"
     )
     print(
-        f"[PASSED] ARCProCritic receives unmasked privileged state [8, 9, 10, 11]: grad L1 = {priv_grad_sum:.4f}"
+        f"[PASSED] ARCProCritic receives all 12 unmasked telemetry slots: grad L1 = {priv_grad_sum:.4f}"
     )
-
 
 
 def test_yuv_chrominance_isolation():

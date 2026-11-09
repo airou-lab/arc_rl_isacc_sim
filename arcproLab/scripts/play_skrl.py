@@ -36,8 +36,9 @@ parser.add_argument(
     "--steer_bias_trim",
     type=float,
     default=0.0,
-    help="Steering bias trim applied during evaluation (default: 0.0)",
+    help="Optional steering bias trim for legacy diagnostics (default: 0.0 for pure vision policy evaluation)",
 )
+
 parser.add_argument(
     "--max_steps",
     type=int,
@@ -337,7 +338,28 @@ try:
                 # Full steering authority for cornering & lane following (matches training action space)
                 action = action.clone()
                 if args_cli.steer_bias_trim != 0.0:
-                    action[:, 0] += args_cli.steer_bias_trim
+                    base_unwrapped = env.unwrapped
+                    kappa_val = base_unwrapped.extras.get(
+                        "kappa", torch.zeros(obs.shape[0], device=env.device)
+                    )
+                    dist_w_val = base_unwrapped.extras.get(
+                        "dist_w", torch.ones(obs.shape[0], device=env.device) * 0.20
+                    )
+                    dist_y_val = base_unwrapped.extras.get(
+                        "dist_y", torch.ones(obs.shape[0], device=env.device) * 0.20
+                    )
+                    token_straight = torch.abs(obs[:, 25088]) < 0.1
+                    geom_straight = torch.abs(kappa_val) < 0.15
+                    # Never push car into the boundary: clamp trim if within 14cm of the boundary line
+                    safe_boundary = (
+                        dist_w_val > 0.14
+                        if args_cli.steer_bias_trim < 0
+                        else dist_y_val > 0.14
+                    )
+                    is_straight = (token_straight & geom_straight & safe_boundary).to(
+                        action.dtype
+                    )
+                    action[:, 0] += args_cli.steer_bias_trim * is_straight
 
         obs, reward, terminated, truncated, info = env.step(action)
         step_count += 1

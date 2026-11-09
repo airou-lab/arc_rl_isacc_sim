@@ -49,7 +49,7 @@ class ARCProActor(GaussianMixin, Model):
         device,
         clip_actions=True,
         clip_log_std=True,
-        min_log_std=-20,
+        min_log_std=-2.0,
         max_log_std=2,
         reduction="sum",
     ):
@@ -104,8 +104,12 @@ class ARCProActor(GaussianMixin, Model):
                 self.num_visual_features : self.num_visual_features
                 + self.num_telemetry,
             ].clone()
-            # Strictly mask privileged coordinates (lat_err=8, head_err=9, distance=11) for Actor.
-            # Slot 10 (lookahead_kappa) remains unmasked for pre-braking.
+            # Strictly mask privileged coordinates (lat_err=8, head_err=9, distance=11)
+            # and autoregressive action feedback (prev_steer=5, prev_drive=6) for Actor.
+            # Slot 10 (lookahead_kappa) remains unmasked so Actor receives continuous
+            # 5-point windowed lookahead curvature during the 1.5m pre-braking corridor.
+            telemetry[:, 5] = 0.0
+            telemetry[:, 6] = 0.0
             telemetry[:, 8] = 0.0
             telemetry[:, 9] = 0.0
             telemetry[:, 11] = 0.0

@@ -39,6 +39,8 @@ import sys
 import warnings
 from datetime import datetime
 
+import torch
+
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -168,6 +170,20 @@ def main():
         print(
             f"[Train] Explicitly updated optimizer learning rate to: {cfg_ppo['learning_rate']}"
         )
+
+        # Exploration Noise Recovery:
+        # If steering log_std has collapsed (e.g. -3.98, sigma = 0.018 rad ~ 1 deg),
+        # re-initialize steering noise to -1.5 (sigma = 0.223 rad ~ 12.8 deg) so PPO can explore straightaway centering.
+        # Clear optimizer momentum state for this parameter to prevent stale Adam gradients from dragging it down.
+        if agent.policy.log_std_parameter.data[0] < -1.8:
+            old_std = torch.exp(agent.policy.log_std_parameter.data[0]).item()
+            agent.policy.log_std_parameter.data[0] = -1.5
+            p_log_std = agent.policy.log_std_parameter
+            if p_log_std in agent.optimizer.state:
+                agent.optimizer.state[p_log_std] = {}
+            print(
+                f"[Train] 🎯 Reset collapsed steering log_std from {old_std:.4f} to {torch.exp(agent.policy.log_std_parameter.data[0]).item():.4f} (log_std = -1.50) & reset Adam moments"
+            )
 
     # 7. Train
     print(f"Starting SKRL AAC training for {args_cli.total_timesteps} steps...")

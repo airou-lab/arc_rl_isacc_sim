@@ -2,8 +2,6 @@
 """Autonomous Self-Healing Sentinel for ARCPro Reinforcement Learning."""
 
 import argparse
-import datetime
-import json
 import logging
 import math
 import os
@@ -264,7 +262,6 @@ class AutonomousSentinel:
 
         su.write_diagnosis_file(failure_type, summary, diagnostics, self.dry_run)
 
-
         cnt = self.state.get("interventions_count", 0) + 1
         self.state["last_intervention_time"] = time.time()
         self.state["last_intervention_type"] = failure_type
@@ -392,7 +389,6 @@ class AutonomousSentinel:
         return True
 
 
-
 def run_daemon(sentinel: AutonomousSentinel, interval_sec: float = 15.0) -> None:
     """Run persistent monitoring loop."""
     sentinel.logger.info(f"Sentinel Daemon Active (interval={interval_sec}s)")
@@ -441,7 +437,9 @@ def main() -> None:
     p.add_argument("--audit", type=str, default="", help="Audit checkpoint path")
     p.add_argument("--audit-latest", action="store_true", help="Audit latest ckpt")
     p.add_argument("--probe", type=str, default="", help="Probe checkpoint path on CPU")
-    p.add_argument("--probe-latest", action="store_true", help="Probe latest ckpt on CPU")
+    p.add_argument(
+        "--probe-latest", action="store_true", help="Probe latest ckpt on CPU"
+    )
     p.add_argument("--verbose", action="store_true", help="Enable debug logging")
     args = p.parse_args()
 

@@ -134,7 +134,9 @@ def test_telemetry_ppo_gradient_step():
 
 def test_Critic_privileged_gradient_and_ping_pong_buffers():
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    print("\n[TEST] Verifying Critic privileged gradients & SKRLFlattenWrapper ping-pong buffers...")
+    print(
+        "\n[TEST] Verifying Critic privileged gradients & SKRLFlattenWrapper ping-pong buffers..."
+    )
 
     obs_space = gym.spaces.Box(low=-float("inf"), high=float("inf"), shape=(25100,))
     act_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(2,))
@@ -171,7 +173,7 @@ def test_Critic_privileged_gradient_and_ping_pong_buffers():
     # Populate memory where ONLY privileged slots [8, 9, 11] in telemetry are non-zero
     for i in range(rollouts):
         states = torch.zeros(num_envs, 25100, device="cpu")
-        states[:, 25088 + 8] = 0.25 * (i + 1)   # lat_err
+        states[:, 25088 + 8] = 0.25 * (i + 1)  # lat_err
         states[:, 25088 + 9] = -0.35 * (i + 1)  # head_err
         states[:, 25088 + 11] = 1.50 * (i + 1)  # distance
         actions = torch.zeros(num_envs, 2, device="cpu")
@@ -199,9 +201,7 @@ def test_Critic_privileged_gradient_and_ping_pong_buffers():
     agent._update(timestep=rollouts, timesteps=100)
 
     assert critic.critic_head[0].weight.grad is not None, "Critic weight.grad is None!"
-    priv_grad_norm = (
-        critic.critic_head[0].weight.grad[:, [8, 9, 11]].abs().sum().item()
-    )
+    priv_grad_norm = critic.critic_head[0].weight.grad[:, [8, 9, 11]].abs().sum().item()
     priv_weight_diff = (
         (critic.critic_head[0].weight[:, [8, 9, 11]] - init_priv_weights)
         .abs()
@@ -240,7 +240,9 @@ def test_Critic_privileged_gradient_and_ping_pong_buffers():
             self.num_envs = num_envs
             self.device = device
             self.scene = _DummyScene(
-                torch.randint(0, 255, (num_envs, 224, 224, 3), device=device, dtype=torch.uint8)
+                torch.randint(
+                    0, 255, (num_envs, 224, 224, 3), device=device, dtype=torch.uint8
+                )
             )
             self.unwrapped = self
             self.observation_space = obs_space
@@ -266,11 +268,10 @@ def test_Critic_privileged_gradient_and_ping_pong_buffers():
         "s_{t+1} buffer does not contain expected telemetry!"
     )
     print(
-        f"[PASSED] SKRLFlattenWrapper ping-pong buffers verified: buf0={ hex(buf0.data_ptr()) } != buf1={ hex(buf1.data_ptr()) }"
+        f"[PASSED] SKRLFlattenWrapper ping-pong buffers verified: buf0={hex(buf0.data_ptr())} != buf1={hex(buf1.data_ptr())}"
     )
 
 
 if __name__ == "__main__":
     test_telemetry_ppo_gradient_step()
     test_Critic_privileged_gradient_and_ping_pong_buffers()
-

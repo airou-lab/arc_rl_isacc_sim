@@ -945,3 +945,71 @@ At the 500k milestone, the agent's episode lengths reached up to ~723, but the e
      - Because all checkpoints (`50k..350k`) from `20261021-163321`..`20261023-095947` were trained with `s_t == s_{t+1}` buffer aliasing, crash-to-spawn value inversion, and untrained Kaiming noise on Critic slots `[8, 9, 11]`, rolling back to any existing checkpoint is mathematically unsound.
      - Quarantined all 4 aliased run directories into `archive/corrupted_aliased_buffer_20261021_20261023/` and launched a clean fresh run from Step `0` via `./start_tmux_training.sh --fresh`.
 
+### Issue 120: Autoregressive `prev_drive` Lockup Masking, Unmasked `lookahead_kappa`, Sector 4 Runway Spawn (`X = -7.0m`), Track-Aligned `in_c2_turn`, Velocity-Gated `intersection_expert_reward`, & Deterministic 5-Sector Auditor Fix
+- **Problem (Sector 4 GUI Crawl/Crash at `0.06 m/s` & Sector 3 Premature Turn-In on `agent_2950000.pt`):**
+  1. Evaluating `agent_2950000.pt` via `./debug.sh --sector 4` (`play_skrl.py --sector 4`) showed the vehicle spawning at `(-6.000, -7.118)`, immediately outputting `Steer: +0.65..+0.73` while crawling at `Spd: 0.06–0.22 m/s`, cutting across the yellow median tip (`Yellow: 13.5cm`) and colliding with the far-left West white curb (`LatErr: +63.7cm`, `White: 2.9cm`) at Step 615 (`WPs: 143`).
+  2. Evaluating Sector 3 (`--sector 3`) showed the vehicle driving straight at `0.50–0.54 m/s` until `WPs: 110`, then snapping to `Steer: +0.35..+0.46` and crashing into the double-yellow line.
+- **Root Cause Analysis (ClearSet Swarm `run_20261106_192304_316643` — 3-Worker `divergent_research` vs. Commit `31f6cb5` at Step 800k & `rl-deep-audit` Gates 1–6):**
+  1. **Autoregressive `prev_drive` (`slot 6`) Braking Lockup & Gated `lookahead_kappa` (`slot 10`) (`skrl_models.py`):**
+     - Uncommitted Wave 5 (`2.70M`) masked `prev_steer` (`telemetry[:, 5] = 0.0`) but left `prev_drive` (`telemetry[:, 6]`, input index `70`) unmasked. Across `2.20M -> 2.95M`, `w_eff[drive <- S3:speed]` grew to `-4.7843` and `w_eff[drive <- S6:prev_drive]` grew to `-3.2564` (while `w_eff[drive <- S0:turn_token] = +0.9498` injected `-0.9498` when `turn_token = -1.0`). When `WarmupActionWrapper` released `prev_drive = -1.0` at Step 10, `drive_10 = +0.835` fed back through `w_eff = -3.2564` to lock `drive_11+` at `-0.85..-0.95` (`0.06–0.12 m/s` crawl) or excess speed into the corner.
+     - Simultaneously, Wave 5 gated `telemetry[:, 10]` (`lookahead_kappa`) by `(|turn_token| > 0.1)`, blinding `ARCProActor` to the 5-point windowed lookahead curvature (`1.5m` ahead) during the straightaway pre-braking corridor before `turn_token` flips and during corner exit after `turn_token` returns to `0.0`.
+  2. **Premature `in_c2_turn` (`X > -6.20`) & Already-Curved Sector 4 Spawn (`X = -6.000`) (`road_manager.py`, `events.py`):**
+     - Uncommitted Wave 4 (`2.50M`) shifted `in_c2_turn` from `X > -5.65 & Y <= -2.20` (commit `31f6cb5`) back to `X > -6.20 & Y <= -2.70`, re-introducing Issue 119 Bug #4: firing `turn_token = -1.0` `70cm` before the Leg 2 double-yellow chute ends at `X = -5.5000, Y = -6.7310` (`WP 2236`), and releasing `50cm` before the North straightaway (`Y = -2.20`).
+     - Sector 4 spawned at `(-6.000, -7.118, 0.0000)` (`WP 2187`), where `track_centerline.npy` is already curving ($\kappa = +0.3289\text{ m}^{-1}$, $e_y = -2.33\text{ cm}$, $e_\psi = -4.32^\circ$) and *already inside* `X > -6.20`, so Sector 4 had `0.0m` of straight runway and started with `turn_token = -1.0` at Step 0.
+  3. **Ungated `intersection_expert_reward` & Loose Stagnation Threshold (`rewards.py`, `terminations.py`):**
+     - Unlike `curvature_speed_reward` and `lane_centering_reward` (which multiply by `velocity_gate = clamp(speed / 0.20, 0.0, 1.0)`), `intersection_expert_reward` (weight `100.0`) had no velocity gate, paying `+49.7 pts/step` at $v = 0.0\text{ m/s}$ (`+58.3` at $0.08\text{ m/s}$) in corners and `+100.0 pts/step` at $v = 0.0\text{ m/s}$ on straightaways.
+     - `stagnation_termination` only required `5.0` waypoints per 100 steps ($0.0257\text{ m/s}$), allowing `0.06–0.12 m/s` crawlers (`11.7–23.4` WPs / 100 steps) to farm `+127.6` net pts/step indefinitely.
+     - Furthermore, on `episode_length_buf == 1`, `stagnation_termination` (`TerminationManager`) executed before `waypoint_progress_reward` (`RewardManager`) zeroed `cumulative_wp_index`, copying the *previous* episode's final `cum_wp` into `stagnation_term_snapshot` and causing false Step-101 stagnation resets after non-crash resets.
+  4. **Three Bugs in `checkpoint_auditor.py` & `SKRLFlattenWrapper.reset()` (`checkpoint_auditor.py`, `skrl_wrappers.py`):**
+     - `checkpoint_auditor.py` imported `arcproLab.mdp.events` while `ARCProEnvCfg` imported `mdp.events` (separate modules in `sys.modules`) and omitted `os.environ["ARCPRO_FORCE_SECTOR"]`, causing `set_spawn_sector()` to sample random sectors.
+     - `skrl`'s `IsaacLabWrapper.reset()` sets `self._reset_once = False` after the first reset, ignoring all subsequent `env.reset()` calls across Sectors 2–5 unless reset in `SKRLFlattenWrapper.reset()`.
+     - `sys.exit(1)` inside `main()` bypassed `simulation_app.close()` and `os._exit(code)`, hanging Isaac Sim C++ threads when a sector failed.
+- **Resolution Deployed & Verified (ClearSet Swarm `run_20261106_194047_97c617` — 3/3 PASSED):**
+  1. **Actor Telemetry Masking (`arcproLab/agents/skrl_models.py`, `tests/test_vision_architecture_upgrade.py`):** Masked `telemetry[:, 6] = 0.0` (`prev_drive`) alongside `slots [5, 8, 9, 11]` and removed the `|turn_token| > 0.1` mask on `telemetry[:, 10]` (`lookahead_kappa`). Verified 4/4 tests in `tests/test_vision_architecture_upgrade.py` under Isaac Sim.
+  2. **Sector 4 Straight Runway Spawn & Track-Aligned Turn Boxes (`arcproLab/mdp/events.py`, `arcproLab/mdp/road_manager.py`, `arcproLab/mdp/curriculum_sectors.json`, `arcproLab/scripts/sentinel_utils.py`):**
+     - Moved Sector 4 spawn to `(-7.000, -7.100, 0.0000)` (`WP 2090`, $\kappa = 0.000$, $e_y = 0$, $e_\psi = 0$, `1.35m` before `in_c2_turn`).
+     - Restored `in_c1_turn` (`X < -15.00 & Y < -6.10`) and `in_c2_turn` (`X > -5.65 & X < -1.80 & Y >= -7.5 & Y <= -2.20`).
+     - Rebalanced `curriculum_sectors.json` to `[0.25, 0.20, 0.20, 0.25, 0.10]` and capped straightaway bias in `sentinel_utils.py` so Sectors 2 and 4 are never starved below `20%`.
+  3. **Velocity-Gated Expert Guidance, Zero-Delay `turn_token`, & Stagnation Snapshot Fix (`arcproLab/mdp/rewards.py`, `arcproLab/mdp/terminations.py`):**
+     - Velocity-gated `intersection_expert_reward` by `clamp(speed / 0.20, 0.0, 1.0)` (when `go_signal > 0.5`) and aligned `in_inter` across `rewards.py` and `terminations.py` to `Y <= -2.20` (`X >= -6.30` in `intersection_expert_reward`).
+     - Added 0-step `RoadManager` update in `white_line_contact()` (`terminations.py`) so `RewardManager` consumes fresh `turn_token`.
+     - Raised `stagnation_termination` threshold from `5.0` to `25.0` waypoints per 100 steps (`~0.13 m/s`) and reset `stagnation_term_snapshot` to `0.0` (`torch.zeros_like(cum_wp)`) on `episode_length_buf <= 1`.
+  4. **Deterministic 5-Sector Benchmark Results (`play_skrl.py --sector 4 --max_steps 800` & `checkpoint_auditor.py --steps 200`):**
+     - **800-Step Sector 4 Intersection Rollout (`play_skrl.py --sector 4 --max_steps 800`):** All three candidate checkpoints (`agent_2500000.pt`, `agent_2700000.pt`, `agent_2950000.pt`) completed `800/800` steps with **0 collisions/resets** (`260–285` waypoints), with `agent_2700000.pt` (`White: 34.1cm, Yellow: 71.9cm, LatErr: +31.5cm, Steer: +0.06`) and `agent_2500000.pt` (`White: 38.1cm, Yellow: 93.3cm, LatErr: +28.0cm`) straightening cleanly onto the North straightaway.
+     - **5-Sector Regression Audit (`checkpoint_auditor.py --steps 200`):**
+       - **`agent_2700000.pt`:** **PASSED 100.0% (`5/5` sectors)** — S1 (`200/200, 0.27m/s, MinW 19.6cm, MinY 11.5cm`), S2 (`200/200, 0.28m/s, MinW 19.5cm, MinY 17.9cm`), S3 (`200/200, 0.28m/s, MinW 21.2cm, MinY 14.0cm`), S4 (`200/200, 0.17m/s, MinW 21.2cm, MinY 12.1cm`), S5 (`200/200, 0.28m/s, MinW 21.4cm, MinY 14.0cm`).
+       - **`agent_2950000.pt`:** **PASSED 100.0% (`5/5` sectors)** — S1 (`200/200, 0.32m/s, MinW 16.7cm, MinY 21.3cm`), S2 (`200/200, 0.29m/s, MinW 19.7cm, MinY 20.0cm`), S3 (`200/200, 0.31m/s, MinW 20.6cm, MinY 16.1cm`), S4 (`200/200, 0.22m/s, MinW 19.5cm, MinY 15.3cm`), S5 (`200/200, 0.35m/s, MinW 20.1cm, MinY 16.2cm`).
+       - **`agent_2500000.pt`:** **Survived `200/200` on `5/5` sectors (`80.0%` pass, S4 `0.148m/s` vs `0.15m/s`)**.
+
+**Issue 120 (Intersection Wrong-Lane Entry & Guidance Curvature Inversion)**:
+- **Observation / Incident**: In continuous full-circuit evaluation (shattering previous distance records by surviving 1,064 continuous steps / 32 meters), live GUI visual inspection revealed that when negotiating the 90° Corner 2 / Intersection turn from East to North, the vehicle understeered into the wrong (oncoming Southbound / West) lane of the North road and drove all the way up the circuit inside the wrong lane without terminating.
+- **Root Cause Forensic Audit (`rl-deep-audit` 6-point forensic investigation)**:
+  1. **Guidance Curvature Sign Inversion (`intersection_expert_reward` in `rewards.py`)**:
+     - Curvature $\kappa$ in `TrackManager` is computed via $d\psi/ds$ across increasing waypoint indices. Because waypoints loop counter-clockwise, $\kappa > 0$ for every left turn on the circuit ($\kappa \approx +0.32\text{ m}^{-1}$ in Corner 2).
+     - However, `intersection_expert_reward` computed `signed_kappa = kappa * track_dir`. Because the waypoint yaw in `track_centerline.npy` was indexed with a $180^\circ$ offset, `observations.py` sets `track_dir = -1.0`. Multiplying $\kappa$ by `-1.0` flipped the feedforward curvature: $\delta_{ff} = \arctan(0.33 \times \text{signed\_kappa}) / 0.68$ evaluated to $-0.11$ to $-0.15$ (commanding the vehicle to steer RIGHT into a LEFT turn).
+     - Furthermore, `steer_match = exp(-4.0 * error^2)` had an overly wide Gaussian bell curve that awarded $\approx 50\%$ of guidance reward even under severe understeer.
+  2. **Intersection Envelope Over-Slack in `terminations.py`**:
+     - `in_inter_box` granted $0.70\text{ m}$ of lateral error slack all the way north to $Y = -2.20$, despite the physical intersection mouth ending at $Y \approx -4.80$.
+     - Because lane half-width is $0.21\text{ m}$ and the oncoming lane centerline is only $0.44\text{ m}$ West of the Northbound centerline, an understeering vehicle in the oncoming lane ($|e_y| \approx 0.44\text{ m}$) was never terminated.
+  3. **Yellow Median Punch-Out Gap**:
+     - The double-yellow line was punched out across the intersection crossing ($Y \in [-6.5, -5.9]$), allowing the vehicle to slip across the median into the West lane with 0 boundary penalty.
+  4. **Reward Inversion in `lane_centering_reward`**:
+     - In the oncoming West lane, the vehicle had the white curb on its left ($dist_w \approx 0.22\text{ m}$) and the double-yellow median on its right ($dist_y \approx 0.22\text{ m}$).
+     - Thus $|dist_y - dist_w| \approx 0$, paying out full $+120$ centering points per step for driving centered in the wrong lane. Along with speed (+180), heading (+80), and progress (+50), the policy harvested $> +400$ net points/step while driving the wrong way.
+- **Fixes Applied**:
+  1. **`arcproLab/mdp/terminations.py`**:
+     - Tightened `in_inter_box` upper bound from $Y \le -2.20$ to $Y \le -4.80$. Tightened non-intersection envelope to $0.40\text{ m}$.
+     - Implemented explicit Wrong-Lane Fatal Termination:
+       - Solid median North road: $(Y \in [-3.50, 2.20]) \land (X < -2.56)$ triggers immediate fatal termination.
+       - Curving median apex zone: $(Y \in [-5.20, -3.50]) \land (X < -2.56 + 0.35 \times (Y + 3.50))$ triggers immediate fatal termination.
+  2. **`arcproLab/mdp/rewards.py`**:
+     - Fixed `delta_ff` feedforward curvature sign in `intersection_expert_reward` by using `kappa` directly ($\delta_{ff} = \arctan(0.33 \times \kappa) / 0.68 > 0$ for left turns), eliminating the inverted `-1.0` multiplier.
+     - Sharpened `steer_match` sensitivity from $-4.0$ to $-12.0$, severely penalizing understeer into the oncoming lane.
+     - Tightened `in_inter` guidance and speed zone upper bounds to $Y \le -4.50$.
+     - In `lane_centering_reward`, enforced centerline tracking (`2.0 * |lat_err|`) across the intersection mouth, and inverted centering reward to a severe $-1.0$ ($-120$ point) penalty whenever `in_wrong_lane` is true.
+  3. **`straightaway_zero_steer_penalty` in `rewards.py`**:
+     - Aligned `in_inter` to $Y \le -4.50$ so straightaway zero-steering regularization activates immediately as the vehicle straightens onto the North straight.
+- **Verification**:
+  - Regression test suite `tests/test_cornering_remediation.py`: 5/5 PASSED.
+  - Closed-loop kinematic left turn test `tests/test_manual_left_turn.py`: 350/350 steps PASSED, exiting Corner 2 into North road at $X = -2.782, Y = -4.949$ (East of median $X = -3.07$) with 15.8cm white and 24.9cm yellow clearance.
+  - 700-step evaluation trace: Confirmed that understeering into the oncoming lane immediately triggers fatal termination at Step 566 ($X < -2.56$, oncoming lane eliminated).

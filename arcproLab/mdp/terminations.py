@@ -65,12 +65,27 @@ def white_line_contact(
         track_dir=env.extras.get("track_dir"),
     ).to(device=env.device, dtype=torch.float32)
 
+    try:
+        from mdp.road_manager import get_road_manager
+
+        rm = get_road_manager(num_envs=env.num_envs, num_agents=1, device=env.device)
+        rm.update(env)
+        turn_tokens, _ = rm.get_nav_commands()
+        env.extras["turn_token"] = turn_tokens.squeeze(1)
+    except Exception:
+        pass
+
     # 1. Boundary hit (Curvature-Adaptive Thresholds for 1.0x scale):
     # Accommodates Ackermann dynamic off-tracking (rear axle swept path expands by ~4.7cm in sharp turns):
     # Straights (|kappa| <= 0.20): enforce healthy lane adherence (0.018m outer white, 0.02m inner yellow),
     # providing ~2.9cm safe operating margin on 43.8cm lane with 32cm chassis without false premature kills.
-    # Sharp corners (|kappa| > 0.20): expand tolerance to 0.015m outer white, 0.008m inner yellow curb to allow apex clipping.
-    is_corner = torch.abs(kappa) > 0.20
+    effective_kappa = torch.maximum(
+        torch.abs(kappa),
+        torch.abs(env.extras["lookahead_kappa"].view_as(kappa)),
+    )
+    is_corner = (effective_kappa > 0.20) | (
+        (local_pos[:, 0] < -15.05) & (local_pos[:, 1] < -6.50)
+    )
     dyn_threshold_w = torch.where(
         is_corner,
         torch.tensor(0.015, device=env.device),
@@ -106,17 +121,35 @@ def white_line_contact(
 
     # Open intersection envelope: where road marks break, allow up to 0.70m lateral drift
     # while strictly enforcing physical boundary contacts (hit_white | hit_yellow).
-    # On straights and standard curves, enforce strict 0.45m envelope.
+    # Tightened north bound to Y <= -4.80: turn completes into North road by Y = -4.80.
     in_inter_box = (
         (local_pos[:, 0] >= -6.50)
         & (local_pos[:, 0] <= -1.80)
         & (local_pos[:, 1] >= -7.50)
-        & (local_pos[:, 1] <= -2.20)
+        & (local_pos[:, 1] <= -4.80)
     )
     max_lat_err = torch.where(
         in_inter_box,
         torch.tensor(0.70, device=env.device),
-        torch.tensor(0.45, device=env.device),
+        torch.tensor(0.40, device=env.device),
+    )
+
+    # Wrong-way / Oncoming lane termination on North road:
+    # 1. Solid double-yellow median zone (Y in [-3.50, 2.20]): Median is at X = -2.55.
+    #    Northbound vehicles MUST stay in East lane (X >= -2.55). Any vehicle with X < -2.56
+    #    is driving in the oncoming Southbound lane!
+    in_wrong_lane_north = (
+        (local_pos[:, 1] >= -3.50)
+        & (local_pos[:, 1] <= 2.20)
+        & (local_pos[:, 0] < -2.56)
+    )
+    # 2. Curving median apex zone (Y in [-5.20, -3.50]): Median curves from X = -3.10 to X = -2.56.
+    #    Understeering west of the median boundary is FATAL.
+    x_median_curve = -2.56 + 0.35 * (local_pos[:, 1] + 3.50)
+    in_wrong_lane_apex = (
+        (local_pos[:, 1] >= -5.20)
+        & (local_pos[:, 1] < -3.50)
+        & (local_pos[:, 0] < x_median_curve)
     )
 
     # Combined boundary hit:
@@ -124,11 +157,14 @@ def white_line_contact(
     # 2. White boundary contact is FATAL everywhere except the transverse stop bar
     # 3. Off-road shoulder or lateral drift > max_lat_err is FATAL
     # 4. East cliff void is FATAL
+    # 5. Wrong-lane / oncoming Southbound driving is FATAL
     boundary_hit = (
         hit_white
         | hit_yellow
         | off_cliff_east
         | off_road_shoulder
+        | in_wrong_lane_north
+        | in_wrong_lane_apex
         | (torch.abs(lat_err) > max_lat_err)
     )
     masked_boundary_hit = boundary_hit
@@ -181,7 +217,7 @@ def stagnation_termination(
 
     timer += 1
 
-    # Every 100 steps (2 seconds), it MUST have progressed at least 5 waypoints (~0.3m)
+    # Every 100 steps (2 seconds), it MUST have progressed at least 25 waypoints (~0.25m, 0.13 m/s)
     # Stagnation is suppressed when dwelling at a stop bar / red signal (go_signal == 0)
     check_now = timer >= 100
     progress = cum_wp - snapshot
@@ -189,7 +225,7 @@ def stagnation_termination(
         env.extras.get("go_signal", torch.ones(env.num_envs, device=env.device)) > 0.5
     )
 
-    stagnated = (progress < 5.0) & check_now & past_grace & is_go
+    stagnated = (progress < 25.0) & check_now & past_grace & is_go
 
     # Reset snapshot for envs that were checked
     env.extras["stagnation_term_snapshot"] = torch.where(check_now, cum_wp, snapshot)
@@ -197,11 +233,13 @@ def stagnation_termination(
         check_now, torch.zeros_like(timer), timer
     )
 
-    # Also reset on episode reset
+    # Also reset on episode reset (TerminationManager runs before RewardManager zeroes cum_wp on step 1)
     if hasattr(env, "episode_length_buf"):
         just_reset = env.episode_length_buf <= 1
         env.extras["stagnation_term_snapshot"] = torch.where(
-            just_reset, cum_wp, env.extras["stagnation_term_snapshot"]
+            just_reset,
+            torch.zeros_like(cum_wp),
+            env.extras["stagnation_term_snapshot"],
         )
         env.extras["stagnation_term_timer"] = torch.where(
             just_reset, torch.zeros_like(timer), env.extras["stagnation_term_timer"]

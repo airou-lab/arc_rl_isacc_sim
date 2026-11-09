@@ -96,6 +96,8 @@ class SKRLFlattenWrapper(Wrapper):
         return flat_obs, reward, terminated, truncated, info
 
     def reset(self):
+        if hasattr(self._env, "_reset_once"):
+            self._env._reset_once = True
         obs, info = self._env.reset()
         try:
             base_env = self._env.unwrapped

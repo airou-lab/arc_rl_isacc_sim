@@ -107,10 +107,10 @@ class RoadManager:
             tokens = torch.zeros((self.num_envs, self.num_agents), device=self.device)
 
             # Circuit Turn Token Routing (Counter-Clockwise Circuit, all turns are LEFT):
-            # 1. Corner 1 Turn (Leg 1 South -> Leg 2 East): curve approach begins at Y < -6.10, completes at X >= -15.00
+            # 1. Corner 1 Turn (Leg 1 South -> Leg 2 East): curve begins at Y < -6.10, completes at X >= -15.00
             in_c1_turn = (local_pos[:, 0:1] < -15.00) & (local_pos[:, 1:2] < -6.10)
             # 2. Corner 2 / Intersection Turn (Leg 2 East -> North Straight):
-            # Curve begins at X > -5.65, completes when vehicle enters North straight at Y >= -2.20
+            # Curve begins at X > -5.65 (end of double-yellow chute), completes when vehicle enters North straight at Y > -2.20
             in_c2_turn = (
                 (local_pos[:, 0:1] > -5.65)
                 & (local_pos[:, 0:1] < -1.80)
@@ -125,8 +125,8 @@ class RoadManager:
                 & (local_pos[:, 0:1] > -6.85)
                 & (local_pos[:, 0:1] < -2.0)
             )
-            # 4. Corner 4 Turn (Top Straight West -> Leg 1 South): curve approach begins at X < -14.75, completes at Y <= 6.15
-            in_c4_turn = (local_pos[:, 0:1] < -14.75) & (local_pos[:, 1:2] > 6.15)
+            # 4. Corner 4 Turn (Top Straight West -> Leg 1 South): curve begins at X < -14.90 (WP 4750), completes at Y <= 5.50 (WP 4999)
+            in_c4_turn = (local_pos[:, 0:1] < -14.90) & (local_pos[:, 1:2] > 5.50)
 
             is_turning = in_c1_turn | in_c2_turn | in_bend_turn | in_c4_turn
             tokens = torch.where(
