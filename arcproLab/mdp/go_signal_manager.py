@@ -38,11 +38,18 @@ from typing import Optional
 
 import torch
 
-from arcproLab.policy_stack.agent.stop_line_detector import (
-    StopLineDetectionContext,
-    StopLineDetectorConfig,
-    VisualStopLineDetector,
-)
+try:
+    from arcproLab.policy_stack.agent.stop_line_detector import (
+        StopLineDetectionContext,
+        StopLineDetectorConfig,
+        VisualStopLineDetector,
+    )
+except ImportError:
+    from policy_stack.agent.stop_line_detector import (
+        StopLineDetectionContext,
+        StopLineDetectorConfig,
+        VisualStopLineDetector,
+    )
 
 
 class _State(enum.IntEnum):
@@ -91,27 +98,100 @@ class GoSignalManager:
         self.go_signal[env_ids] = 1.0
 
     def update(self, images: torch.Tensor) -> torch.Tensor:
-        """Run detector + FSM step for every env. Returns the go_signal tensor.
+        """Run detector + vectorized FSM step for every env. Returns the go_signal tensor.
 
         `images` is (N, H, W, 3) uint8 — the same tensor `get_image_uint8`
-        produces. cv2 needs CPU numpy so we read each env's frame to CPU
-        once per step. With num_envs=8 this is ~8x the per-image cv2 cost,
-        which at 224x224 is sub-millisecond per env on this hardware.
+        produces. cv2 needs CPU numpy so we read all frames to CPU once per
+        step, run cv2 detection on CPU, and execute the FSM state update
+        vectorized on `self.device` without per-env GPU-CPU `.item()` syncs.
         """
         if images is None:
-            # Cameras disabled. Leave go_signal at whatever it currently
-            # is — typically initialized to 1 (go).
             return self.go_signal
 
         imgs_cpu = images.detach().cpu().numpy()
+        det_list = []
+        dist_list = []
         for i in range(self.num_envs):
             result = self.detector.detect(
                 StopLineDetectionContext(image=imgs_cpu[i], active=True)
             )
-            self._step_env(i, bool(result.detected), float(result.distance_m))
+            det_list.append(bool(result.detected))
+            dist_list.append(float(result.distance_m))
+
+        detected_t = torch.tensor(det_list, dtype=torch.bool, device=self.device)
+        dist_t = torch.tensor(dist_list, dtype=torch.float32, device=self.device)
+
+        is_approach = self.state == int(_State.APPROACH)
+        is_stop = self.state == int(_State.STOP)
+        is_depart = self.state == int(_State.DEPART)
+
+        # APPROACH transitions
+        trigger_stop = is_approach & detected_t & (dist_t < self.stop_distance_threshold)
+
+        # STOP transitions
+        next_dwell = self.dwell_counter + 1
+        finish_stop = is_stop & (next_dwell >= self.dwell_steps)
+        stay_stop = is_stop & (~finish_stop)
+
+        # DEPART transitions
+        next_clear = torch.where(
+            detected_t,
+            torch.zeros_like(self.depart_clear_counter),
+            self.depart_clear_counter + 1,
+        )
+        finish_depart = is_depart & (~detected_t) & (next_clear >= self.depart_clear_steps)
+
+        # Apply state updates atomically
+        new_state = self.state.clone()
+        new_state = torch.where(
+            trigger_stop,
+            torch.full_like(new_state, int(_State.STOP)),
+            new_state,
+        )
+        new_state = torch.where(
+            finish_stop,
+            torch.full_like(new_state, int(_State.DEPART)),
+            new_state,
+        )
+        new_state = torch.where(
+            finish_depart,
+            torch.full_like(new_state, int(_State.APPROACH)),
+            new_state,
+        )
+        self.state = new_state
+
+        self.dwell_counter = torch.where(
+            trigger_stop,
+            torch.zeros_like(self.dwell_counter),
+            torch.where(is_stop, next_dwell, self.dwell_counter),
+        )
+        self.depart_clear_counter = torch.where(
+            finish_stop,
+            torch.zeros_like(self.depart_clear_counter),
+            torch.where(
+                is_depart,
+                torch.where(
+                    finish_depart,
+                    torch.zeros_like(next_clear),
+                    next_clear,
+                ),
+                self.depart_clear_counter,
+            ),
+        )
+
+        is_red = trigger_stop | stay_stop
+        self.go_signal = torch.where(
+            is_red,
+            torch.zeros_like(self.go_signal),
+            torch.ones_like(self.go_signal),
+        )
+
+        self.last_distance = dist_t
+        self.last_detected = detected_t
         return self.go_signal
 
     def _step_env(self, i: int, detected: bool, distance_m: float) -> None:
+        """Single-env transition helper retained for unit-test compatibility."""
         state = int(self.state[i].item())
 
         if state == _State.APPROACH:
@@ -132,9 +212,6 @@ class GoSignalManager:
                 self.go_signal[i] = 0.0
 
         elif state == _State.DEPART:
-            # Stay in DEPART until detector has been "clear" for N steps.
-            # Doesn't matter what bar we see along the way; the just-crossed
-            # bar would otherwise immediately re-trigger STOP.
             if not detected:
                 self.depart_clear_counter[i] += 1
                 if int(self.depart_clear_counter[i].item()) >= self.depart_clear_steps:
@@ -162,3 +239,10 @@ def get_go_signal_manager(num_envs: int, device: str) -> GoSignalManager:
     ):
         _GO_SIGNAL_MANAGER = GoSignalManager(num_envs=num_envs, device=device)
     return _GO_SIGNAL_MANAGER
+
+
+import sys as _sys  # noqa: E402
+
+_sys.modules.setdefault("mdp.go_signal_manager", _sys.modules[__name__])
+_sys.modules.setdefault("arcproLab.mdp.go_signal_manager", _sys.modules[__name__])
+

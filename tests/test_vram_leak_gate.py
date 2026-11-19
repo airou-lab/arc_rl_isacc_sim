@@ -1,33 +1,41 @@
+#!/usr/bin/env python3
+"""Adversarial 200-Step VRAM Memory Stability Gate (Isaac Sim GPU test)."""
+
 import argparse
-
-from isaaclab.app import AppLauncher
-
-parser = argparse.ArgumentParser(
-    description="Adversarial 200-Step VRAM Memory Stability Gate"
-)
-parser.add_argument("--num_envs", type=int, default=20)
-AppLauncher.add_app_launcher_args(parser)
-args_cli = parser.parse_args()
-
-app_launcher = AppLauncher(args_cli)
-simulation_app = app_launcher.app
-
+import gc
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath("."))
-sys.path.insert(0, os.path.abspath("arcproLab"))
-
-import gc
-
+import pytest
 import torch
-from agents.skrl_wrappers import SKRLFlattenWrapper
-from arcpro_env_cfg import ARCProEnvCfg
-from isaaclab.envs import ManagerBasedRLEnv
-from skrl.envs.wrappers.torch import IsaacLabWrapper
+
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ARCPRO_LAB_DIR = os.path.join(ROOT_DIR, "arcproLab")
+for _p in (ROOT_DIR, ARCPRO_LAB_DIR):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+pytestmark = pytest.mark.isaac
 
 
 def main():
+    from isaaclab.app import AppLauncher
+
+    parser = argparse.ArgumentParser(
+        description="Adversarial 200-Step VRAM Memory Stability Gate"
+    )
+    parser.add_argument("--num_envs", type=int, default=20)
+    AppLauncher.add_app_launcher_args(parser)
+    args_cli = parser.parse_args()
+
+    app_launcher = AppLauncher(args_cli)
+    simulation_app = app_launcher.app
+
+    from agents.skrl_wrappers import SKRLFlattenWrapper
+    from arcpro_env_cfg import ARCProEnvCfg
+    from isaaclab.envs import ManagerBasedRLEnv
+    from skrl.envs.wrappers.torch import IsaacLabWrapper
+
     print("=" * 70)
     print("ADVERSARIAL VRAM LEAK VERIFICATION GATE (200 STEPS, 20 RGB ENVS)")
     print("=" * 70)
@@ -44,7 +52,6 @@ def main():
     obs, info = wrapped_env.reset()
     torch.cuda.synchronize()
 
-    # Warm-up 10 steps for CUDA graph / allocator stabilization
     for _ in range(10):
         actions = torch.zeros((args_cli.num_envs, 2), device="cuda:0")
         with torch.no_grad():
@@ -78,28 +85,19 @@ def main():
     final_alloc_mb = torch.cuda.memory_allocated() / (1024 * 1024)
     final_delta_mb = final_alloc_mb - start_alloc_mb
 
-    print("-" * 70)
-    print(f"[GATE] Final Allocated: {final_alloc_mb:.2f} MB")
-    print(f"[GATE] Total Delta over 200 Steps: {final_delta_mb:+.2f} MB")
-    print("-" * 70)
-
     wrapped_env.close()
     simulation_app.close()
 
-    # Adversarial Assertion:
-    # Unpatched code leaks 3.01 MB per step = ~602 MB over 200 steps.
-    # Patched code must keep delta strictly under 10.0 MB.
     MAX_ALLOWED_DELTA_MB = 10.0
     if final_delta_mb > MAX_ALLOWED_DELTA_MB:
-        print(
-            f"[GATE FAILED] VRAM leak detected: Delta={final_delta_mb:.2f} MB > Max Allowed {MAX_ALLOWED_DELTA_MB:.2f} MB"
-        )
         sys.exit(1)
-
-    print(
-        f"[GATE PASSED] VRAM leak successfully eliminated! Delta={final_delta_mb:.2f} MB <= {MAX_ALLOWED_DELTA_MB:.2f} MB."
-    )
     sys.exit(0)
+
+
+@pytest.mark.isaac_sim
+def test_vram_leak_gate():
+    pytest.importorskip("isaaclab")
+    main()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # ClearSet Codebase Directory Structure & Architectural Layout
 clearset_version: '1.0'
-last_updated: '2026-11-09T01:32:05.678884+00:00Z'
+last_updated: '2026-11-18T20:46:19.815346+00:00Z'
 root: '.'
 
 directories:
@@ -19,11 +19,11 @@ directories:
   arcproLab/agents:
     layer: 'database'
     tags: ["database"]
-    primary_files: ["arcproLab/agents/telemetry_ppo.py", "arcproLab/agents/README.md", "arcproLab/agents/skrl_models.py", "arcproLab/agents/skrl_wrappers.py"]
+    primary_files: ["arcproLab/agents/README.md", "arcproLab/agents/skrl_models.py", "arcproLab/agents/telemetry_ppo.py", "arcproLab/agents/skrl_wrappers.py"]
   arcproLab/mdp:
     layer: 'config'
     tags: ["config"]
-    primary_files: ["arcproLab/mdp/track_boundaries_1x.npz.bak", "arcproLab/mdp/spawner.py", "arcproLab/mdp/actions.py", "arcproLab/mdp/curriculum_config.py", "arcproLab/mdp/track_usd_extractor.py"]
+    primary_files: ["arcproLab/mdp/track_boundaries_1x.npz.bak", "arcproLab/mdp/spawner.py", "arcproLab/mdp/track_usd_extractor.py", "arcproLab/mdp/track_visualizer.py", "arcproLab/mdp/visual_analytics.py"]
   arcproLab/models:
     layer: 'database'
     tags: ["database"]
@@ -99,4 +99,4 @@ directories:
   tests:
     layer: 'testing'
     tags: ["testing", "api"]
-    primary_files: ["tests/test_track_dir.py", "tests/verify_rerouted_track.py", "tests/test_manual_left_turn.py", "tests/verify_imports.py", "tests/test_cornering_remediation.py"]
+    primary_files: ["tests/test_manual_left_turn.py", "tests/verify_imports.py", "tests/compare_intersection_oracle.py", "tests/audit_track_geometry.py", "tests/build_perfect_circuit.py"]

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Verification Suite for Vision Architecture Upgrades:
+Pure-CPU Verification Suite for Vision Architecture Upgrades:
 1. SpatialSoftmax2d: Output shapes, coordinate bounds [-1, 1], and autograd differentiability.
 2. ARCProActor: Trainable parameter count (21,474), forward pass, and gradient backprop.
 3. YUV Linear Preprocessing: Chrominance isolation of yellow median vs white boundary.
@@ -10,93 +10,64 @@ Verification Suite for Vision Architecture Upgrades:
 import os
 import sys
 
+import gymnasium as gym
+import numpy as np
+import pytest
 import torch
 import torch.nn as nn
 
 WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if WORKSPACE_DIR not in sys.path:
-    sys.path.insert(0, WORKSPACE_DIR)
-from isaaclab.app import AppLauncher
+ARCPRO_LAB_DIR = os.path.join(WORKSPACE_DIR, "arcproLab")
+for _p in (WORKSPACE_DIR, ARCPRO_LAB_DIR):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
-app_launcher = AppLauncher({"headless": True, "num_envs": 1})
-simulation_app = app_launcher.app
+from arcproLab.agents.skrl_models import (  # noqa: E402
+    ARCProActor,
+    ARCProCritic,
+    SpatialSoftmax2d,
+)
+from arcproLab.mdp.terminations import height_termination  # noqa: E402
 
-from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic, SpatialSoftmax2d
-from arcproLab.arcpro_env_cfg import ARCProEnvCfg
+pytestmark = pytest.mark.cpu
 
 
 def test_spatial_softmax():
-    print("\n--- Test 1: SpatialSoftmax2d Geometry & Autograd ---")
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu")
     ssm = SpatialSoftmax2d(height=7, width=7, temperature=1.0).to(device)
 
-    # 1. Shape & Bounds
     B, C, H, W = 20, 32, 7, 7
     feat = torch.randn(B, C, H, W, device=device, requires_grad=True)
     coords = ssm(feat)
     assert coords.shape == (B, 64), f"Expected shape ({B}, 64), got {coords.shape}"
-    assert (coords >= -1.0).all() and (coords <= 1.0).all(), (
-        "Coordinates exceed [-1, 1]!"
-    )
-    print(
-        f"[PASSED] SpatialSoftmax2d output shape: {coords.shape}, strictly bounded in [-1, 1]"
-    )
+    assert (coords >= -1.0).all() and (coords <= 1.0).all()
 
-    # 2. Gradient Flow
     loss = coords.sum()
     loss.backward()
-    assert feat.grad is not None, "feat.grad is None!"
-    assert feat.grad.norm().item() > 0.0, "feat.grad norm is 0!"
-    print(
-        f"[PASSED] SpatialSoftmax2d analytical autograd: dLoss/dFeat norm = {feat.grad.norm().item():.4f}"
-    )
+    assert feat.grad is not None
+    assert feat.grad.norm().item() > 0.0
 
 
 def test_actor_architecture():
-    print("\n--- Test 2: ARCProActor Keypoint Architecture & Parameters ---")
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    import gymnasium as gym
-    import numpy as np
-
+    device = torch.device("cpu")
     obs_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(25100,))
     act_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(2,))
 
+    torch.manual_seed(7)
     actor = ARCProActor(obs_space, act_space, device).to(device)
 
-    # Parameter count verification
-    spatial_params = sum(p.numel() for p in actor.spatial_conv.parameters())
-    head_params = sum(p.numel() for p in actor.policy_head.parameters())
     total_trainable = sum(p.numel() for p in actor.parameters() if p.requires_grad)
-
-    print(f"  - spatial_conv (512 -> 32, 1x1): {spatial_params:,} params")
-    print(f"  - spatial_softmax (32 keypoints): 0 params (differentiable softargmax)")
-    print(f"  - policy_head (76 -> 64 -> 2):   {head_params:,} params")
-    print(f"  - Total trainable parameters:     {total_trainable:,}")
-
     assert total_trainable in (21474, 21476), (
         f"Expected 21,474-21,476 parameters, got {total_trainable}"
     )
-    print(
-        f"[PASSED] Parameter count exactly matches theoretical specification: {total_trainable:,} parameters (-95% reduction)"
-    )
 
-    # Forward pass verification
     dummy_obs = torch.randn(20, 25100, device=device)
-    inputs = {"states": dummy_obs}
-    action_mean, log_std, _ = actor.compute(inputs)
+    action_mean, log_std, _ = actor.compute({"states": dummy_obs})
 
-    assert action_mean.shape == (20, 2), (
-        f"Expected action shape (20, 2), got {action_mean.shape}"
-    )
-    assert not torch.isnan(action_mean).any(), "action_mean contains NaNs!"
-    assert (action_mean >= -1.0).all() and (action_mean <= 1.0).all(), (
-        "action_mean outside [-1, 1]!"
-    )
-    print(
-        f"[PASSED] Forward pass successful: output shape {action_mean.shape}, zero NaNs, valid actions in [-1, 1]"
-    )
+    assert action_mean.shape == (20, 2)
+    assert not torch.isnan(action_mean).any()
+    assert (action_mean >= -1.0).all() and (action_mean <= 1.0).all()
 
-    # Adversarial check: Actor Blindness, Unmasked Lookahead Curvature & Non-Mutating Clone
     obs_a = torch.randn(20, 25100, device=device)
     obs_a[:, 25088 + 0] = 0.0  # straightaway turn_token == 0.0
     obs_b = obs_a.clone()
@@ -108,19 +79,14 @@ def test_actor_architecture():
     obs_b_telemetry_snapshot = obs_b[:, 25088:25100].clone()
     act_a, _, _ = actor.compute({"states": obs_a})
     act_b, _, _ = actor.compute({"states": obs_b})
-    assert torch.allclose(act_a, act_b, atol=1e-6), (
-        "ARCProActor output changed when masked slots [5, 6, 8, 9, 11] were perturbed!"
-    )
-    assert torch.equal(obs_b[:, 25088:25100], obs_b_telemetry_snapshot), (
-        "ARCProActor.compute mutated input states[:, 25088:25100] in-place!"
-    )
+    assert torch.allclose(act_a, act_b, atol=1e-6)
+    assert torch.equal(obs_b[:, 25088:25100], obs_b_telemetry_snapshot)
 
-    # Input gradient check on states[:, 25088 + i] with turn_token == 0.0
     grad_states = obs_a.clone().detach().requires_grad_(True)
     actor.zero_grad()
     act_grad_out, _, _ = actor.compute({"states": grad_states})
-    act_grad_out.sum().backward()
-    assert grad_states.grad is not None, "grad_states.grad is None!"
+    (act_grad_out[:, 0] * 1.3 + act_grad_out[:, 1] * 0.7).sum().backward()
+    assert grad_states.grad is not None
     for i in [5, 6, 8, 9, 11]:
         slot_grad = grad_states.grad[:, 25088 + i].abs().sum().item()
         assert slot_grad == 0.0, (
@@ -129,13 +95,9 @@ def test_actor_architecture():
     for i in [0, 10]:
         slot_grad = grad_states.grad[:, 25088 + i].abs().sum().item()
         assert slot_grad > 0.0, (
-            f"Expected non-zero input gradient on unmasked slot {i} when turn_token == 0.0, got {slot_grad}"
+            f"Expected non-zero input gradient on unmasked slot {i}, got {slot_grad}"
         )
-    print(
-        "[PASSED] ARCProActor masks slots [5, 6, 8, 9, 11] (zero input grad), preserves unmasked slots [0, 10] when turn_token == 0.0, and does not mutate states[:, 25088:25100]"
-    )
 
-    # Critic privileged gradient check across all 12 unmasked slots
     critic = ARCProCritic(obs_space, act_space, device).to(device)
     critic.zero_grad()
     critic_states = obs_b.clone().detach().requires_grad_(True)
@@ -143,24 +105,15 @@ def test_actor_architecture():
     val.sum().backward()
     for i in range(12):
         c_slot_grad = critic_states.grad[:, 25088 + i].abs().sum().item()
-        assert c_slot_grad > 0.0, (
-            f"Expected non-zero Critic input gradient on slot {i}, got {c_slot_grad}"
-        )
+        assert c_slot_grad > 0.0
     priv_grad_sum = (
         critic.critic_head[0].weight.grad[:, [5, 6, 8, 9, 10, 11]].abs().sum().item()
     )
-    assert priv_grad_sum > 0.0, (
-        f"Expected non-zero Critic gradient on slots [5, 6, 8, 9, 10, 11], got {priv_grad_sum}"
-    )
-    print(
-        f"[PASSED] ARCProCritic receives all 12 unmasked telemetry slots: grad L1 = {priv_grad_sum:.4f}"
-    )
+    assert priv_grad_sum > 0.0
 
 
 def test_yuv_chrominance_isolation():
-    print("\n--- Test 3: YUV Linear Preprocessing & Chrominance Isolation ---")
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
+    device = torch.device("cpu")
     yuv_conv = nn.Conv2d(3, 3, kernel_size=1, bias=False).to(device)
     yuv_weights = (
         torch.tensor(
@@ -176,7 +129,6 @@ def test_yuv_chrominance_isolation():
     )
     yuv_conv.weight.data.copy_(yuv_weights)
 
-    # Test pixels: White line vs Yellow line vs Dark Asphalt
     white = torch.tensor([0.92, 0.92, 0.92], device=device).view(1, 3, 1, 1)
     yellow = torch.tensor([0.90, 0.75, 0.05], device=device).view(1, 3, 1, 1)
     asphalt = torch.tensor([0.25, 0.25, 0.25], device=device).view(1, 3, 1, 1)
@@ -185,75 +137,51 @@ def test_yuv_chrominance_isolation():
     yuv_yellow = yuv_conv(yellow).squeeze().tolist()
     yuv_asphalt = yuv_conv(asphalt).squeeze().tolist()
 
-    print(
-        f"  - White:   Y={yuv_white[0]:.3f}, U={yuv_white[1]:+.3f}, V={yuv_white[2]:+.3f}"
-    )
-    print(
-        f"  - Yellow:  Y={yuv_yellow[0]:.3f}, U={yuv_yellow[1]:+.3f}, V={yuv_yellow[2]:+.3f}"
-    )
-    print(
-        f"  - Asphalt: Y={yuv_asphalt[0]:.3f}, U={yuv_asphalt[1]:+.3f}, V={yuv_asphalt[2]:+.3f}"
-    )
-
-    # Yellow must have strong negative U and positive V
-    assert yuv_yellow[1] < -0.25, (
-        f"Yellow U chrominance should be < -0.25, got {yuv_yellow[1]}"
-    )
-    assert yuv_yellow[2] > +0.10, (
-        f"Yellow V chrominance should be > +0.10, got {yuv_yellow[2]}"
-    )
-    # White and asphalt have near zero chrominance
+    assert yuv_yellow[1] < -0.25
+    assert yuv_yellow[2] > +0.10
     assert abs(yuv_white[1]) < 0.02 and abs(yuv_white[2]) < 0.02
     assert abs(yuv_asphalt[1]) < 0.02 and abs(yuv_asphalt[2]) < 0.02
-    print(
-        "[PASSED] ITU-R BT.601 YUV chrominance isolates yellow median line with infinite SNR!"
-    )
 
 
 def test_elevation_bounds():
-    print("\n--- Test 4: Elevation Bounds Accommodation ---")
-    cfg = ARCProEnvCfg()
-    height_cfg = cfg.terminations.height_bounds
+    import inspect
 
-    max_h = height_cfg.params["max_height"]
-    min_h = height_cfg.params["threshold"]
+    sig = inspect.signature(height_termination)
+    min_h = sig.parameters["threshold"].default
+    max_h = sig.parameters["max_height"].default
 
-    print(f"  - Height threshold: {min_h}m")
-    print(f"  - Max height bound: {max_h}m")
+    assert min_h == -0.05
+    assert max_h == 3.5
 
-    # Track rises to Z = 2.5m on 3D hill. Car at Z = 2.5m must NOT terminate!
-    car_z_hill = 2.50
-    is_terminated_hill = (car_z_hill < min_h) or (car_z_hill > max_h)
-    assert not is_terminated_hill, (
-        f"Car on 3D hill (Z={car_z_hill}m) falsely terminated!"
-    )
+    class _MockRobotData:
+        def __init__(self, z_vals):
+            self.root_pos_w = torch.tensor(
+                [[0.0, 0.0, z] for z in z_vals], dtype=torch.float32
+            )
 
-    # Flipping/flying at Z = 3.6m must terminate
-    car_z_fly = 3.60
-    is_terminated_fly = (car_z_fly < min_h) or (car_z_fly > max_h)
-    assert is_terminated_fly, "Flying car (Z=3.6m) was not terminated!"
+    class _MockRobot:
+        def __init__(self, z_vals):
+            self.data = _MockRobotData(z_vals)
 
-    # Falling through track at Z = -0.10m must terminate
-    car_z_fall = -0.10
-    is_terminated_fall = (car_z_fall < min_h) or (car_z_fall > max_h)
-    assert is_terminated_fall, "Fallen car (Z=-0.10m) was not terminated!"
+    class _MockScene(dict):
+        def __init__(self, z_vals):
+            super().__init__(robot=_MockRobot(z_vals))
+            self.env_origins = torch.zeros((len(z_vals), 3), dtype=torch.float32)
 
-    print(
-        f"[PASSED] Elevation bounds correctly set to max_height = {max_h}m (3D hill climbs safely without reset)"
-    )
+    class _MockEnv:
+        def __init__(self, z_vals):
+            self.scene = _MockScene(z_vals)
+            self.episode_length_buf = torch.full((len(z_vals),), 50, dtype=torch.long)
+
+    env = _MockEnv([2.50, 3.60, -0.10])
+    terminated = height_termination(env, threshold=min_h, max_height=max_h)
+    assert not bool(terminated[0].item())  # Z = 2.50m on 3D hill -> safe
+    assert bool(terminated[1].item())  # Z = 3.60m -> terminated
+    assert bool(terminated[2].item())  # Z = -0.10m -> terminated
 
 
 if __name__ == "__main__":
-    print("=" * 70)
-    print("RUNNING VISION ARCHITECTURE & ELEVATION UPGRADE TESTS")
-    print("=" * 70)
-    try:
-        test_spatial_softmax()
-        test_actor_architecture()
-        test_yuv_chrominance_isolation()
-        test_elevation_bounds()
-        print("=" * 70)
-        print("ALL VISION ARCHITECTURE UPGRADE TESTS PASSED (4/4)!")
-        print("=" * 70)
-    finally:
-        simulation_app.close()
+    test_spatial_softmax()
+    test_actor_architecture()
+    test_yuv_chrominance_isolation()
+    test_elevation_bounds()

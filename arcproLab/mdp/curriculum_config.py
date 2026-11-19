@@ -1,25 +1,49 @@
 """Curriculum & Sentinel Configuration Manager for ARCPro RL."""
 
+import datetime
 import json
 import os
 from typing import Any, Dict, List, Tuple
 
+try:
+    from mdp.track_topology import (
+        DEFAULT_LOOKAHEAD_DISTANCE,
+        DEFAULT_SECTOR_WEIGHTS,
+        SECTOR_DEFS,
+        SECTOR_DESCRIPTIONS,
+    )
+except ImportError:
+    from arcproLab.mdp.track_topology import (
+        DEFAULT_LOOKAHEAD_DISTANCE,
+        DEFAULT_SECTOR_WEIGHTS,
+        SECTOR_DEFS,
+        SECTOR_DESCRIPTIONS,
+    )
+
 _CONFIG_PATH = os.path.join(os.path.dirname(__file__), "curriculum_sectors.json")
 _LAST_MTIME = 0.0
+_DEAD_KEYS = ("speed_tracking_weight", "target_corner_speed")
+
 _CACHED_CONFIG: Dict[str, Any] = {
-    "sector_weights": [0.20, 0.20, 0.20, 0.20, 0.20],
-    "lookahead_distance": 1.2,
-    "speed_tracking_weight": 60.0,
-    "target_corner_speed": 0.35,
-    "sectors": {
-        "1": "Start Line (11m straight)",
-        "2": "Corner 1 Runway Approach (2.5m runway)",
-        "3": "Leg 2 Post-C1 Exit (8m runway)",
-        "4": "Leg 2 Intersection Approach (4.15m runway)",
-        "5": "North Straight Return Corridor (10m runway)",
-    },
+    "sector_weights": list(DEFAULT_SECTOR_WEIGHTS),
+    "lookahead_distance": DEFAULT_LOOKAHEAD_DISTANCE,
+    "sectors": dict(SECTOR_DESCRIPTIONS),
 }
-_CACHED_THRESHOLDS: List[float] = [0.20, 0.40, 0.60, 0.80]
+_CACHED_THRESHOLDS: List[float] = [0.25, 0.50, 0.70, 0.85]
+
+
+def _recompute_thresholds(weights: List[float]) -> List[float]:
+    if len(weights) == 5:
+        total = float(sum(weights))
+        if total > 0:
+            w = [float(x) / total for x in weights]
+            return [
+                w[0],
+                w[0] + w[1],
+                w[0] + w[1] + w[2],
+                w[0] + w[1] + w[2] + w[3],
+            ]
+    return [0.25, 0.50, 0.70, 0.85]
 
 
 def get_curriculum_config() -> Dict[str, Any]:
@@ -31,20 +55,15 @@ def get_curriculum_config() -> Dict[str, Any]:
             if mtime != _LAST_MTIME:
                 with open(_CONFIG_PATH, "r") as f:
                     data = json.load(f)
+                for k in _DEAD_KEYS:
+                    data.pop(k, None)
                 _CACHED_CONFIG.update(data)
+                for k in _DEAD_KEYS:
+                    _CACHED_CONFIG.pop(k, None)
                 weights = _CACHED_CONFIG.get(
-                    "sector_weights", [0.20, 0.20, 0.20, 0.20, 0.20]
+                    "sector_weights", list(DEFAULT_SECTOR_WEIGHTS)
                 )
-                if len(weights) == 5:
-                    total = float(sum(weights))
-                    if total > 0:
-                        w = [float(x) / total for x in weights]
-                        _CACHED_THRESHOLDS = [
-                            w[0],
-                            w[0] + w[1],
-                            w[0] + w[1] + w[2],
-                            w[0] + w[1] + w[2] + w[3],
-                        ]
+                _CACHED_THRESHOLDS = _recompute_thresholds(weights)
                 _LAST_MTIME = mtime
         except Exception:
             pass
@@ -65,14 +84,16 @@ def get_sector_thresholds() -> Tuple[float, float, float, float]:
 def get_lookahead_distance() -> float:
     """Get dynamic lookahead distance for route curvature sampling."""
     cfg = get_curriculum_config()
-    return float(cfg.get("lookahead_distance", 1.2))
+    return float(cfg.get("lookahead_distance", DEFAULT_LOOKAHEAD_DISTANCE))
 
 
 def update_curriculum_config(updates: Dict[str, Any]) -> Dict[str, Any]:
     """Atomically update the curriculum JSON configuration file."""
     cfg = get_curriculum_config().copy()
-    cfg.update(updates)
-    import datetime
+    clean_updates = {k: v for k, v in updates.items() if k not in _DEAD_KEYS}
+    cfg.update(clean_updates)
+    for k in _DEAD_KEYS:
+        cfg.pop(k, None)
 
     cfg["updated_at"] = datetime.datetime.utcnow().isoformat() + "Z"
 
@@ -80,6 +101,12 @@ def update_curriculum_config(updates: Dict[str, Any]) -> Dict[str, Any]:
     with open(tmp_path, "w") as f:
         json.dump(cfg, f, indent=2)
     os.replace(tmp_path, _CONFIG_PATH)
-    # Trigger refresh
     get_curriculum_config()
     return cfg
+
+
+import sys as _sys  # noqa: E402
+
+_sys.modules.setdefault("mdp.curriculum_config", _sys.modules[__name__])
+_sys.modules.setdefault("arcproLab.mdp.curriculum_config", _sys.modules[__name__])
+

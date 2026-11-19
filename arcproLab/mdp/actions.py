@@ -1,21 +1,101 @@
 from dataclasses import dataclass, field
 
 import gymnasium as gym
-import isaaclab.envs.mdp.actions.actions_cfg as actions_cfg
 import torch
-from isaaclab.assets import Articulation
-from isaaclab.envs import ManagerBasedEnv
-from isaaclab.managers.action_manager import ActionTerm, ActionTermCfg
+
+try:
+    import isaaclab.envs.mdp.actions.actions_cfg as actions_cfg
+    from isaaclab.assets import Articulation
+    from isaaclab.envs import ManagerBasedEnv
+    from isaaclab.managers.action_manager import ActionTerm, ActionTermCfg
+    _JOINT_ACTION_CFG_BASE = actions_cfg.JointActionCfg
+except ImportError:
+    Articulation = object  # type: ignore[misc,assignment]
+    ManagerBasedEnv = object  # type: ignore[misc,assignment]
+
+    @dataclass
+    class ActionTermCfg:  # type: ignore[no-redef]
+        class_type: type | None = None
+        asset_name: str = "robot"
+
+    @dataclass
+    class _JointActionCfgStub(ActionTermCfg):
+        joint_names: list[str] = field(default_factory=list)
+        scale: float = 1.0
+        offset: float = 0.0
+        clip: dict | tuple | None = None
+
+    _JOINT_ACTION_CFG_BASE = _JointActionCfgStub
+
+    class ActionTerm:  # type: ignore[no-redef]
+        def __init__(self, cfg, env):
+            self.cfg = cfg
+            self._env = env
+            self.device = getattr(env, "device", "cpu")
+            self.num_envs = getattr(env, "num_envs", 1)
+            self._asset = env.scene[cfg.asset_name] if hasattr(env, "scene") else None
+
+
+def get_normalized_actions(env) -> torch.Tensor:
+    """Return normalized (num_envs, 2) [steer, drive] actions strictly in [-1.0, 1.0].
+
+    Prefers clamped term-level normalized actions (`a_steering`, `b_drive`), and un-offsets /
+    un-scales any raw target values before clamping to [-1.0, 1.0].
+    """
+    num_envs = getattr(env, "num_envs", 1)
+    device = getattr(env, "device", "cpu")
+    out = torch.zeros((num_envs, 2), device=device, dtype=torch.float32)
+
+    am = getattr(env, "action_manager", None)
+    if am is None:
+        return out
+
+    # 1. Try reading from explicit steering and drive terms first
+    try:
+        if hasattr(am, "get_term"):
+            steer_term = am.get_term("a_steering")
+            drive_term = am.get_term("b_drive")
+            if steer_term is not None and hasattr(steer_term, "normalized_actions"):
+                out[:, 0] = steer_term.normalized_actions.view(-1)
+            elif steer_term is not None and hasattr(steer_term, "raw_actions"):
+                out[:, 0] = torch.clamp(
+                    steer_term.raw_actions.view(-1), min=-1.0, max=1.0
+                )
+            if drive_term is not None and hasattr(drive_term, "normalized_actions"):
+                out[:, 1] = drive_term.normalized_actions.view(-1)
+            elif drive_term is not None and hasattr(drive_term, "raw_actions"):
+                out[:, 1] = torch.clamp(
+                    drive_term.raw_actions.view(-1), min=-1.0, max=1.0
+                )
+            return torch.clamp(out, min=-1.0, max=1.0)
+    except Exception:
+        pass
+
+    # 2. Fallback to action_manager.action buffer
+    try:
+        raw = getattr(am, "action", None)
+        if raw is not None and raw.shape[1] >= 2:
+            steer_col = raw[:, 0]
+            drive_col = raw[:, 1]
+            # If drive_col looks like unnormalized wheel velocity targets (e.g., [0, 40] rad/s
+            # from scale=20.0, offset=20.0), un-offset and normalize back to [-1.0, 1.0].
+            if (drive_col.abs() > 1.5).any():
+                drive_col = (drive_col - 20.0) / 20.0
+            out[:, 0] = torch.clamp(steer_col, min=-1.0, max=1.0)
+            out[:, 1] = torch.clamp(drive_col, min=-1.0, max=1.0)
+    except Exception:
+        pass
+
+    return out
 
 
 @dataclass
-class GroupedJointActionCfg(actions_cfg.JointActionCfg):
+class GroupedJointActionCfg(_JOINT_ACTION_CFG_BASE):
     """Configuration for a grouped joint action term."""
 
     invert_right_joints: bool = False
 
     def __post_init__(self):
-        # Set missing class_type for the manager to know which class to instantiate
         if self.class_type is None:
             self.class_type = GroupedJointAction
 
@@ -28,29 +108,25 @@ class GroupedJointAction(ActionTerm):
 
     def __init__(self, cfg: GroupedJointActionCfg, env: ManagerBasedEnv) -> None:
         super().__init__(cfg, env)
-        # Resolve joints
         self._joint_ids, self._joint_names = self._asset.find_joints(
             self.cfg.joint_names
         )
         self._num_joints = len(self._joint_ids)
 
-        # Prepare scale and offset tensors (num_envs, num_joints)
-        self._scale = torch.tensor(self.cfg.scale, device=self.device).repeat(
-            self.num_envs, self._num_joints
-        )
-        self._offset = torch.tensor(self.cfg.offset, device=self.device).repeat(
-            self.num_envs, self._num_joints
-        )
+        self._scale = torch.tensor(
+            self.cfg.scale, device=self.device, dtype=torch.float32
+        ).repeat(self.num_envs, self._num_joints)
+        self._offset = torch.tensor(
+            self.cfg.offset, device=self.device, dtype=torch.float32
+        ).repeat(self.num_envs, self._num_joints)
 
-        # Action buffers
         self._raw_actions = torch.zeros(
-            self.num_envs, self.action_dim, device=self.device
+            self.num_envs, self.action_dim, device=self.device, dtype=torch.float32
         )
         self._processed_actions = torch.zeros(
-            self.num_envs, self._num_joints, device=self.device
+            self.num_envs, self._num_joints, device=self.device, dtype=torch.float32
         )
 
-        # Pre-compute right wheel indices for mirroring
         self._right_wheel_indices = [
             i
             for i, name in enumerate(self._joint_names)
@@ -63,11 +139,9 @@ class GroupedJointAction(ActionTerm):
 
     @property
     def action_space(self) -> gym.Space:
-        # Define bounds based on clip if available
         low, high = -1.0, 1.0
         if hasattr(self.cfg, "clip") and self.cfg.clip is not None:
             if isinstance(self.cfg.clip, dict):
-                # For grouped actions, we usually just have one term
                 for val in self.cfg.clip.values():
                     low, high = val[0], val[1]
             elif isinstance(self.cfg.clip, tuple):
@@ -80,31 +154,39 @@ class GroupedJointAction(ActionTerm):
         return self._raw_actions
 
     @property
+    def normalized_actions(self) -> torch.Tensor:
+        return self._raw_actions
+
+    @property
     def processed_actions(self) -> torch.Tensor:
         return self._processed_actions
 
-    def process_actions(self, actions: torch.Tensor):
-        # actions is (num_envs, 1)
-        self._raw_actions[:] = actions
+    def unscale_processed_actions(self, processed: torch.Tensor) -> torch.Tensor:
+        """Recover normalized [-1.0, 1.0] command from scaled/offset joint targets."""
+        safe_scale = torch.where(
+            torch.abs(self._scale) > 1e-6,
+            self._scale,
+            torch.ones_like(self._scale),
+        )
+        unscaled = (processed - self._offset) / safe_scale
+        return torch.clamp(unscaled.mean(dim=-1, keepdim=True), min=-1.0, max=1.0)
 
-        # Apply clipping if specified in config
-        # Note: self.cfg.clip can be a dict or None
+    def process_actions(self, actions: torch.Tensor):
         if hasattr(self.cfg, "clip") and self.cfg.clip is not None:
             if isinstance(self.cfg.clip, dict):
-                # For grouped actions, we usually just have one term, but we check all
                 for val in self.cfg.clip.values():
                     actions = torch.clamp(actions, val[0], val[1])
             elif isinstance(self.cfg.clip, tuple):
                 actions = torch.clamp(actions, self.cfg.clip[0], self.cfg.clip[1])
-        # FORCE clamp raw actions to [-1.0, 1.0] to protect physics
-        actions = torch.clamp(actions, min=-1.0, max=1.0)
 
-        # Broadcast and apply scale/offset
+        # Clamp normalized actions strictly to [-1.0, 1.0] before storing and scaling
+        actions = torch.clamp(actions, min=-1.0, max=1.0)
+        self._raw_actions[:] = actions
+
         self._processed_actions[:] = self._offset + self._scale * actions.repeat(
             1, self._num_joints
         )
 
-        # Invert right-side joints if they are physically mirrored in the USD
         if (
             getattr(self.cfg, "invert_right_joints", False)
             and len(self._right_wheel_indices) > 0
@@ -112,7 +194,6 @@ class GroupedJointAction(ActionTerm):
             self._processed_actions[:, self._right_wheel_indices] *= -1.0
 
     def apply_actions(self):
-        # To be implemented by child classes
         pass
 
 
@@ -124,9 +205,7 @@ class AckermannSteeringActionCfg(ActionTermCfg):
     joint_names: list[str] = field(default_factory=list)
     wheelbase: float = 0.33
     track_width: float = 0.28
-    max_steering_angle: float = (
-        0.68  # 38.96 deg (enables R_min = 0.408m for Corner 1 R=0.464m)
-    )
+    max_steering_angle: float = 0.68
     scale: float = 1.0
     offset: float = 0.0
     invert_right_joint: bool = False
@@ -146,7 +225,6 @@ class AckermannSteeringAction(ActionTerm):
 
     def __init__(self, cfg: AckermannSteeringActionCfg, env: ManagerBasedEnv) -> None:
         super().__init__(cfg, env)
-        # Resolve joints
         self._joint_ids, self._joint_names = self._asset.find_joints(
             self.cfg.joint_names
         )
@@ -155,17 +233,21 @@ class AckermannSteeringAction(ActionTerm):
                 f"AckermannSteeringAction requires exactly 2 joints, found {len(self._joint_ids)}: {self._joint_names}"
             )
 
-        # Explicitly map which index corresponds to which requested joint to prevent sorting bugs
         self._left_idx = self._joint_names.index(self.cfg.joint_names[0])
         self._right_idx = self._joint_names.index(self.cfg.joint_names[1])
 
-        # Constants
         self.wheelbase = cfg.wheelbase
         self.half_track = cfg.track_width / 2.0
 
-        # Action buffers
-        self._raw_actions = torch.zeros(self.num_envs, 1, device=self.device)
-        self._processed_actions = torch.zeros(self.num_envs, 2, device=self.device)
+        self._raw_actions = torch.zeros(
+            self.num_envs, 1, device=self.device, dtype=torch.float32
+        )
+        self._steering_angle = torch.zeros(
+            self.num_envs, device=self.device, dtype=torch.float32
+        )
+        self._processed_actions = torch.zeros(
+            self.num_envs, 2, device=self.device, dtype=torch.float32
+        )
 
     @property
     def action_dim(self) -> int:
@@ -180,44 +262,46 @@ class AckermannSteeringAction(ActionTerm):
         return self._raw_actions
 
     @property
+    def normalized_actions(self) -> torch.Tensor:
+        return self._raw_actions
+
+    @property
+    def steering_angle(self) -> torch.Tensor:
+        return self._steering_angle
+
+    @property
     def processed_actions(self) -> torch.Tensor:
         return self._processed_actions
 
     def process_actions(self, actions: torch.Tensor):
-        # actions is (num_envs, 1) in range [-1, 1]
-        self._raw_actions[:] = actions
+        clamped_actions = torch.clamp(actions, min=-1.0, max=1.0)
+        self._raw_actions[:] = clamped_actions
 
-        # Clamp raw network actions to [-1.0, 1.0] in case the policy outputs out-of-bound values
-        clamped_actions = torch.clamp(actions.squeeze(1), min=-1.0, max=1.0)
+        max_steer = float(self.cfg.max_steering_angle)
+        steering_angle = torch.clamp(
+            clamped_actions.squeeze(-1) * max_steer + float(self.cfg.offset),
+            min=-max_steer,
+            max=max_steer,
+        )
+        self._steering_angle[:] = steering_angle
 
-        # Convert normalized action to target steering angle (rad) and apply offset
-        steering_angle = clamped_actions * self.cfg.max_steering_angle + self.cfg.offset
-
-        # Handle Straight case (to avoid division by zero)
         is_straight = torch.abs(steering_angle) < 1e-4
 
-        # Ackermann Logic (Vectorized)
-        # turn_radius = wheelbase / tan(abs(steering_angle))
         turn_radius = self.wheelbase / torch.tan(torch.abs(steering_angle) + 1e-6)
-
-        # inner_angle = atan(wheelbase / (turn_radius - half_track))
-        # outer_angle = atan(wheelbase / (turn_radius + half_track))
         inner_angle = torch.atan(self.wheelbase / (turn_radius - self.half_track))
         outer_angle = torch.atan(self.wheelbase / (turn_radius + self.half_track))
 
-        # Map to Left/Right joints
-        # If steering_angle > 0 (Turning LEFT): Left is Inner, Right is Outer
-        # If steering_angle < 0 (Turning RIGHT): Left is Outer, Right is Inner
+        # Exact Left/Right odd mirror symmetry:
+        # steering_angle > 0 (Left turn): Left is Inner (+inner), Right is Outer (+outer)
+        # steering_angle < 0 (Right turn): Left is Outer (-outer), Right is Inner (-inner)
         left_angle = torch.where(steering_angle > 0, inner_angle, -outer_angle)
         right_angle = torch.where(steering_angle > 0, outer_angle, -inner_angle)
 
-        # Apply Straight override
         left_angle = torch.where(is_straight, torch.zeros_like(left_angle), left_angle)
         right_angle = torch.where(
             is_straight, torch.zeros_like(right_angle), right_angle
         )
 
-        # Store processed actions mapped explicitly to their actual indices
         self._processed_actions[:, self._left_idx] = left_angle
         self._processed_actions[:, self._right_idx] = right_angle
 
@@ -279,8 +363,6 @@ class AckermannDifferentialVelocityAction(GroupedJointAction):
         self.wheelbase = cfg.wheelbase
         self.half_track = cfg.track_width / 2.0
 
-        # Classify which joints are on the left side vs right side
-        # Joint names typically: Joint_Drive_FL, Joint_Drive_FR, Joint_Drive_RL, Joint_Drive_RR
         self._left_joint_indices = []
         self._right_joint_indices = []
         for i, name in enumerate(self._joint_names):
@@ -304,7 +386,7 @@ class AckermannDifferentialVelocityAction(GroupedJointAction):
     def process_actions(self, actions: torch.Tensor):
         super().process_actions(actions)
 
-        # Retrieve active steering angle from steering action term or raw action buffer
+        # Retrieve clamped, offset-aware steering angle from steering action term
         steering_angle = None
         try:
             if hasattr(self._env, "action_manager"):
@@ -312,11 +394,26 @@ class AckermannDifferentialVelocityAction(GroupedJointAction):
                     self.cfg.steering_term_name
                 )
                 if (
+                    hasattr(steer_term, "steering_angle")
+                    and steer_term.steering_angle is not None
+                ):
+                    steering_angle = steer_term.steering_angle
+                elif (
                     hasattr(steer_term, "raw_actions")
                     and steer_term.raw_actions is not None
                 ):
-                    max_steer = getattr(steer_term.cfg, "max_steering_angle", 0.68)
-                    steering_angle = steer_term.raw_actions.squeeze(-1) * max_steer
+                    max_steer = float(
+                        getattr(steer_term.cfg, "max_steering_angle", 0.68)
+                    )
+                    offset = float(getattr(steer_term.cfg, "offset", 0.0))
+                    clamped_steer = torch.clamp(
+                        steer_term.raw_actions.squeeze(-1), min=-1.0, max=1.0
+                    )
+                    steering_angle = torch.clamp(
+                        clamped_steer * max_steer + offset,
+                        min=-max_steer,
+                        max=max_steer,
+                    )
         except Exception:
             pass
 
@@ -326,14 +423,14 @@ class AckermannDifferentialVelocityAction(GroupedJointAction):
                     hasattr(self._env, "action_manager")
                     and self._env.action_manager.action is not None
                 ):
-                    steering_angle = self._env.action_manager.action[:, 0] * 0.68
+                    clamped_steer = torch.clamp(
+                        self._env.action_manager.action[:, 0], min=-1.0, max=1.0
+                    )
+                    steering_angle = clamped_steer * 0.68
             except Exception:
                 pass
 
         if steering_angle is not None:
-            # Kinematic speed ratio: diff_factor = (W * tan(delta)) / (2 * L)
-            # delta > 0: Left turn -> Left wheels inner (slower), Right wheels outer (faster)
-            # delta < 0: Right turn -> Left wheels outer (faster), Right wheels inner (slower)
             tan_delta = torch.tan(steering_angle)
             diff_factor = (self.half_track * tan_delta) / self.wheelbase
             diff_factor = torch.clamp(diff_factor, min=-0.60, max=0.60).unsqueeze(1)
@@ -369,15 +466,13 @@ class CombinedDriveAction(GroupedJointAction):
 
     @property
     def action_dim(self) -> int:
-        return 2  # [Throttle, Brake]
+        return 2
 
     @property
     def action_space(self) -> gym.Space:
         return gym.spaces.Box(low=0.0, high=1.0, shape=(self.action_dim,))
 
     def process_actions(self, actions: torch.Tensor):
-        # actions is (num_envs, 2) -> [throttle, brake]
-        # Explicitly clamp to [0, 1] to respect the action space
         actions = torch.clamp(actions, 0.0, 1.0)
         self._raw_actions[:] = actions
         throttle = torch.clamp(actions[:, 0:1], 0.0, 1.0)
@@ -385,7 +480,6 @@ class CombinedDriveAction(GroupedJointAction):
 
         drive = throttle * (1.0 - brake)
 
-        # Broadcast and apply scale/offset to all drive joints
         self._processed_actions[:] = self._offset + self._scale * drive.repeat(
             1, self._num_joints
         )
@@ -394,3 +488,10 @@ class CombinedDriveAction(GroupedJointAction):
         self._asset.set_joint_velocity_target(
             self._processed_actions, joint_ids=self._joint_ids
         )
+
+
+import sys as _sys  # noqa: E402
+
+_sys.modules.setdefault("mdp.actions", _sys.modules[__name__])
+_sys.modules.setdefault("arcproLab.mdp.actions", _sys.modules[__name__])
+

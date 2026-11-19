@@ -11,17 +11,30 @@ visualization in track_visualizer.py, core runtime navigation in this module.
 """
 
 import os
+import sys
 
 import numpy as np
 import torch
 
-from .track_usd_extractor import (
-    collect_raw_marker_points_from_stage,
-)
-from .track_usd_extractor import (
-    sample_waypoints as _sample_waypoints,
-)
-from .track_visualizer import refresh_track_visuals
+try:
+    from .track_usd_extractor import (
+        collect_raw_marker_points_from_stage,
+        sample_waypoints as _sample_waypoints,
+    )
+    from .track_visualizer import refresh_track_visuals
+except ImportError:
+    try:
+        from mdp.track_usd_extractor import (
+            collect_raw_marker_points_from_stage,
+            sample_waypoints as _sample_waypoints,
+        )
+        from mdp.track_visualizer import refresh_track_visuals
+    except ImportError:
+        from arcproLab.mdp.track_usd_extractor import (
+            collect_raw_marker_points_from_stage,
+            sample_waypoints as _sample_waypoints,
+        )
+        from arcproLab.mdp.track_visualizer import refresh_track_visuals
 
 
 class TrackManager:
@@ -30,14 +43,14 @@ class TrackManager:
     Ensures 'Dense Walls' for reliable termination and visible debug spheres.
     """
 
-    def __init__(self, device: str = "cuda:0"):
+    def __init__(self, device: str | torch.device = "cuda:0"):
+        if hasattr(device, "device"):
+            device = device.device
         self.device = device
         self.waypoints = None
         self.last_indices = None  # Tensor (num_envs,) to track closest waypoints
 
         # Performance: Only enable visuals if explicitly requested via --debug flag
-        import sys
-
         self.debug = "--debug" in sys.argv
 
         # Visualizers (Using reliable USD-based markers)
@@ -55,6 +68,16 @@ class TrackManager:
         self.white_tensor = None
         self.gate_tensor = None
         self.curvature_tensor = None
+
+        # Contiguous 2D XY views and per-pos cdist cache for fast exact queries
+        self._yellow_xy = None
+        self._white_xy = None
+        self._gate_xy = None
+        self._waypoints_xy = None
+        self._cached_marker_pos_xy = None
+        self._cached_dist_y = None
+        self._cached_dist_w = None
+        self._cached_dist_g = None
 
         self.sync_attempts = 0
         self.max_sync_attempts = 10
@@ -81,25 +104,29 @@ class TrackManager:
                 self.collect_raw_marker_points()
                 self.save_cache()
 
-            # Convert to Tensors
+            # Convert to Tensors and pre-materialize contiguous 2D XY views
             if self.raw_yellow_pts is not None:
                 self.yellow_tensor = torch.tensor(
                     self.raw_yellow_pts, device=self.device, dtype=torch.float32
                 )
+                self._yellow_xy = self.yellow_tensor[:, :2].contiguous()
             if self.raw_white_pts is not None:
                 self.white_tensor = torch.tensor(
                     self.raw_white_pts, device=self.device, dtype=torch.float32
                 )
+                self._white_xy = self.white_tensor[:, :2].contiguous()
             if self.raw_gate_pts is not None:
                 self.gate_tensor = torch.tensor(
                     self.raw_gate_pts, device=self.device, dtype=torch.float32
                 )
+                self._gate_xy = self.gate_tensor[:, :2].contiguous()
 
             if os.path.exists(self.wp_path):
                 wp_np = np.load(self.wp_path)
                 self.waypoints = torch.tensor(
                     wp_np, device=self.device, dtype=torch.float32
                 )
+                self._waypoints_xy = self.waypoints[:, :2].contiguous()
 
                 # Pre-calculate Curvature (Kappa = dYaw / ds)
                 n_wps = len(wp_np)
@@ -125,6 +152,7 @@ class TrackManager:
                 self.waypoints = torch.tensor(
                     [[-16.25, 5.56, -1.57]], device=self.device
                 )
+                self._waypoints_xy = self.waypoints[:, :2].contiguous()
                 self.curvature_tensor = torch.zeros(1, device=self.device)
 
         self.sync_attempts += 1
@@ -176,6 +204,7 @@ class TrackManager:
         self.waypoints = torch.tensor(
             final_wps, device=self.device, dtype=torch.float32
         )
+        self._waypoints_xy = self.waypoints[:, :2].contiguous()
         print(f"[TrackManager] Generated {n} sequenced waypoints.")
 
     def save_waypoints(self, path):
@@ -183,20 +212,84 @@ class TrackManager:
             np.save(path, self.waypoints.cpu().numpy())
             print(f"[TrackManager] Saved waypoints to {path}")
 
+    def reset_indices(
+        self,
+        env_ids: torch.Tensor | None = None,
+        new_pos: torch.Tensor | None = None,
+    ) -> None:
+        """Reset cached marker distances and optionally re-index waypoints on reset."""
+        self._cached_marker_pos_xy = None
+        self.ensure_synced()
+        if new_pos is not None and self.waypoints is not None and len(self.waypoints) > 0:
+            wp_xy = (
+                self._waypoints_xy
+                if self._waypoints_xy is not None
+                else self.waypoints[:, :2]
+            )
+            dists = torch.cdist(new_pos[:, :2].to(device=self.device, dtype=torch.float32), wp_xy)
+            closest_idx = torch.argmin(dists, dim=1)
+            if env_ids is None or self.last_indices is None:
+                self.last_indices = closest_idx
+            else:
+                self.last_indices[env_ids] = closest_idx
+        elif env_ids is None:
+            self.last_indices = None
+
+    def get_nearest_waypoint(self, pos: torch.Tensor) -> torch.Tensor:
+        """Return nearest waypoint indices for the given (N, 2+) positions."""
+        self.ensure_synced()
+        wp_xy = (
+            self._waypoints_xy
+            if self._waypoints_xy is not None
+            else self.waypoints[:, :2]
+        )
+        dists = torch.cdist(pos[:, :2].to(device=self.device, dtype=torch.float32), wp_xy)
+        return torch.argmin(dists, dim=1)
+
     def compute_marker_distances(self, pos: torch.Tensor):
         self.ensure_synced()
+        pos_xy = pos[:, :2].to(device=self.device, dtype=torch.float32).contiguous()
+
+        if (
+            self._cached_marker_pos_xy is not None
+            and self._cached_marker_pos_xy.shape == pos_xy.shape
+            and torch.equal(self._cached_marker_pos_xy, pos_xy)
+            and self._cached_dist_y is not None
+            and self._cached_dist_w is not None
+            and self._cached_dist_g is not None
+        ):
+            return self._cached_dist_y, self._cached_dist_w, self._cached_dist_g
+
+        yellow_xy = (
+            self._yellow_xy
+            if self._yellow_xy is not None and self._yellow_xy.shape[0] == self.yellow_tensor.shape[0]
+            else self.yellow_tensor[:, :2]
+        )
+        white_xy = (
+            self._white_xy
+            if self._white_xy is not None and self._white_xy.shape[0] == self.white_tensor.shape[0]
+            else self.white_tensor[:, :2]
+        )
+
         # 2D distance for XY plane, ignoring Z height of the robot chassis
-        dist_y = torch.min(torch.cdist(pos[:, :2], self.yellow_tensor[:, :2]), dim=1)[0]
-        dist_w = torch.min(torch.cdist(pos[:, :2], self.white_tensor[:, :2]), dim=1)[0]
+        dist_y = torch.min(torch.cdist(pos_xy, yellow_xy), dim=1)[0]
+        dist_w = torch.min(torch.cdist(pos_xy, white_xy), dim=1)[0]
 
         # Gates distance (permeable)
         if self.gate_tensor is not None:
-            dist_g = torch.min(torch.cdist(pos[:, :2], self.gate_tensor[:, :2]), dim=1)[
-                0
-            ]
+            gate_xy = (
+                self._gate_xy
+                if self._gate_xy is not None and self._gate_xy.shape[0] == self.gate_tensor.shape[0]
+                else self.gate_tensor[:, :2]
+            )
+            dist_g = torch.min(torch.cdist(pos_xy, gate_xy), dim=1)[0]
         else:
             dist_g = torch.ones_like(dist_y) * 10.0
 
+        self._cached_marker_pos_xy = pos_xy.clone()
+        self._cached_dist_y = dist_y
+        self._cached_dist_w = dist_w
+        self._cached_dist_g = dist_g
         return dist_y, dist_w, dist_g
 
     def refresh_visuals(self, target_lane_offset: float = 0.0):
@@ -218,10 +311,16 @@ class TrackManager:
 
         num_envs = pos.shape[0]
         num_wps = self.waypoints.shape[0]
+        pos_xy = pos[:, :2]
+        wp_xy = (
+            self._waypoints_xy
+            if self._waypoints_xy is not None and self._waypoints_xy.shape[0] == num_wps
+            else self.waypoints[:, :2]
+        )
 
         if self.last_indices is None or self.last_indices.shape[0] != num_envs:
             # Cold start: Global Search
-            dists = torch.cdist(pos[:, :2], self.waypoints[:, :2])
+            dists = torch.cdist(pos_xy, wp_xy)
             closest_idx = torch.argmin(dists, dim=1)
             self.last_indices = closest_idx
         else:
@@ -235,28 +334,25 @@ class TrackManager:
             candidate_indices = (self.last_indices.unsqueeze(1) + offsets) % num_wps
 
             candidate_wps = self.waypoints[candidate_indices]
-            dists = torch.norm(pos[:, None, :2] - candidate_wps[:, :, :2], dim=2)
+            dists = torch.norm(pos_xy[:, None, :] - candidate_wps[:, :, :2], dim=2)
             best_local_idx = torch.argmin(dists, dim=1)
 
-            closest_idx = candidate_indices[
-                torch.arange(num_envs, device=self.device), best_local_idx
-            ]
+            env_idx_range = torch.arange(num_envs, device=self.device)
+            closest_idx = candidate_indices[env_idx_range, best_local_idx]
 
             # Teleport / Spawn detection: if closest waypoint in local window is > 1.0m away,
             # fall back to global search to re-index at new spawn location
-            min_local_dist = dists[
-                torch.arange(num_envs, device=self.device), best_local_idx
-            ]
+            min_local_dist = dists[env_idx_range, best_local_idx]
             teleported = min_local_dist > 1.0
             if teleported.any():
-                global_dists = torch.cdist(pos[:, :2], self.waypoints[:, :2])
+                global_dists = torch.cdist(pos_xy, wp_xy)
                 global_idx = torch.argmin(global_dists, dim=1)
                 closest_idx = torch.where(teleported, global_idx, closest_idx)
 
             self.last_indices = closest_idx
 
         closest_wp = self.waypoints[closest_idx]
-        wp_to_robot = pos[:, :2] - closest_wp[:, :2]
+        wp_to_robot = pos_xy - closest_wp[:, :2]
         wp_yaw = closest_wp[:, 2]
 
         kappa = self.curvature_tensor[closest_idx]
@@ -406,8 +502,15 @@ class TrackManager:
 _TRACK_MANAGER = None
 
 
-def get_track_manager(device: str = "cuda:0"):
+def get_track_manager(device: str | torch.device = "cuda:0"):
     global _TRACK_MANAGER
-    if _TRACK_MANAGER is None:
+    if hasattr(device, "device"):
+        device = device.device
+    if _TRACK_MANAGER is None or str(_TRACK_MANAGER.device) != str(device):
         _TRACK_MANAGER = TrackManager(device=device)
     return _TRACK_MANAGER
+
+
+sys.modules.setdefault("mdp.track_manager", sys.modules[__name__])
+sys.modules.setdefault("arcproLab.mdp.track_manager", sys.modules[__name__])
+

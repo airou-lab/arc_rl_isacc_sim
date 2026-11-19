@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-LOG_FILE = f"{WORKSPACE_ROOT}/logs/skrl_phase1.log"
+LOG_FILE = os.environ.get("ARCPRO_LOG_FILE", f"{WORKSPACE_ROOT}/logs/skrl_phase1.log")
 SENTINEL_LOG = f"{WORKSPACE_ROOT}/logs/sentinel.log"
 DIAGNOSIS_FILE = f"{WORKSPACE_ROOT}/logs/SENTINEL_DIAGNOSIS.md"
 STATE_FILE = f"{WORKSPACE_ROOT}/logs/sentinel_state.json"
@@ -25,6 +25,7 @@ START_SCRIPT = f"{WORKSPACE_ROOT}/start_tmux_training.sh"
 DEFAULT_COOLDOWN_SEC = 300.0
 VENV_PYTHON = f"{WORKSPACE_ROOT}/venv/bin/python"
 PROBE_SCRIPT = f"{WORKSPACE_ROOT}/arcproLab/scripts/checkpoint_probe.py"
+DEBIAS_SCRIPT = f"{WORKSPACE_ROOT}/arcproLab/scripts/debias_checkpoint.py"
 PROBE_LOG_PATH = f"{WORKSPACE_ROOT}/logs/checkpoint_probes.jsonl"
 
 
@@ -77,11 +78,26 @@ def get_active_branch() -> str:
         return "rollback/clean-baseline"
 
 
-def get_active_log_subdir(branch: Optional[str] = None) -> str:
-    """Resolve the active SKRL log subdirectory for the active git branch."""
+def get_active_log_subdir(
+    branch: Optional[str] = None, log_dir: Optional[str] = None
+) -> str:
+    """Resolve the active SKRL log subdirectory for the active git branch.
+
+    Never falls back to stale legacy directories when on a feature/experiment branch.
+    Supports explicit `log_dir` or `ARCPRO_LOG_DIR` environment override.
+    """
+    override = log_dir or os.environ.get("ARCPRO_LOG_DIR", "")
+    if override:
+        return os.path.abspath(override)
     tag = (branch or get_active_branch()).replace("/", "_")
-    sub = f"{WORKSPACE_ROOT}/logs/ppo_skrl_{tag}"
-    return sub if os.path.isdir(sub) else f"{WORKSPACE_ROOT}/logs/ppo_skrl"
+    prefix = "ppo_skrl_"
+    branch_dir = os.path.join(WORKSPACE_ROOT, "logs", f"{prefix}{tag}")
+    if os.path.isdir(branch_dir):
+        return branch_dir
+    skrl_dir = os.path.join(WORKSPACE_ROOT, "logs", "skrl", "arcpro_car")
+    if os.path.isdir(skrl_dir):
+        return skrl_dir
+    return branch_dir
 
 
 def format_checkpoint_key(ckpt_path: str) -> str:
@@ -91,9 +107,9 @@ def format_checkpoint_key(ckpt_path: str) -> str:
     return f"{run_dir.name}/{p.name}"
 
 
-def get_current_run_checkpoint() -> str:
+def get_current_run_checkpoint(log_dir: Optional[str] = None) -> str:
     """Find latest step checkpoint (or best_agent.pt fallback) in active run."""
-    log_subdir = get_active_log_subdir()
+    log_subdir = get_active_log_subdir(log_dir=log_dir)
     if not os.path.isdir(log_subdir):
         return ""
     best_ckpts, agent_ckpts = [], []
@@ -179,8 +195,11 @@ def query_gpu_stats() -> GPUStats:
     return GPUStats()
 
 
-def check_process_status(max_stale_seconds: float = 180.0) -> ProcessStatus:
+def check_process_status(
+    max_stale_seconds: float = 180.0, log_file: Optional[str] = None
+) -> ProcessStatus:
     """Check tmux session, process execution, and log freshness."""
+    target_log = log_file or os.environ.get("ARCPRO_LOG_FILE", LOG_FILE)
     tmux_ok, py_ok = False, False
     try:
         cmd = ["tmux", "has-session", "-t", "training"]
@@ -188,15 +207,15 @@ def check_process_status(max_stale_seconds: float = 180.0) -> ProcessStatus:
     except Exception:
         pass
     try:
-        cmd = ["pgrep", "-f", "train_skrl.py"]
+        cmd = ["pgrep", "-f", "[t]rain_skrl.py"]
         py_ok = subprocess.run(cmd, capture_output=True).returncode == 0
     except Exception:
         pass
-    log_exists = os.path.exists(LOG_FILE)
+    log_exists = os.path.exists(target_log)
     log_age, log_fresh = 999999.0, False
     if log_exists:
         try:
-            log_age = time.time() - os.path.getmtime(LOG_FILE)
+            log_age = time.time() - os.path.getmtime(target_log)
             log_fresh = log_age <= max_stale_seconds
         except Exception:
             pass
@@ -211,13 +230,16 @@ _METRIC_PATTERN = re.compile(
 )
 
 
-def parse_recent_metrics(max_lines: int = 300) -> List[MetricBatch]:
-    """Parse telemetry batches from the tail of skrl_phase1.log."""
-    if not os.path.exists(LOG_FILE):
+def parse_recent_metrics(
+    max_lines: int = 300, log_file: Optional[str] = None
+) -> List[MetricBatch]:
+    """Parse telemetry batches from the tail of the active training log."""
+    target_log = log_file or os.environ.get("ARCPRO_LOG_FILE", LOG_FILE)
+    if not os.path.exists(target_log):
         return []
     try:
         raw = subprocess.check_output(
-            ["tail", "-n", str(max_lines), LOG_FILE], timeout=5
+            ["tail", "-n", str(max_lines), target_log], timeout=5
         )
         text = raw.decode("utf-8", errors="replace")
     except Exception:
@@ -342,7 +364,7 @@ def probe_checkpoint_bias(ckpt_path: str) -> Optional[Dict[str, Any]]:
         if os.path.exists(VENV_PYTHON)
         else (isaac_py if os.path.exists(isaac_py) else sys.executable)
     )
-    cmd = [py_bin, PROBE_SCRIPT, ckpt_path, "--json"]
+    cmd = [py_bin, PROBE_SCRIPT, ckpt_path, "--equivariant", "--json"]
     clean_env = {k: v for k, v in os.environ.items() if not k.startswith("PYTHON")}
     try:
         res = subprocess.run(
@@ -361,8 +383,25 @@ def probe_checkpoint_bias(ckpt_path: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def debias_checkpoint_file(
+    ckpt_path: str, out_path: Optional[str] = None
+) -> str:
+    """Run debias_checkpoint on ckpt_path and return the debiased checkpoint path."""
+    if not os.path.isfile(ckpt_path):
+        return ckpt_path
+    try:
+        from debias_checkpoint import debias_checkpoint
+
+        debiased_ckpt_path = debias_checkpoint(ckpt_path, out_path=out_path)
+        if debiased_ckpt_path and os.path.isfile(debiased_ckpt_path):
+            return debiased_ckpt_path
+    except Exception as e:
+        print(f"[Sentinel] Debias error on {ckpt_path}: {e}", file=sys.stderr)
+    return ckpt_path
+
+
 def auto_tune_curriculum_bias(bias_metrics: Dict[str, Any]) -> Dict[str, Any]:
-    """Dynamically adjust curriculum sector weights based on probed policy bias."""
+    """Dynamically adjust 5-sector curriculum weights based on probed policy bias."""
     bias = bias_metrics.get("mu_neutral_steer", 0.0)
     if bias > 0.08:
         new_weights = [0.30, 0.20, 0.20, 0.20, 0.10]
@@ -415,7 +454,10 @@ def auto_tune_curriculum_bias(bias_metrics: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def process_checkpoint_probe_and_tuning(
-    ckpt_path: str, ckpt_key: str, logger: logging.Logger
+    ckpt_path: str,
+    ckpt_key: str,
+    logger: logging.Logger,
+    auto_debias: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """Probe checkpoint, log telemetry, and apply dynamic bias curriculum tuning."""
     logger.info(f"🎯 Probing checkpoint weights (CPU): {ckpt_key}")
@@ -434,6 +476,11 @@ def process_checkpoint_probe_and_tuning(
         f"[Probe] {ckpt_key} | Neutral Steer: {bias:+.4f} ({status_tag}) | "
         f"Turn Steer: {t_steer:+.4f} (Δ={d_steer:+.4f}) | Pre-Brake: {brake:+.4f} | σ_steer: {sig:.4f}"
     )
+
+    if auto_debias and abs(bias) > 0.05:
+        debiased_ckpt_path = debias_checkpoint_file(ckpt_path)
+        res["debiased_ckpt_path"] = debiased_ckpt_path
+        logger.info(f"[Sentinel] Generated debiased checkpoint: {debiased_ckpt_path}")
 
     tuning = auto_tune_curriculum_bias(res)
     if tuning and tuning.get("tuned"):

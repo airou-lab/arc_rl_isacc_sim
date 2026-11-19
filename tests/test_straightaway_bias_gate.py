@@ -2,12 +2,10 @@
 """Deterministic Straightaway Bias Quality Gate for ARCPro Policy Checkpoints.
 
 Verifies:
-1. Neutral Straightaway Steer: |steer| <= 0.05 rad (or user-defined threshold).
+1. Neutral Straightaway Steer on real synthesized road images: |steer| <= 0.05 rad.
 2. Cornering Authority: Turn Token = -1.0 produces steer >= +0.30 rad.
-3. Pre-Braking Authority: Turn Token = -1.0 produces throttle <= -0.30.
-
-Zero GPU VRAM, zero Isaac Sim overhead (~0.05s execution on CPU).
-Can be executed directly via python3 or pytest.
+3. Masked telemetry columns [69, 70, 72, 73, 75] have zero influence on probed bias.
+4. Zero GPU VRAM, zero Isaac Sim overhead (~0.05s execution on CPU).
 """
 
 import argparse
@@ -16,103 +14,60 @@ import os
 import sys
 from typing import Any, Dict, Optional, Tuple
 
+import gymnasium as gym
+import pytest
 import torch
+
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ARCPRO_LAB_DIR = os.path.join(ROOT_DIR, "arcproLab")
+SCRIPTS_DIR = os.path.join(ARCPRO_LAB_DIR, "scripts")
+for _p in (ROOT_DIR, ARCPRO_LAB_DIR, SCRIPTS_DIR):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+from agents.skrl_models import ARCProActor  # noqa: E402
+from checkpoint_probe import evaluate_checkpoint  # noqa: E402
+from debias_checkpoint import debias_checkpoint  # noqa: E402
+
+pytestmark = pytest.mark.cpu
 
 
 def find_latest_checkpoint(root_dir: Optional[str] = None) -> str:
-    """Find the most recent checkpoint in logs/ppo_skrl_rollback_clean-baseline."""
+    """Find the most recent checkpoint in logs/."""
     if root_dir is None:
-        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    search_dir = os.path.join(root_dir, "logs/ppo_skrl_rollback_clean-baseline")
+        root_dir = ROOT_DIR
+    search_dir = os.path.join(root_dir, "logs")
     candidates = glob.glob(os.path.join(search_dir, "**/agent_*.pt"), recursive=True)
     candidates = [c for c in candidates if "corrupted" not in c]
     if not candidates:
-        raise FileNotFoundError(
-            f"No valid clean-baseline checkpoints found under {search_dir}"
-        )
+        raise FileNotFoundError(f"No valid checkpoints found under {search_dir}")
     return max(candidates, key=os.path.getmtime)
 
 
 def evaluate_policy_cpu(
     ckpt_path: str,
 ) -> Tuple[Dict[str, float], Dict[str, Any]]:
-    """Load policy weights onto CPU and evaluate deterministic response.
-
-    Returns:
-        metrics: Dictionary of evaluated steer and throttle actions.
-        raw_tensors: Extracted weights, biases, and std parameter.
-    """
+    """Load policy weights onto CPU and evaluate deterministic response on synthesized road images."""
     if not os.path.isfile(ckpt_path):
         raise FileNotFoundError(f"Checkpoint file does not exist: {ckpt_path}")
 
-    ckpt = torch.load(ckpt_path, map_location="cpu")
-    sd = ckpt.get("policy", ckpt)
-
-    log_std = sd["log_std_parameter"]
-    std = torch.exp(log_std).numpy()
+    metrics = evaluate_checkpoint(ckpt_path)
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    sd = (
+        ckpt.get("policy", ckpt.get("models", {}).get("policy", ckpt))
+        if isinstance(ckpt, dict)
+        else ckpt
+    )
     w0 = sd["policy_head.0.weight"]
     b0 = sd["policy_head.0.bias"]
     w2 = sd["policy_head.2.weight"]
     b2 = sd["policy_head.2.bias"]
-
-    if w0.shape[1] != 76:
-        raise ValueError(
-            f"Checkpoint input feature mismatch: expected 76, got {w0.shape[1]} in {ckpt_path}"
-        )
-
-    def eval_policy(inp: torch.Tensor) -> torch.Tensor:
-        h = torch.relu(torch.matmul(inp, w0.T) + b0)
-        return torch.tanh(torch.matmul(h, w2.T) + b2)
-
-    # 1. Centered Straightaway observation (76 features)
-    # Slot 64: turn_token = 0.0 (Straight)
-    # Slot 65: go_signal = 1.0
-    # Slot 67: forward speed = 0.50 m/s
-    # Slot 70: prev_drive = 0.50
-    neutral = torch.zeros(1, 76)
-    neutral[0, 65] = 1.0
-    neutral[0, 67] = 0.50
-    neutral[0, 70] = 0.50
-    act_neutral = eval_policy(neutral).squeeze().numpy()
-
-    # 2. Turn Token = -1.0 observation (Corner 2 / Left Turn Command)
-    turn = neutral.clone()
-    turn[0, 64] = -1.0
-    act_turn = eval_policy(turn).squeeze().numpy()
-
-    # 3. Corner Turn + Curvature observation (-1.0 token, kappa = -0.25)
-    corner = turn.clone()
-    corner[0, 74] = -0.25
-    act_corner = eval_policy(corner).squeeze().numpy()
-
-    mu_neutral_steer = float(act_neutral[0])
-    mu_neutral_throt = float(act_neutral[1])
-    mu_turn_steer = float(act_turn[0])
-    mu_turn_throt = float(act_turn[1])
-    delta_turn_steer = mu_turn_steer - mu_neutral_steer
-    mu_corner_steer = float(act_corner[0])
-    mu_corner_throt = float(act_corner[1])
-    sigma_steer = float(std[0])
-    sigma_throt = float(std[1])
-
-    metrics = {
-        "mu_neutral_steer": round(mu_neutral_steer, 4),
-        "mu_neutral_throt": round(mu_neutral_throt, 4),
-        "mu_turn_steer": round(mu_turn_steer, 4),
-        "mu_turn_throt": round(mu_turn_throt, 4),
-        "delta_turn_steer": round(delta_turn_steer, 4),
-        "mu_corner_steer": round(mu_corner_steer, 4),
-        "mu_corner_throt": round(mu_corner_throt, 4),
-        "sigma_steer": round(sigma_steer, 4),
-        "sigma_throt": round(sigma_throt, 4),
-    }
-
     tensors = {
         "w0": w0,
         "b0": b0,
         "w2": w2,
         "b2": b2,
-        "std": std,
+        "std": [metrics["sigma_steer"], metrics["sigma_throt"]],
     }
     return metrics, tensors
 
@@ -123,19 +78,7 @@ def run_bias_gate_check(
     min_turn_steer: float = 0.30,
     strict: bool = True,
 ) -> Tuple[bool, Dict[str, Any], str]:
-    """Execute gate check against required tolerances.
-
-    Args:
-        ckpt_path: Path to checkpoint.
-        max_steer_bias: Upper bound on absolute neutral steering (|bias| <= max_steer_bias).
-        min_turn_steer: Lower bound on turn steering authority (turn_steer >= min_turn_steer).
-        strict: If True, raise AssertionError on gate failure.
-
-    Returns:
-        passed: Boolean status.
-        metrics: Evaluated metrics dict.
-        report: Summary string.
-    """
+    """Execute gate check against required tolerances."""
     metrics, _ = evaluate_policy_cpu(ckpt_path)
 
     neutral_steer = metrics["mu_neutral_steer"]
@@ -157,7 +100,9 @@ def run_bias_gate_check(
         f"  [2] Turn Token -1.0 Steer      : {turn_steer:+.4f} rad (Limit: steer >= +{min_turn_steer:.4f}) -> {'PASS' if turn_pass else 'FAIL'}",
         f"  [3] Differential Delta Steer   : {delta_steer:+.4f} rad",
         f"  [4] Turn Pre-Braking Throttle  : {turn_throt:+.4f} (Active Braking: {turn_throt < -0.30})",
-        f"  [5] Exploration Noise (sigma)  : steer={sigma_steer:.4f}, throt={metrics['sigma_throt']:.4f}",
+        f"  [5] Corner Turn + Curvature    : {metrics['mu_corner_steer']:+.4f} rad (Throttle: {metrics['mu_corner_throt']:+.4f})",
+        f"  [6] Exploration Noise (sigma)  : steer={sigma_steer:.4f}, throt={metrics['sigma_throt']:.4f}",
+        f"  [7] Mirror Equivariance Error  : {metrics.get('mirror_equiv_err', 0.0):.6e}",
         "-" * 76,
         f"  OVERALL GATE RESULT: {'PASS (POLICY IS NEUTRAL & RESPONSIVE)' if passed else 'FAIL (BIAS EXCEEDS TOLERANCE)'}",
         "=" * 76,
@@ -184,24 +129,45 @@ def run_bias_gate_check(
     return passed, metrics, report
 
 
-# Pytest-compatible test function
-def test_straightaway_bias_gate():
-    """Deterministic regression test for CI/CD pipeline."""
-    ckpt = find_latest_checkpoint()
-    # Note: If running on known biased unmitigated checkpoint, capture metrics
-    passed, metrics, report = run_bias_gate_check(
-        ckpt, max_steer_bias=0.05, min_turn_steer=0.30, strict=False
+def test_straightaway_bias_gate(tmp_path):
+    """Deterministic CPU regression test for checkpoint_probe + debias_checkpoint."""
+    obs_space = gym.spaces.Box(low=-float("inf"), high=float("inf"), shape=(25100,))
+    act_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(2,))
+    actor = ARCProActor(obs_space, act_space, device="cpu", equivariant=False)
+
+    with torch.no_grad():
+        actor.policy_head[0].weight.zero_()
+        actor.policy_head[0].bias.zero_()
+        actor.policy_head[2].weight.zero_()
+        actor.policy_head[2].bias.zero_()
+        # Give unit 0 strong response to turn_token = -1.0 (col 64)
+        actor.policy_head[0].weight[0, 64] = -1.0
+        actor.policy_head[2].weight[0, 0] = 1.0
+        actor.policy_head[2].weight[1, 0] = -0.8
+        # Inject straightaway bias on b2[0] AND large weight on masked col 70 (prev_drive)
+        actor.policy_head[2].bias[0] = 0.35
+        actor.policy_head[0].weight[1, 70] = 50.0
+        actor.policy_head[2].weight[0, 1] = 50.0
+
+    biased_ckpt = str(tmp_path / "agent_biased.pt")
+    torch.save({"policy": actor.state_dict()}, biased_ckpt)
+
+    # 1. Verify biased checkpoint fails strict bias gate before debiasing
+    passed_before, metrics_before, _ = run_bias_gate_check(
+        biased_ckpt, max_steer_bias=0.05, min_turn_steer=0.30, strict=False
+    )
+    assert not passed_before
+    assert abs(metrics_before["mu_neutral_steer"]) > 0.05
+
+    # 2. Run debias_checkpoint and verify strict gate passes after debiasing
+    debiased_ckpt = debias_checkpoint(biased_ckpt)
+    passed_after, metrics_after, report = run_bias_gate_check(
+        debiased_ckpt, max_steer_bias=0.05, min_turn_steer=0.30, strict=True
     )
     print("\n" + report)
-    # Assert turn authority is always maintained
-    assert metrics["mu_turn_steer"] >= 0.30, (
-        f"Turn authority failed: {metrics['mu_turn_steer']} < 0.30"
-    )
-    # Document straightaway neutrality status
-    if not passed:
-        print(
-            f"\n[GATE NOTE] Checkpoint {os.path.basename(ckpt)} failed neutrality gate: bias={metrics['mu_neutral_steer']:+.4f} rad > 0.05 rad"
-        )
+    assert passed_after
+    assert abs(metrics_after["mu_neutral_steer"]) <= 1e-5
+    assert metrics_after["mu_turn_steer"] >= 0.30
 
 
 def main():
@@ -212,7 +178,7 @@ def main():
         "--checkpoint",
         type=str,
         default=None,
-        help="Path to checkpoint. Defaults to latest clean-baseline checkpoint.",
+        help="Path to checkpoint. Defaults to latest checkpoint.",
     )
     parser.add_argument(
         "--threshold-steer",

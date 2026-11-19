@@ -1,20 +1,18 @@
 {
   "sector_weights": [
-    0.25,
     0.2,
-    0.2,
+    0.35,
+    0.1,
     0.25,
     0.1
   ],
   "lookahead_distance": 1.2,
-  "speed_tracking_weight": 180.0,
-  "target_corner_speed": 0.35,
   "sectors": {
-    "1": "Start Line / West Runway (30% - full-speed straightaway centering)",
-    "2": "Corner 1 Runway Approach (20%)",
-    "3": "Leg 2 Post-C1 Exit & Runway (20% - straightaway centering)",
-    "4": "North Straight & Sweeping Bend (20%)",
-    "5": "Top North Straight & Corner 4 Approach (10%)"
+    "1": "West Runway South Start (-16.201, 5.500)",
+    "2": "Corner 1 Runway Approach (-16.204, -3.500)",
+    "3": "Leg 2 Clean Straightaway East (-12.500, -7.100)",
+    "4": "Leg 2 Intersection Approach (-7.000, -7.100)",
+    "5": "Top North Straightaway West & C4 Approach (-10.500, 7.100)"
   },
-  "updated_at": "2026-11-08T09:29:37.977679Z"
+  "updated_at": "2026-11-17T08:51:09.347195Z"
 }

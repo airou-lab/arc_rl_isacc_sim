@@ -22,6 +22,25 @@ parser.add_argument(
     "--resume", type=str, default="", help="Path to checkpoint to resume from."
 )
 parser.add_argument(
+    "--fresh",
+    action="store_true",
+    default=False,
+    help="Start fresh training (default when --resume is omitted; ignores any --resume path).",
+)
+parser.add_argument(
+    "--warm_start_policy",
+    type=str,
+    default="",
+    help="Optional checkpoint path to load ONLY policy weights while initializing Critic, value_preprocessor, and decoupled optimizers fresh.",
+)
+parser.add_argument(
+    "--vision_mode",
+    type=str,
+    default="rgb",
+    choices=["rgb", "yuv"],
+    help="Camera preprocessing mode passed to SKRLFlattenWrapper ('rgb' default or 'yuv' fallback).",
+)
+parser.add_argument(
     "--initial_step",
     type=int,
     default=None,
@@ -56,10 +75,18 @@ from agents.skrl_wrappers import SKRLFlattenWrapper, WarmupActionWrapper
 from agents.telemetry_ppo import TelemetryPPO
 from arcpro_env_cfg import ARCProEnvCfg
 from isaaclab.envs import ManagerBasedRLEnv
-from skrl.agents.torch.ppo import PPO_DEFAULT_CONFIG
 from skrl.envs.wrappers.torch import IsaacLabWrapper
 from skrl.memories.torch import RandomMemory
+from skrl.resources.preprocessors.torch import RunningStandardScaler
 from skrl.trainers.torch import SequentialTrainer
+
+try:
+    from skrl.agents.torch.ppo import PPO_DEFAULT_CONFIG
+except ImportError:
+    from dataclasses import asdict
+    from skrl.agents.torch.ppo import PPO_CFG
+
+    PPO_DEFAULT_CONFIG = asdict(PPO_CFG())
 
 
 def main():
@@ -80,7 +107,9 @@ def main():
     env = IsaacLabWrapper(env)
 
     # 3.5 Flatten for SKRL RandomMemory limitation
-    env = SKRLFlattenWrapper(env)
+    env = SKRLFlattenWrapper(
+        env, vision_mode=args_cli.vision_mode, augment=True, training=True
+    )
 
     # 4. Define Memory: 512 rollouts stored in Host System RAM (device="cpu")
     # Frees 100% of GPU replay buffer VRAM, allowing 20 parallel camera envs with zero OOM risk!
@@ -106,6 +135,12 @@ def main():
     cfg_ppo["random_timesteps"] = 0
     cfg_ppo["learning_starts"] = 0
     cfg_ppo["state_preprocessor"] = None
+    cfg_ppo["value_preprocessor"] = RunningStandardScaler
+    cfg_ppo["value_preprocessor_kwargs"] = {"size": 1, "device": "cuda:0"}
+    cfg_ppo["clip_predicted_values"] = True
+    cfg_ppo["value_clip"] = 0.2
+    cfg_ppo["value_loss_scale"] = 0.5
+    cfg_ppo["mirror_symmetry_weight"] = 0.5
     # Use native PPO KL early stopping and Entropy to prevent policy collapse
     cfg_ppo["kl_threshold"] = (
         0.016  # Relaxed from 0.008 — too tight was causing snap-back collapses
@@ -136,9 +171,10 @@ def main():
         50000  # Save every 50k timesteps (~2.4 hours)
     )
 
+    is_fresh = args_cli.fresh or not args_cli.resume
     # Auto-detect initial_step from resume checkpoint if not explicitly provided
     initial_step = args_cli.initial_step
-    if initial_step is None and args_cli.resume:
+    if initial_step is None and args_cli.resume and not is_fresh:
         match = re.search(r"agent_(\d+)", args_cli.resume)
         if match:
             initial_step = int(match.group(1))
@@ -161,29 +197,35 @@ def main():
         num_envs=args_cli.num_envs,
     )
 
-    if args_cli.resume:
+    if args_cli.warm_start_policy:
+        print(
+            f"[Train] Warm-starting ONLY policy weights from: {args_cli.warm_start_policy} "
+            "(Critic, value_preprocessor, and decoupled optimizers initialized fresh)"
+        )
+        ckpt = torch.load(
+            args_cli.warm_start_policy, map_location="cuda:0", weights_only=False
+        )
+        policy_sd = (
+            ckpt["policy"] if isinstance(ckpt, dict) and "policy" in ckpt else ckpt
+        )
+        missing, unexpected = agent.policy.load_state_dict(policy_sd, strict=False)
+        print(
+            f"[Train] Policy warm-start loaded (missing={len(missing)}, unexpected={len(unexpected)})."
+        )
+    elif not is_fresh and args_cli.resume:
         print(f"Resuming from checkpoint: {args_cli.resume}")
         agent.load(args_cli.resume)
         # Ensure configured learning rate overrides serialized optimizer state from old checkpoint
-        for param_group in agent.optimizer.param_groups:
-            param_group["lr"] = cfg_ppo["learning_rate"]
+        for opt_name in ("policy_optimizer", "value_optimizer", "optimizer"):
+            opt = getattr(agent, opt_name, None)
+            if opt is not None:
+                for param_group in opt.param_groups:
+                    param_group["lr"] = cfg_ppo["learning_rate"]
         print(
             f"[Train] Explicitly updated optimizer learning rate to: {cfg_ppo['learning_rate']}"
         )
-
-        # Exploration Noise Recovery:
-        # If steering log_std has collapsed (e.g. -3.98, sigma = 0.018 rad ~ 1 deg),
-        # re-initialize steering noise to -1.5 (sigma = 0.223 rad ~ 12.8 deg) so PPO can explore straightaway centering.
-        # Clear optimizer momentum state for this parameter to prevent stale Adam gradients from dragging it down.
-        if agent.policy.log_std_parameter.data[0] < -1.8:
-            old_std = torch.exp(agent.policy.log_std_parameter.data[0]).item()
-            agent.policy.log_std_parameter.data[0] = -1.5
-            p_log_std = agent.policy.log_std_parameter
-            if p_log_std in agent.optimizer.state:
-                agent.optimizer.state[p_log_std] = {}
-            print(
-                f"[Train] 🎯 Reset collapsed steering log_std from {old_std:.4f} to {torch.exp(agent.policy.log_std_parameter.data[0]).item():.4f} (log_std = -1.50) & reset Adam moments"
-            )
+    else:
+        print("[Train] Starting fresh training (policy, critic, value_preprocessor, and decoupled optimizers initialized fresh).")
 
     # 7. Train
     print(f"Starting SKRL AAC training for {args_cli.total_timesteps} steps...")

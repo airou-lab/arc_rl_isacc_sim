@@ -1,11 +1,11 @@
 # ClearSet Codebase Map & RAG Query Guide
 clearset_version: '1.0'
 database: '.cs/cs_codebase.db'
-last_updated: '2026-11-09T01:32:05.678537+00:00Z'
-git_commit: '31f6cb527369dd2baf60a3a38ad10cdcd53611bc'
+last_updated: '2026-11-18T20:46:19.815124+00:00Z'
+git_commit: '9c01e4563b3b98d38eed085f7990ddd7d8d9a688'
 stats:
-  total_indexed_files: 192
-  total_symbols: 808
+  total_indexed_files: 202
+  total_symbols: 948
 
 domain_tags:
   api:
@@ -15,7 +15,7 @@ domain_tags:
   config:
     category: 'config'
     matching_entities: 12
-    sample_targets: ["arcproLab/mdp/curriculum_config.py", "arcproLab/policy_stack/agent/agent_env_wrapper.py", "arcproLab/policy_stack/agent/config.py", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/envs/registry.py"]
+    sample_targets: ["arcproLab/policy_stack/agent/agent_env_wrapper.py", "arcproLab/policy_stack/agent/config.py", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/envs/registry.py", "arcproLab/policy_stack/envs/__init__.py"]
   database:
     category: 'layer'
     matching_entities: 4
@@ -26,7 +26,7 @@ domain_tags:
     sample_targets: ["arcproLab/arcpro_robot_cfg.py", "arcproLab/scripts/test_intersection_crossing.py", "arcproLab/scripts/list_robot_joints.py"]
   testing:
     category: 'layer'
-    matching_entities: 42
+    matching_entities: 50
     sample_targets: ["arcproLab/test_rewards.py", "arcproLab/policy_stack/pytest.ini", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/tests/test_intersection_worker.py", "arcproLab/policy_stack/tests/test_intersection_node_server.py"]
 
 query_templates:

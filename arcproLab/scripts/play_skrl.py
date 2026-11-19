@@ -23,7 +23,7 @@ parser.add_argument(
     type=int,
     default=None,
     choices=[1, 2, 3, 4, 5],
-    help="Force specific spawn sector (1=Start Line, 2=C1 Runway, 3=Leg 2 Exit, 4=Intersection, 5=North Straight)",
+    help="Force specific spawn sector (1=Start Line, 2=C1 Runway, 3=Leg 2 Mid-Straight, 4=Intersection, 5=North Straight)",
 )
 parser.add_argument(
     "--camera_mode",
@@ -38,7 +38,6 @@ parser.add_argument(
     default=0.0,
     help="Optional steering bias trim for legacy diagnostics (default: 0.0 for pure vision policy evaluation)",
 )
-
 parser.add_argument(
     "--max_steps",
     type=int,
@@ -56,8 +55,8 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import os
-import sys
+import os  # noqa: E402
+import sys  # noqa: E402
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
@@ -90,7 +89,6 @@ if args_cli.checkpoint is None or args_cli.checkpoint.strip().lower() in (
     else:
         print("[debug.sh] WARNING: No checkpoint found. Running with random weights.")
 elif not os.path.exists(args_cli.checkpoint):
-    # Support shortcuts like 'agent_50000.pt' or '50000'
     query = args_cli.checkpoint.strip()
     target = os.path.basename(query)
 
@@ -121,37 +119,42 @@ elif not os.path.exists(args_cli.checkpoint):
 
 print("Importing torch...")
 sys.stdout.flush()
-import torch
+import torch  # noqa: E402
 
 print("Importing IsaacLab...")
 sys.stdout.flush()
-from isaaclab.envs import ManagerBasedRLEnv
+from isaaclab.envs import ManagerBasedRLEnv  # noqa: E402
 
 print("Importing SKRL...")
 sys.stdout.flush()
-from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
+from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG  # noqa: E402
 
 print("Importing ARCPro modules...")
 sys.stdout.flush()
-import traceback
+import traceback  # noqa: E402
 
-from agents.skrl_wrappers import SKRLFlattenWrapper, WarmupActionWrapper
-from skrl.envs.wrappers.torch import IsaacLabWrapper
+from agents.skrl_wrappers import (  # noqa: E402
+    SKRLFlattenWrapper,
+    WarmupActionWrapper,
+)
+from mdp.track_topology import (  # noqa: E402, F401
+    SECTOR_DEFS,
+    SECTOR_DESCRIPTIONS,
+    in_any_corner,
+    in_bend_turn,
+    in_c1_turn,
+    in_c2_turn,
+    in_c4_turn,
+)
+from skrl.envs.wrappers.torch import IsaacLabWrapper  # noqa: E402
 
-from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic
-from arcproLab.arcpro_env_cfg import ARCProEnvCfg
+from arcproLab.agents.skrl_models import ARCProActor, ARCProCritic  # noqa: E402
+from arcproLab.arcpro_env_cfg import ARCProEnvCfg  # noqa: E402
 
 try:
     print("Configuring environment...")
     sys.stdout.flush()
     if args_cli.sector is not None:
-        sector_names = {
-            1: "Start Line",
-            2: "C1 Runway",
-            3: "Leg 2 Exit",
-            4: "Intersection",
-            5: "North Straight",
-        }
         sector_thresholds = {
             1: (1.0, 1.0, 1.0, 1.0),
             2: (0.0, 1.0, 1.0, 1.0),
@@ -160,7 +163,7 @@ try:
             5: (0.0, 0.0, 0.0, 0.0),
         }
         th = sector_thresholds[args_cli.sector]
-        sector_weights = [0.0, 0.0, 0.0, 0.0, 0.0]
+        sector_weights = [0.0] * len(SECTOR_DEFS)
         sector_weights[args_cli.sector - 1] = 1.0
         os.environ["ARCPRO_FORCE_SECTOR"] = str(args_cli.sector)
         try:
@@ -171,8 +174,9 @@ try:
             curr_cfg._CACHED_THRESHOLDS = list(th)
             curr_cfg.get_sector_thresholds = lambda: th
             mdp_events.get_sector_thresholds = lambda: th
+            sec_desc = SECTOR_DESCRIPTIONS.get(str(args_cli.sector), "Unknown")
             print(
-                f"[debug.sh] Forced deterministic spawn in Sector {args_cli.sector} ({sector_names.get(args_cli.sector, 'Unknown')})"
+                f"[debug.sh] Forced deterministic spawn in Sector {args_cli.sector} ({sec_desc})"
             )
         except Exception as e:
             print(f"[debug.sh] Failed to set sector override: {e}")
@@ -190,7 +194,7 @@ try:
     print("Wrapping environment...")
     sys.stdout.flush()
     env = IsaacLabWrapper(env)
-    env = SKRLFlattenWrapper(env)
+    env = SKRLFlattenWrapper(env, training=False, augment=False)
 
     if args_cli.debug:
         print(
@@ -231,19 +235,21 @@ try:
             print(
                 f"Note: Full agent.load encountered ({e}). Loading policy network weights directly for evaluation..."
             )
-            ckpt_data = torch.load(args_cli.checkpoint, map_location=agent.device)
+            ckpt_data = torch.load(
+                args_cli.checkpoint, map_location=agent.device, weights_only=False
+            )
             if isinstance(ckpt_data, dict):
                 if "policy" in ckpt_data:
-                    agent.policy.load_state_dict(ckpt_data["policy"])
+                    agent.policy.load_state_dict(ckpt_data["policy"], strict=False)
                     print("Policy network weights loaded successfully.")
                 if "value" in ckpt_data:
                     try:
-                        agent.value.load_state_dict(ckpt_data["value"])
+                        agent.value.load_state_dict(ckpt_data["value"], strict=False)
                         print("Value network weights loaded successfully.")
                     except Exception:
                         pass
             else:
-                agent.policy.load_state_dict(ckpt_data)
+                agent.policy.load_state_dict(ckpt_data, strict=False)
                 print("Raw policy weights loaded successfully.")
     elif args_cli.checkpoint is not None:
         print(f"ERROR: Checkpoint not found: {args_cli.checkpoint}")
@@ -272,7 +278,6 @@ try:
                     float(quat[2]),
                     float(quat[3]),
                 )
-                # Vehicle forward heading in XY world coordinates
                 fx = 1.0 - 2.0 * (y**2 + z**2)
                 fy = 2.0 * (x * y + w * z)
                 norm = (fx**2 + fy**2) ** 0.5
@@ -282,7 +287,6 @@ try:
                 else:
                     fx, fy = 1.0, 0.0
 
-                # 2.0m behind, 1.0m above, aiming 1.2m ahead through windshield
                 eye = [
                     float(pos[0]) - 2.0 * fx,
                     float(pos[1]) - 2.0 * fy,
@@ -312,33 +316,29 @@ try:
     step_count = 0
     total_steps = 0
     while simulation_app.is_running():
+        base_unwrapped = env.unwrapped
         with torch.no_grad():
             if args_cli.expert:
-                base_unwrapped = env.unwrapped
                 lat_err = float(
                     base_unwrapped.extras.get("lat_err", torch.tensor([0.0]))[0].item()
                 )
                 head_err = float(
                     base_unwrapped.extras.get("head_err", torch.tensor([0.0]))[0].item()
                 )
-                # Closed-loop Stanley expert controller (matches tests/test_manual_left_turn.py)
                 target_steer = -2.5 * lat_err - 1.2 * head_err
                 steer_val = float(
                     torch.clamp(torch.tensor(target_steer), min=-1.0, max=1.0).item()
                 )
-                drive_val = -0.40  # ~0.40 m/s cornering cruising speed
+                drive_val = -0.40
                 action = torch.tensor([[steer_val, drive_val]], device=env.device)
             else:
-                # Deterministic policy execution: Use mean action without stochastic exploration noise
                 _, _, outputs = agent.act(obs, timestep=0, timesteps=0)
                 action = outputs.get("mean_actions", None)
                 if action is None:
                     action = agent.policy.compute({"states": obs})[0]
 
-                # Full steering authority for cornering & lane following (matches training action space)
                 action = action.clone()
                 if args_cli.steer_bias_trim != 0.0:
-                    base_unwrapped = env.unwrapped
                     kappa_val = base_unwrapped.extras.get(
                         "kappa", torch.zeros(obs.shape[0], device=env.device)
                     )
@@ -348,9 +348,8 @@ try:
                     dist_y_val = base_unwrapped.extras.get(
                         "dist_y", torch.ones(obs.shape[0], device=env.device) * 0.20
                     )
-                    token_straight = torch.abs(obs[:, 25088]) < 0.1
+                    token_straight = torch.abs(obs[:, -12]) < 0.1
                     geom_straight = torch.abs(kappa_val) < 0.15
-                    # Never push car into the boundary: clamp trim if within 14cm of the boundary line
                     safe_boundary = (
                         dist_w_val > 0.14
                         if args_cli.steer_bias_trim < 0
@@ -361,13 +360,28 @@ try:
                     )
                     action[:, 0] += args_cli.steer_bias_trim * is_straight
 
+        # Capture pre-step clearance BEFORE env.step(action) resets & overwrites extras
+        pre_extras = getattr(base_unwrapped, "extras", {}) or {}
+        w_key = "dist_white" if "dist_white" in pre_extras else "dist_w"
+        y_key = "dist_yellow" if "dist_yellow" in pre_extras else "dist_y"
+        pre_dw_cm = (
+            float(pre_extras[w_key][0].item()) * 100.0 if w_key in pre_extras else 0.0
+        )
+        pre_dy_cm = (
+            float(pre_extras[y_key][0].item()) * 100.0 if y_key in pre_extras else 0.0
+        )
+        pre_lat_cm = (
+            float(pre_extras["lat_err"][0].item()) * 100.0
+            if "lat_err" in pre_extras
+            else 0.0
+        )
+
         obs, reward, terminated, truncated, info = env.step(action)
         step_count += 1
         total_steps += 1
         update_tracking_camera(env, mode=args_cli.camera_mode)
 
         steer = float(action[0, 0].item())
-        throttle = float(action[0, 1].item())
         speed = (
             float(info["speed_mps"].float().mean().item())
             if "speed_mps" in info
@@ -381,18 +395,24 @@ try:
         )
         done = bool((terminated | truncated)[0].item())
 
-        # Real-time clearance metrics to boundary spheres (in centimeters)
-        dist_w_cm = (
-            float(info["dist_white"][0].item()) * 100.0 if "dist_white" in info else 0.0
-        )
-        dist_y_cm = (
-            float(info["dist_yellow"][0].item()) * 100.0
-            if "dist_yellow" in info
-            else 0.0
-        )
-        lat_err_cm = (
-            float(info["lat_err"][0].item()) * 100.0 if "lat_err" in info else 0.0
-        )
+        if done and (pre_dw_cm > 0.0 or pre_dy_cm > 0.0):
+            dist_w_cm = pre_dw_cm
+            dist_y_cm = pre_dy_cm
+            lat_err_cm = pre_lat_cm
+        else:
+            dist_w_cm = (
+                float(info["dist_white"][0].item()) * 100.0
+                if "dist_white" in info
+                else 0.0
+            )
+            dist_y_cm = (
+                float(info["dist_yellow"][0].item()) * 100.0
+                if "dist_yellow" in info
+                else 0.0
+            )
+            lat_err_cm = (
+                float(info["lat_err"][0].item()) * 100.0 if "lat_err" in info else 0.0
+            )
 
         if step_count % 10 == 0 or done:
             status = " [BOUNDARY COLLISION / RESET]" if done else ""

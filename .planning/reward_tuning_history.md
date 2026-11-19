@@ -1013,3 +1013,13 @@ At the 500k milestone, the agent's episode lengths reached up to ~723, but the e
   - Regression test suite `tests/test_cornering_remediation.py`: 5/5 PASSED.
   - Closed-loop kinematic left turn test `tests/test_manual_left_turn.py`: 350/350 steps PASSED, exiting Corner 2 into North road at $X = -2.782, Y = -4.949$ (East of median $X = -3.07$) with 15.8cm white and 24.9cm yellow clearance.
   - 700-step evaluation trace: Confirmed that understeering into the oncoming lane immediately triggers fatal termination at Step 566 ($X < -2.56$, oncoming lane eliminated).
+
+
+### Issue 120 — Corner 1 Exit Crash (Turn Token Cliff + Curriculum Blind Spot)
+- **Problem:** The debiased checkpoint (agent_3700000_debiased.pt) survived 1,435 continuous steps (26% of circuit) but crashed at the Corner 1 EXIT (X ≈ -14.8, Y ≈ -7.1). Two root causes: (1) `in_c1_turn` in `road_manager.py` had an abrupt cliff at X = -15.15, instantly flipping `turn_token` from -1.0 to 0.0 while the car still carried centrifugal outward momentum from the hairpin at 0.38 m/s. (2) No curriculum sector trained the policy on C1 exit recovery — Sector 2 spawns before C1, Sector 3 spawned 2.7m after the crash point.
+- **Fix (3 coordinated changes):**
+  1. **road_manager.py line 110**: Extended `in_c1_turn` boundary from `X < -15.15` to `X < -14.50` (+0.65m eastward). Turn token now persists through the centrifugal exit zone.
+  2. **events.py lines 36/45/64**: Shifted Sector 3 spawn from `(-12.500, -7.100, 0.0)` to `(-15.200, -7.100, 0.0)`. Fleet now spawns directly at the C1 exit transition for targeted training.
+  3. **rewards.py line 367**: Extended `in_c1` pre-braking zone from `X <= -15.20` to `X <= -14.50` to match the new turn token boundary. Corner speed target (0.35 m/s) now persists through exit stabilization.
+- **Training resumed from**: `agent_3700000_debiased.pt` (debiased steering head, step 3,744,298)
+- **Result:** Pending evaluation after ~100k steps.

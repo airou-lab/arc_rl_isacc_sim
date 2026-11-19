@@ -10,7 +10,7 @@ import sys
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ARCPRO_LAB_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
@@ -35,13 +35,25 @@ def __getattr__(name: str) -> Any:
 class AutonomousSentinel:
     """Core sentinel coordinator running diagnostic checks and interventions."""
 
-    def __init__(self, logger: logging.Logger, dry_run: bool = False):
+    def __init__(
+        self,
+        logger: logging.Logger,
+        dry_run: bool = False,
+        log_dir: Optional[str] = None,
+        log_file: Optional[str] = None,
+    ):
         self.logger = logger
         self.dry_run = dry_run
+        self.log_dir = log_dir
+        self.log_file = log_file
+        if log_dir:
+            os.environ["ARCPRO_LOG_DIR"] = os.path.abspath(log_dir)
+        if log_file:
+            os.environ["ARCPRO_LOG_FILE"] = os.path.abspath(log_file)
         self.state = load_state()
 
     def _apply_curriculum_stage(self, updates: Dict[str, Any]) -> None:
-        """Apply curriculum weight/speed updates if not in dry-run mode."""
+        """Apply valid 5-sector curriculum weight/lookahead updates if not in dry-run mode."""
         if self.dry_run:
             return
         try:
@@ -66,10 +78,24 @@ class AutonomousSentinel:
         if wait_s > 0.0:
             time.sleep(wait_s)
 
+    def _resolve_restart_checkpoint(self, ckpt_path: str = "") -> str:
+        """Resolve and optionally debias checkpoint before restarting training."""
+        target = ckpt_path or su.get_current_run_checkpoint(log_dir=self.log_dir)
+        if not target or not os.path.isfile(target) or self.dry_run:
+            return target
+        probe = su.probe_checkpoint_bias(target)
+        if probe and abs(float(probe.get("mu_neutral_steer", 0.0))) > 0.05:
+            debiased_ckpt_path = su.debias_checkpoint_file(target)
+            self.logger.info(
+                f"Applied zero-mean straightaway debiasing: {debiased_ckpt_path}"
+            )
+            return debiased_ckpt_path
+        return target
+
     def run_health_check(self) -> Tuple[bool, List[str], Dict[str, Any]]:
         """Evaluate all 5 diagnostic sentinels against latest telemetry."""
-        proc = su.check_process_status()
-        batches = su.parse_recent_metrics(max_lines=300)
+        proc = su.check_process_status(log_file=self.log_file)
+        batches = su.parse_recent_metrics(max_lines=300, log_file=self.log_file)
         sents: Dict[str, Any] = {}
         n_b = len(batches)
         diagnostics = {
@@ -110,6 +136,7 @@ class AutonomousSentinel:
         max_len = max(b.len_max for b in win)
         rew = sum(b.rew for b in win) / len(win)
         max_rew = max(b.rew_max for b in win)
+        wps_climbing = len(win) >= 2 and (win[-1].wps_cum > win[0].wps_cum)
 
         diagnostics["metrics"] = dict(
             latest_step=last.step,
@@ -151,7 +178,8 @@ class AutonomousSentinel:
             prev_max = self.state.get("step_window_max_len", 0)
             self.state["step_window_max_len"] = max(prev_max, max_len)
             if (last.step - start_step) >= 50000:
-                if self.state["step_window_max_len"] <= 300:
+                window_max = self.state["step_window_max_len"]
+                if window_max <= 300 and not (window_max == 0 and wps_climbing):
                     s2 = True
                 else:
                     self.state["apex_cliff_trigger_count"] = 0
@@ -190,7 +218,7 @@ class AutonomousSentinel:
         if math.isnan(rew) or math.isnan(avg_len):
             s4 = True
             failures.append("POLICY_COLLAPSE: Numerical NaN detected in telemetry")
-        elif n_b >= 20 and rew < -500.0 and avg_len < 120.0:
+        elif last.step >= 100000 and n_b >= 20 and rew < -500.0 and avg_len < 120.0:
             self.state["collapse_consecutive_count"] += 1
             if self.state["collapse_consecutive_count"] >= 10:
                 s4 = True
@@ -229,14 +257,17 @@ class AutonomousSentinel:
                 "Killed hanging processes and restarted via start_tmux_training.sh"
             )
             if not self.dry_run:
-                subprocess.run("pkill -9 -f 'isaac-sim|train_skrl.py'", shell=True)
+                subprocess.run("pkill -9 -f '[i]saac-sim|[t]rain_skrl.py'", shell=True)
                 time.sleep(5)
             restart_cmd = ["bash", START_SCRIPT]
         elif "CRAWLING" in f_up:
-            summary = "Elevated speed_tracking_weight=90.0 and target_corner_speed=0.40"
+            w = [0.30, 0.20, 0.20, 0.20, 0.10]
+            summary = (
+                "Rebalanced sector_weights=[0.30, 0.20, 0.20, 0.20, 0.10] and lookahead_distance=1.2"
+            )
             touched.append(su.CURRICULUM_CFG_PATH)
             self._apply_curriculum_stage(
-                {"speed_tracking_weight": 90.0, "target_corner_speed": 0.40}
+                {"sector_weights": w, "lookahead_distance": 1.2}
             )
             restart_cmd = ["bash", START_SCRIPT]
         elif "CORNER1" in f_up or "APEX_CLIFF" in f_up or "CLIFF" in f_up:
@@ -246,19 +277,32 @@ class AutonomousSentinel:
                 summary = "Curriculum boost (Attempt 1): Sector 2 weight set to 70%"
                 touched.append(su.CURRICULUM_CFG_PATH)
                 w = [0.10, 0.70, 0.05, 0.10, 0.05]
-                self._apply_curriculum_stage(
-                    {"sector_weights": w, "target_corner_speed": 0.35}
-                )
+                self._apply_curriculum_stage({"sector_weights": w})
             else:
                 summary = f"Persistent Apex Cliff (Attempt {trigs}): Warm-restarting"
                 self.state["apex_cliff_trigger_count"] = 0
-                restart_cmd = ["bash", START_SCRIPT]
+                debiased_ckpt_path = self._resolve_restart_checkpoint()
+                restart_cmd = (
+                    ["bash", START_SCRIPT, "--resume", debiased_ckpt_path]
+                    if debiased_ckpt_path
+                    else ["bash", START_SCRIPT]
+                )
         elif "WALL_HUGGING" in f_up or "HUGGING" in f_up:
             summary = "Wall-hugging detected: Warm-restarting training cleanly"
-            restart_cmd = ["bash", START_SCRIPT]
+            debiased_ckpt_path = self._resolve_restart_checkpoint()
+            restart_cmd = (
+                ["bash", START_SCRIPT, "--resume", debiased_ckpt_path]
+                if debiased_ckpt_path
+                else ["bash", START_SCRIPT]
+            )
         elif "COLLAPSE" in f_up or "DIVERGENCE" in f_up:
             summary = "Policy Collapse detected: Warm-restarting training cleanly"
-            restart_cmd = ["bash", START_SCRIPT]
+            debiased_ckpt_path = self._resolve_restart_checkpoint()
+            restart_cmd = (
+                ["bash", START_SCRIPT, "--resume", debiased_ckpt_path]
+                if debiased_ckpt_path
+                else ["bash", START_SCRIPT]
+            )
 
         su.write_diagnosis_file(failure_type, summary, diagnostics, self.dry_run)
 
@@ -279,19 +323,26 @@ class AutonomousSentinel:
         return True
 
     def audit_checkpoint(
-        self, ckpt_path: str, auto_heal: bool = True, steps: int = 150
+        self,
+        ckpt_path: str,
+        auto_heal: bool = True,
+        steps: int = 150,
+        debias: bool = True,
     ) -> Tuple[bool, Dict[str, Any]]:
         """Run headless regression audit across 5 sectors for a checkpoint."""
         if not os.path.isfile(ckpt_path):
             self.logger.error(f"Checkpoint not found for audit: {ckpt_path}")
             return False, {}
 
-        ckpt_key = su.format_checkpoint_key(ckpt_path)
+        debiased_ckpt_path = (
+            su.debias_checkpoint_file(ckpt_path) if debias else ckpt_path
+        )
+        ckpt_key = su.format_checkpoint_key(debiased_ckpt_path)
         self.logger.info(f"🎯 Initiating Checkpoint Regression Audit for: {ckpt_key}")
         self.state["is_auditing"] = True
         save_state(self.state)
 
-        proc = su.check_process_status()
+        proc = su.check_process_status(log_file=self.log_file)
         if proc.python_active or proc.tmux_active:
             self.logger.info("Stopping active training session to free GPU VRAM...")
             try:
@@ -301,7 +352,7 @@ class AutonomousSentinel:
             except Exception:
                 pass
             subprocess.run(
-                "pkill -9 -f 'train_skrl.py'", shell=True, capture_output=True
+                "pkill -9 -f '[t]rain_skrl.py'", shell=True, capture_output=True
             )
             time.sleep(5)
 
@@ -310,7 +361,15 @@ class AutonomousSentinel:
 
         auditor = f"{WORKSPACE_ROOT}/arcproLab/scripts/checkpoint_auditor.py"
         sh_path = "/home/arika/IsaacLab/isaaclab.sh"
-        cmd = [sh_path, "-p", auditor, "--checkpoint", ckpt_path, "--steps", str(steps)]
+        cmd = [
+            sh_path,
+            "-p",
+            auditor,
+            "--checkpoint",
+            debiased_ckpt_path,
+            "--steps",
+            str(steps),
+        ]
         if auto_heal:
             cmd.append("--auto_heal")
 
@@ -343,12 +402,17 @@ class AutonomousSentinel:
         self.state["is_auditing"] = False
         save_state(self.state)
 
-        self._spawn_detached_training(["bash", START_SCRIPT, ckpt_path], wait_s=25.0)
-        return passed, {"output": audit_output}
+        self._spawn_detached_training(
+            ["bash", START_SCRIPT, "--resume", debiased_ckpt_path], wait_s=25.0
+        )
+        return passed, {
+            "output": audit_output,
+            "debiased_ckpt_path": debiased_ckpt_path,
+        }
 
     def check_and_audit_new_checkpoints(self) -> bool:
         """Check for new unaudited agent_*.pt checkpoints on active git branch."""
-        log_subdir = su.get_active_log_subdir()
+        log_subdir = su.get_active_log_subdir(log_dir=self.log_dir)
         if not os.path.isdir(log_subdir):
             return False
 
@@ -425,6 +489,8 @@ def main() -> None:
     p.add_argument("--status", action="store_true", help="Print sentinel status")
     p.add_argument("--dry-run", action="store_true", help="Evaluate without acting")
     p.add_argument("--interval", type=float, default=15.0, help="Daemon poll seconds")
+    p.add_argument("--log-dir", type=str, default=None, help="Explicit SKRL log subdir")
+    p.add_argument("--log-file", type=str, default=None, help="Explicit log file path")
     t_opts = (
         "crawling",
         "apex_cliff",
@@ -444,10 +510,15 @@ def main() -> None:
     args = p.parse_args()
 
     logger = su.setup_logger(verbose=args.verbose)
-    sentinel = AutonomousSentinel(logger=logger, dry_run=args.dry_run)
+    sentinel = AutonomousSentinel(
+        logger=logger,
+        dry_run=args.dry_run,
+        log_dir=args.log_dir,
+        log_file=args.log_file,
+    )
 
     if args.probe or args.probe_latest:
-        target = args.probe or su.get_current_run_checkpoint()
+        target = args.probe or su.get_current_run_checkpoint(log_dir=args.log_dir)
         if not target:
             logger.error("No checkpoint found to probe.")
             sys.exit(1)
@@ -456,7 +527,7 @@ def main() -> None:
         )
         sys.exit(0 if res else 1)
     if args.audit or args.audit_latest:
-        target = args.audit or su.get_current_run_checkpoint()
+        target = args.audit or su.get_current_run_checkpoint(log_dir=args.log_dir)
         if not target:
             logger.error("No checkpoint found to audit.")
             sys.exit(1)

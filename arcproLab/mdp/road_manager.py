@@ -5,6 +5,23 @@
 
 import torch
 
+try:
+    from mdp.track_topology import (
+        in_any_corner,
+        in_bend_turn,
+        in_c1_turn,
+        in_c2_turn,
+        in_c4_turn,
+    )
+except ImportError:
+    from arcproLab.mdp.track_topology import (
+        in_any_corner,
+        in_bend_turn,
+        in_c1_turn,
+        in_c2_turn,
+        in_c4_turn,
+    )
+
 
 class RoadManager:
     """
@@ -93,44 +110,20 @@ class RoadManager:
         )
 
     def update(self, env):
-        """Updates internal state based on environment triggers and vehicle proximity to gates."""
+        """Updates internal state based on canonical track_topology corner zones."""
         if not self.initialized:
             self._initialize_gates()
 
-        # Proximity-based dynamic gate intent routing:
-        # Default to 0.0 (Straight / Lane Follow) on straightaways and non-gate zones
+        # Default to 0.0 (Straight / Lane Follow) on straightaways and non-corner zones
         try:
             robot = env.scene["robot"]
             env_origins = env.scene.env_origins
             local_pos = robot.data.root_pos_w[:, :2] - env_origins[:, :2]
 
             tokens = torch.zeros((self.num_envs, self.num_agents), device=self.device)
-
-            # Circuit Turn Token Routing (Counter-Clockwise Circuit, all turns are LEFT):
-            # 1. Corner 1 Turn (Leg 1 South -> Leg 2 East): curve begins at Y < -6.10, completes at X >= -15.00
-            in_c1_turn = (local_pos[:, 0:1] < -15.00) & (local_pos[:, 1:2] < -6.10)
-            # 2. Corner 2 / Intersection Turn (Leg 2 East -> North Straight):
-            # Curve begins at X > -5.65 (end of double-yellow chute), completes when vehicle enters North straight at Y > -2.20
-            in_c2_turn = (
-                (local_pos[:, 0:1] > -5.65)
-                & (local_pos[:, 0:1] < -1.80)
-                & (local_pos[:, 1:2] >= -7.5)
-                & (local_pos[:, 1:2] <= -2.20)
-            )
-            # 3. Sweeping Road Bend Approach (North Straight -> Top Straight West):
-            # Curve begins at Y >= 2.40, completes at X <= -6.85
-            in_bend_turn = (
-                (local_pos[:, 1:2] >= 2.40)
-                & (local_pos[:, 1:2] <= 7.20)
-                & (local_pos[:, 0:1] > -6.85)
-                & (local_pos[:, 0:1] < -2.0)
-            )
-            # 4. Corner 4 Turn (Top Straight West -> Leg 1 South): curve begins at X < -14.90 (WP 4750), completes at Y <= 5.50 (WP 4999)
-            in_c4_turn = (local_pos[:, 0:1] < -14.90) & (local_pos[:, 1:2] > 5.50)
-
-            is_turning = in_c1_turn | in_c2_turn | in_bend_turn | in_c4_turn
+            is_turning = in_any_corner(local_pos[:, 0:1], local_pos[:, 1:2])
             tokens = torch.where(
-                is_turning, torch.tensor(-1.0, device=self.device), tokens
+                is_turning, torch.full_like(tokens, -1.0), tokens
             )
 
             self.turn_tokens = tokens
@@ -139,7 +132,6 @@ class RoadManager:
                 (self.num_envs, self.num_agents), device=self.device
             )
 
-        # Future: FIFO Queue logic for intersections (Milestone 4)
         self.go_signals[:] = 1.0
 
     def get_nav_commands(self):
@@ -152,6 +144,18 @@ _ROAD_MANAGER = None
 
 def get_road_manager(num_envs: int = 1, num_agents: int = 1, device: str = "cuda:0"):
     global _ROAD_MANAGER
-    if _ROAD_MANAGER is None:
+    if (
+        _ROAD_MANAGER is None
+        or _ROAD_MANAGER.num_envs != num_envs
+        or _ROAD_MANAGER.num_agents != num_agents
+        or str(_ROAD_MANAGER.device) != str(device)
+    ):
         _ROAD_MANAGER = RoadManager(num_envs, num_agents, device=device)
     return _ROAD_MANAGER
+
+
+import sys as _sys  # noqa: E402
+
+_sys.modules.setdefault("mdp.road_manager", _sys.modules[__name__])
+_sys.modules.setdefault("arcproLab.mdp.road_manager", _sys.modules[__name__])
+

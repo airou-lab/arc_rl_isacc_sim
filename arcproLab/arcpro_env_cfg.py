@@ -14,32 +14,78 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 ARCPRO_LAB_DIR = os.path.dirname(os.path.abspath(__file__))
 USD_DIR = os.path.join(ARCPRO_LAB_DIR, "..", "openStreetUSD")
 
-import isaaclab.sim as sim_utils
+try:
+    import isaaclab.sim as sim_utils
+    from arcpro_robot_cfg import ARCPRO_ROBOT_CFG
+    from isaaclab.assets import AssetBaseCfg
+    from isaaclab.envs import ManagerBasedRLEnvCfg, ViewerCfg
+    from isaaclab.managers import (
+        EventTermCfg,
+        ObservationGroupCfg,
+        SceneEntityCfg,
+    )
+    from isaaclab.managers import (
+        ObservationTermCfg as ObsTerm,
+    )
+    from isaaclab.managers import (
+        RewardTermCfg as RewTerm,
+    )
+    from isaaclab.managers import (
+        TerminationTermCfg as DoneTerm,
+    )
+    from isaaclab.scene import InteractiveSceneCfg
+    from isaaclab.sensors import ContactSensorCfg, TiledCameraCfg
+    from isaaclab.sim import SimulationCfg
+    from isaaclab.utils import configclass
+except ModuleNotFoundError:
+
+    class _StubCfg:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+
+        def replace(self, **kwargs):
+            new = _StubCfg(*getattr(self, "args", ()))
+            new.__dict__.update(self.__dict__)
+            new.__dict__.update(kwargs)
+            return new
+
+    _StubCfg.InitialStateCfg = _StubCfg
+    _StubCfg.OffsetCfg = _StubCfg
+
+    class _SimUtilsStub:
+        DistantLightCfg = _StubCfg
+        DomeLightCfg = _StubCfg
+        GroundPlaneCfg = _StubCfg
+        UsdFileCfg = _StubCfg
+        PinholeCameraCfg = _StubCfg
+        PhysxCfg = _StubCfg
+
+    sim_utils = _SimUtilsStub()
+    AssetBaseCfg = _StubCfg
+    ManagerBasedRLEnvCfg = _StubCfg
+    ViewerCfg = _StubCfg
+    EventTermCfg = _StubCfg
+    ObservationGroupCfg = _StubCfg
+    SceneEntityCfg = _StubCfg
+    ObsTerm = _StubCfg
+    RewTerm = _StubCfg
+    DoneTerm = _StubCfg
+    InteractiveSceneCfg = _StubCfg
+    ContactSensorCfg = _StubCfg
+    TiledCameraCfg = _StubCfg
+    SimulationCfg = _StubCfg
+    ARCPRO_ROBOT_CFG = _StubCfg(spawn=_StubCfg(), init_state=_StubCfg())
+
+    def configclass(cls):
+        return cls
+
+
 import mdp.events as mdp_events
 import mdp.observations as mdp_obs
 import mdp.rewards as mdp_rew
 import mdp.terminations as mdp_done
-from arcpro_robot_cfg import ARCPRO_ROBOT_CFG
-from isaaclab.assets import AssetBaseCfg
-from isaaclab.envs import ManagerBasedRLEnvCfg, ViewerCfg
-from isaaclab.managers import (
-    EventTermCfg,
-    ObservationGroupCfg,
-    SceneEntityCfg,
-)
-from isaaclab.managers import (
-    ObservationTermCfg as ObsTerm,
-)
-from isaaclab.managers import (
-    RewardTermCfg as RewTerm,
-)
-from isaaclab.managers import (
-    TerminationTermCfg as DoneTerm,
-)
-from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import ContactSensorCfg, TiledCameraCfg
-from isaaclab.sim import SimulationCfg
-from isaaclab.utils import configclass
 
 
 @configclass
@@ -62,11 +108,15 @@ class ARCProSceneCfg(InteractiveSceneCfg):
         prim_path="/World/light",
         spawn=sim_utils.DistantLightCfg(intensity=1500.0, color=(1.0, 1.0, 1.0)),
     )
+    dome_light = AssetBaseCfg(
+        prim_path="/World/domeLight",
+        spawn=sim_utils.DomeLightCfg(intensity=600.0, color=(0.98, 0.96, 0.94)),
+    )
 
     # Ground Plane (Visual + Safety Backup)
     ground_plane = AssetBaseCfg(
         prim_path="/World/defaultGroundPlane",
-        spawn=sim_utils.GroundPlaneCfg(size=(200.0, 200.0)),
+        spawn=sim_utils.GroundPlaneCfg(size=(800.0, 800.0)),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -0.50)),
     )
 
@@ -201,8 +251,8 @@ class RewardCfg:
     # Pure Vision Lane Centering: Rewards staying equidistant between white and double-yellow lines
     lane_centering = RewTerm(func=mdp_rew.lane_centering_reward, weight=120.0)
 
-    # Precision: Waypoint lateral error reward
-    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=15.0)
+    # Precision: Waypoint lateral error reward (weight=225.0 pairs with unscaled exp(-10*abs(lat_err)) in rewards.py)
+    lateral_error = RewTerm(func=mdp_rew.lateral_error_reward, weight=225.0)
 
     # Force movement: Stagnation penalty
     stationary = RewTerm(func=mdp_rew.stationary_penalty, weight=80.0)
@@ -252,7 +302,7 @@ class ARCProEnvCfg(ManagerBasedRLEnvCfg):
     viewer: ViewerCfg = ViewerCfg(eye=(-15.0, 6.25, 1.25), lookat=(-16.25, 4.92, 0.0))
 
     enable_cameras: bool = True
-    scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=32, env_spacing=30.0)
+    scene: ARCProSceneCfg = ARCProSceneCfg(num_envs=32, env_spacing=60.0)
     observations: ObservationCfg = ObservationCfg()
     actions: ActionCfg = ActionCfg()
     rewards: RewardCfg = RewardCfg()

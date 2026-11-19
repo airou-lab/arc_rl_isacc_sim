@@ -2,12 +2,12 @@ import argparse
 
 from isaaclab.app import AppLauncher
 
-parser = argparse.ArgumentParser(description="Play SKRL ARCPro Policy")
+parser = argparse.ArgumentParser(description="Play SKRL ARCPro Steering Physics Test")
 parser.add_argument(
     "--checkpoint",
     type=str,
-    default="logs/ppo_skrl/20260701-192503/26-07-01_19-25-03-529362_PPO/checkpoints/best_agent.pt",
-    help="Path to SKRL checkpoint .pt file",
+    default=None,
+    help="Optional path to SKRL checkpoint .pt file",
 )
 parser.add_argument(
     "--num_envs", type=int, default=1, help="Number of parallel environments"
@@ -17,30 +17,33 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import os
-import sys
+import os  # noqa: E402
+import sys  # noqa: E402
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
-if ROOT_DIR not in sys.path:
-    sys.path.insert(0, ROOT_DIR)
+ARCPRO_LAB_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+for _p in (ROOT_DIR, ARCPRO_LAB_DIR):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 print("Importing torch...")
 sys.stdout.flush()
-import torch
+import torch  # noqa: E402
 
 print("Importing IsaacLab...")
 sys.stdout.flush()
-from isaaclab.envs import ManagerBasedRLEnv
+from isaaclab.envs import ManagerBasedRLEnv  # noqa: E402
 
 print("Importing ARCPro modules...")
 sys.stdout.flush()
-import traceback
+import traceback  # noqa: E402
 
-from skrl.envs.wrappers.torch import IsaacLabWrapper
+from mdp.track_topology import SECTOR_DEFS, TELEMETRY_DIM  # noqa: E402, F401
+from skrl.envs.wrappers.torch import IsaacLabWrapper  # noqa: E402
 
-from arcproLab.agents.skrl_wrappers import SKRLFlattenWrapper
-from arcproLab.arcpro_env_cfg import ARCProEnvCfg
+from arcproLab.agents.skrl_wrappers import SKRLFlattenWrapper  # noqa: E402
+from arcproLab.arcpro_env_cfg import ARCProEnvCfg  # noqa: E402
 
 try:
     print("Configuring environment...")
@@ -78,20 +81,27 @@ try:
 
     while simulation_app.is_running() and step_count < MAX_STEPS:
         # Action space is 2-dimensional: [steer, drive]
+        # Drive action -1.0 maps to 0.0 rad/s (stopped) during the 10-step settling warmup
         action = torch.zeros((args_cli.num_envs, 2), device=env.device)
+        action[:, 0] = 0.0
+        action[:, 1] = -1.0
 
-        # Wait 10 steps for the car to drop to the ground before driving
+        # Wait 10 steps for the car to settle on the ground before driving
         if step_count > 10:
-            action[:, 0] = 0.5  # Steer (0.5 = half right/left turn)
-            action[:, 1] = 0.5  # Drive (half speed forward)
+            action[:, 0] = 0.5  # Steer (0.5 = half left turn)
+            action[:, 1] = 0.5  # Drive (three-quarter speed forward)
 
         obs, reward, terminated, truncated, info = env.step(action)
         step_count += 1
 
-        # Speed is index 3 in the telemetry obs vector (fwd velocity m/s)
-        speed = (
-            float(obs[0, 3].item()) if obs.shape[-1] > 3 else float(obs[0, 0].item())
-        )
+        # Read speed from info["speed_mps"] or slot 3 of the 12-D telemetry tail (obs[:, -9])
+        if isinstance(info, dict) and "speed_mps" in info:
+            speed = float(info["speed_mps"].float().mean().item())
+        elif obs.shape[-1] >= TELEMETRY_DIM:
+            speed = float(obs[0, -TELEMETRY_DIM + 3].item())
+        else:
+            speed = float(obs[0, 0].item())
+
         rew_val = float(reward[0].item())
         done = bool((terminated | truncated)[0].item())
         max_speed = max(max_speed, abs(speed))
@@ -116,9 +126,9 @@ try:
     sys.stdout.flush()
     env.close()
 
-except Exception as e:
+except Exception:
     print("=" * 50)
-    print("ERROR CAUGHT IN PLAY_SKRL.PY:")
+    print("ERROR CAUGHT IN PLAY_STEER.PY:")
     traceback.print_exc()
     print("=" * 50)
     sys.stdout.flush()

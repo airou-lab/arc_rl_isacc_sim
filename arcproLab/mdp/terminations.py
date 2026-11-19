@@ -3,9 +3,63 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import math
 import torch
-from isaaclab.envs import ManagerBasedRLEnv
-from isaaclab.managers import SceneEntityCfg
+
+try:
+    from isaaclab.envs import ManagerBasedRLEnv
+    from isaaclab.managers import SceneEntityCfg
+except ImportError:
+    ManagerBasedRLEnv = object  # type: ignore[misc,assignment]
+
+    class SceneEntityCfg:  # type: ignore[no-redef]
+        def __init__(self, name: str = "robot"):
+            self.name = name
+
+try:
+    from mdp.track_topology import (
+        BOUNDARY_CONTACT_WHITE_CORNER,
+        BOUNDARY_CONTACT_WHITE_STRAIGHT,
+        BOUNDARY_CONTACT_YELLOW_CORNER,
+        BOUNDARY_CONTACT_YELLOW_STRAIGHT,
+        BOUNDARY_CORNER_KAPPA_THRESH,
+        MAX_LAT_ERR_DEFAULT,
+        MAX_LAT_ERR_INTERSECTION,
+        OFF_ROAD_SHOULDER_DIST_Y,
+        OFF_ROAD_SHOULDER_LAT_ERR,
+        compute_step_road_state,
+        in_any_corner,
+        in_bend_turn,
+        in_c1_turn,
+        in_c2_turn,
+        in_c4_turn,
+        in_intersection_expert_zone,
+        in_off_cliff_east,
+        in_stop_bar,
+        in_wrong_lane_intersection,
+    )
+except ImportError:
+    from arcproLab.mdp.track_topology import (
+        BOUNDARY_CONTACT_WHITE_CORNER,
+        BOUNDARY_CONTACT_WHITE_STRAIGHT,
+        BOUNDARY_CONTACT_YELLOW_CORNER,
+        BOUNDARY_CONTACT_YELLOW_STRAIGHT,
+        BOUNDARY_CORNER_KAPPA_THRESH,
+        MAX_LAT_ERR_DEFAULT,
+        MAX_LAT_ERR_INTERSECTION,
+        OFF_ROAD_SHOULDER_DIST_Y,
+        OFF_ROAD_SHOULDER_LAT_ERR,
+        compute_step_road_state,
+        in_any_corner,
+        in_bend_turn,
+        in_c1_turn,
+        in_c2_turn,
+        in_c4_turn,
+        in_intersection_expert_zone,
+        in_off_cliff_east,
+        in_stop_bar,
+        in_wrong_lane_intersection,
+    )
 
 
 def white_line_contact(
@@ -14,166 +68,99 @@ def white_line_contact(
     threshold: float = 0.05,
 ) -> torch.Tensor:
     """
-    Terminates if the robot hits a white or yellow line boundary.
-    Configured to 0.05m (5cm) to allow tight inner-curb apex clipping (8.3cm clearance)
-    while still immediately resetting if the vehicle departs the drivable road surface.
+    Terminates if the robot hits a white or yellow line boundary, drives into the
+    oncoming lane, or departs the drivable road envelope.
+    Uses the canonical per-step road state cache (`compute_step_road_state`) so
+    all spatial telemetry (including `go_signal`) is fresh before RewardManager runs.
     """
-    from mdp.track_manager import get_track_manager
+    state = compute_step_road_state(env, asset_name=asset_cfg.name)
 
-    tm = get_track_manager(device=env.device)
+    x = state["x"]
+    y = state["y"]
+    lat_err = state["lat_err"]
+    head_err = state["head_err"]
+    kappa = state["kappa"]
+    dist_y = state["dist_y"]
+    dist_w = state["dist_w"]
+    dist_g = state["dist_g"]
+    lookahead_kappa = state["lookahead_kappa"]
+    turn_token = state["turn_token"]
+    go_signal = state["go_signal"]
 
-    asset = env.scene[asset_cfg.name]
-    env_origins = env.scene.env_origins
-    local_pos = asset.data.root_pos_w - env_origins
-
-    # FIX: 1-Step Delay. Compute lat_err and head_err here (during terminations)
-    # so that the Reward Manager has the current step's data, not the previous step's!
-    q = asset.data.root_quat_w
-    yaw = torch.atan2(
-        2.0 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]),
-        1.0 - 2.0 * (q[:, 2] ** 2 + q[:, 3] ** 2),
-    )
-    yaw = yaw + 3.14159265
-    yaw = torch.atan2(torch.sin(yaw), torch.cos(yaw))
-
-    lat_err, raw_head_err, kappa = tm.compute_errors(local_pos, yaw)
-    if "track_dir" not in env.extras:
-        env.extras["track_dir"] = torch.where(
-            torch.abs(raw_head_err) > 1.5708, -1.0, 1.0
-        ).to(env.device)
-    is_reverse = env.extras["track_dir"] < 0
-    head_err = torch.where(
-        is_reverse, raw_head_err - 3.14159 * torch.sign(raw_head_err), raw_head_err
-    )
-    lat_err = torch.where(is_reverse, -lat_err, lat_err)
-
+    # Ensure all precomputed signals are published in env.extras
     env.extras["lat_err"] = lat_err
     env.extras["head_err"] = head_err
     env.extras["kappa"] = kappa
-
-    # Get boundary data
-    dist_y, dist_w, dist_g = tm.compute_marker_distances(local_pos)
     env.extras["dist_y"] = dist_y
     env.extras["dist_w"] = dist_w
     env.extras["dist_g"] = dist_g
+    env.extras["lookahead_kappa"] = lookahead_kappa
+    env.extras["turn_token"] = turn_token
+    env.extras["go_signal"] = go_signal
 
-    # Pre-compute lookahead curvature so RewardManager has fresh step data
-    from mdp.curriculum_config import get_lookahead_distance
-
-    env.extras["lookahead_kappa"] = tm.get_lookahead_curvature(
-        lookahead_distance=get_lookahead_distance(),
-        track_dir=env.extras.get("track_dir"),
-    ).to(device=env.device, dtype=torch.float32)
-
-    try:
-        from mdp.road_manager import get_road_manager
-
-        rm = get_road_manager(num_envs=env.num_envs, num_agents=1, device=env.device)
-        rm.update(env)
-        turn_tokens, _ = rm.get_nav_commands()
-        env.extras["turn_token"] = turn_tokens.squeeze(1)
-    except Exception:
-        pass
-
-    # 1. Boundary hit (Curvature-Adaptive Thresholds for 1.0x scale):
-    # Accommodates Ackermann dynamic off-tracking (rear axle swept path expands by ~4.7cm in sharp turns):
-    # Straights (|kappa| <= 0.20): enforce healthy lane adherence (0.018m outer white, 0.02m inner yellow),
-    # providing ~2.9cm safe operating margin on 43.8cm lane with 32cm chassis without false premature kills.
+    # 1. Curvature-Adaptive Physical Contact Thresholds:
     effective_kappa = torch.maximum(
         torch.abs(kappa),
-        torch.abs(env.extras["lookahead_kappa"].view_as(kappa)),
+        torch.abs(lookahead_kappa.view_as(kappa)),
     )
-    is_corner = (effective_kappa > 0.20) | (
-        (local_pos[:, 0] < -15.05) & (local_pos[:, 1] < -6.50)
+    corner_zone = (
+        in_c1_turn(x, y)
+        | in_c2_turn(x, y)
+        | in_bend_turn(x, y)
+        | in_c4_turn(x, y)
     )
+    is_corner = (effective_kappa > BOUNDARY_CORNER_KAPPA_THRESH) | corner_zone
+
     dyn_threshold_w = torch.where(
         is_corner,
-        torch.tensor(0.015, device=env.device),
-        torch.tensor(0.018, device=env.device),
+        torch.tensor(BOUNDARY_CONTACT_WHITE_CORNER, device=env.device),
+        torch.tensor(BOUNDARY_CONTACT_WHITE_STRAIGHT, device=env.device),
     )
     dyn_threshold_y = torch.where(
         is_corner,
-        torch.tensor(0.008, device=env.device),
-        torch.tensor(0.020, device=env.device),
+        torch.tensor(BOUNDARY_CONTACT_YELLOW_CORNER, device=env.device),
+        torch.tensor(BOUNDARY_CONTACT_YELLOW_STRAIGHT, device=env.device),
     )
 
     # 2. Gate & Intersection permeability check:
     # Yellow median line is NEVER permeable anywhere on the circuit!
-    # Permeability is granted ONLY to the transverse painted white stop bar at intersection entry (X in [-6.5, -4.5])
-    in_stop_bar = (
-        (dist_g < 0.60)
-        & (local_pos[:, 0] >= -6.5)
-        & (local_pos[:, 0] <= -4.5)
-        & (local_pos[:, 1] >= -7.5)
-        & (local_pos[:, 1] <= -6.5)
-    )
-    hit_white = (~in_stop_bar) & (dist_w < dyn_threshold_w)
+    # Permeability is granted ONLY to the transverse painted white stop bar at intersection entry.
+    stop_bar_mask = in_stop_bar(x, y, dist_g)
+    hit_white = (~stop_bar_mask) & (dist_w < dyn_threshold_w)
     hit_yellow = dist_y < dyn_threshold_y
 
-    off_cliff_east = (
-        (local_pos[:, 0] > -2.08)
-        & (local_pos[:, 1] >= -7.5)
-        & (local_pos[:, 1] <= -3.60)
-    )
+    off_cliff_east = in_off_cliff_east(x, y)
     off_road_shoulder = (
-        (~is_corner) & (~in_stop_bar) & (lat_err < -0.25) & (dist_y > 0.38)
+        (~is_corner)
+        & (~stop_bar_mask)
+        & (lat_err < OFF_ROAD_SHOULDER_LAT_ERR)
+        & (dist_y > OFF_ROAD_SHOULDER_DIST_Y)
     )
 
-    # Open intersection envelope: where road marks break, allow up to 0.70m lateral drift
+    # Open intersection envelope: allow up to 0.70m lateral drift where road widens,
     # while strictly enforcing physical boundary contacts (hit_white | hit_yellow).
-    # Tightened north bound to Y <= -4.80: turn completes into North road by Y = -4.80.
-    in_inter_box = (
-        (local_pos[:, 0] >= -6.50)
-        & (local_pos[:, 0] <= -1.80)
-        & (local_pos[:, 1] >= -7.50)
-        & (local_pos[:, 1] <= -4.80)
-    )
+    inter_box = in_c2_turn(x, y) | in_intersection_expert_zone(x, y)
     max_lat_err = torch.where(
-        in_inter_box,
-        torch.tensor(0.70, device=env.device),
-        torch.tensor(0.40, device=env.device),
+        inter_box,
+        torch.tensor(MAX_LAT_ERR_INTERSECTION, device=env.device),
+        torch.tensor(MAX_LAT_ERR_DEFAULT, device=env.device),
     )
 
-    # Wrong-way / Oncoming lane termination on North road:
-    # 1. Solid double-yellow median zone (Y in [-3.50, 2.20]): Median is at X = -2.55.
-    #    Northbound vehicles MUST stay in East lane (X >= -2.55). Any vehicle with X < -2.56
-    #    is driving in the oncoming Southbound lane!
-    in_wrong_lane_north = (
-        (local_pos[:, 1] >= -3.50)
-        & (local_pos[:, 1] <= 2.20)
-        & (local_pos[:, 0] < -2.56)
-    )
-    # 2. Curving median apex zone (Y in [-5.20, -3.50]): Median curves from X = -3.10 to X = -2.56.
-    #    Understeering west of the median boundary is FATAL.
-    x_median_curve = -2.56 + 0.35 * (local_pos[:, 1] + 3.50)
-    in_wrong_lane_apex = (
-        (local_pos[:, 1] >= -5.20)
-        & (local_pos[:, 1] < -3.50)
-        & (local_pos[:, 0] < x_median_curve)
-    )
+    # Wrong-way / Oncoming lane termination across intersection exit and North road
+    wrong_lane = in_wrong_lane_intersection(x, y)
 
-    # Combined boundary hit:
-    # 1. Yellow median contact is FATAL everywhere (no exceptions)
-    # 2. White boundary contact is FATAL everywhere except the transverse stop bar
-    # 3. Off-road shoulder or lateral drift > max_lat_err is FATAL
-    # 4. East cliff void is FATAL
-    # 5. Wrong-lane / oncoming Southbound driving is FATAL
     boundary_hit = (
         hit_white
         | hit_yellow
         | off_cliff_east
         | off_road_shoulder
-        | in_wrong_lane_north
-        | in_wrong_lane_apex
+        | wrong_lane
         | (torch.abs(lat_err) > max_lat_err)
     )
-    masked_boundary_hit = boundary_hit
 
     # Check if we just started (less than 20 steps) to prevent spawn resets
     is_spawn = env.episode_length_buf < 20
-
-    # Apply grace period
-    return (~is_spawn) & masked_boundary_hit
+    return (~is_spawn) & boundary_hit
 
 
 def height_termination(
@@ -189,7 +176,6 @@ def height_termination(
     asset = env.scene[asset_cfg.name]
     env_origins = env.scene.env_origins
     local_z = asset.data.root_pos_w[:, 2] - env_origins[:, 2]
-    # Add a grace period to prevent immediate failures on spawn settling
     is_spawn = env.episode_length_buf < 20
     fallen = local_z < threshold
     flying = local_z > max_height
@@ -199,41 +185,64 @@ def height_termination(
 def stagnation_termination(
     env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
 ) -> torch.Tensor:
-    """Terminates if the robot is crawling or stuck, measured by waypoint progress."""
+    """Terminates if the robot is crawling or stuck, measured by waypoint progress.
+
+    Never terminates a robot legally holding at a RED light (`go_signal <= 0.5`
+    or inside `in_stop_bar` with red signal), and resets stagnation timers cleanly
+    both while holding at a red signal and upon episode resets.
+    """
     past_grace = env.episode_length_buf > 100
 
     cum_wp = env.extras.get("cumulative_wp_index", None)
     if cum_wp is None:
         return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
 
-    if "stagnation_term_snapshot" not in env.extras:
+    if (
+        "stagnation_term_snapshot" not in env.extras
+        or env.extras["stagnation_term_snapshot"].shape != cum_wp.shape
+    ):
         env.extras["stagnation_term_snapshot"] = cum_wp.clone()
         env.extras["stagnation_term_timer"] = torch.zeros(
             env.num_envs, dtype=torch.long, device=env.device
         )
 
+    go_signal = env.extras.get(
+        "go_signal", torch.ones(env.num_envs, device=env.device, dtype=torch.float32)
+    )
+    is_go = go_signal > 0.5
+
+    local_pos = env.extras.get("local_pos", None)
+    dist_g = env.extras.get("dist_g", None)
+    if local_pos is not None and dist_g is not None:
+        stop_bar_mask = in_stop_bar(local_pos[:, 0], local_pos[:, 1], dist_g)
+    else:
+        stop_bar_mask = torch.zeros_like(is_go, dtype=torch.bool)
+
+    holding_at_red = (~is_go) | (stop_bar_mask & (~is_go))
+
     timer = env.extras["stagnation_term_timer"]
     snapshot = env.extras["stagnation_term_snapshot"]
 
-    timer += 1
+    # Freeze/reset timer and snapshot while legally holding at a red light so
+    # departing when the light turns green starts with a full 100-step window.
+    timer = torch.where(holding_at_red, torch.zeros_like(timer), timer + 1)
+    snapshot = torch.where(holding_at_red, cum_wp.clone(), snapshot)
 
     # Every 100 steps (2 seconds), it MUST have progressed at least 25 waypoints (~0.25m, 0.13 m/s)
-    # Stagnation is suppressed when dwelling at a stop bar / red signal (go_signal == 0)
-    check_now = timer >= 100
+    check_now = (timer >= 100) & (~holding_at_red)
     progress = cum_wp - snapshot
-    is_go = (
-        env.extras.get("go_signal", torch.ones(env.num_envs, device=env.device)) > 0.5
+
+    stagnated = (progress < 25.0) & check_now & past_grace & is_go & (~holding_at_red)
+
+    # Reset snapshot and timer for envs that were checked
+    env.extras["stagnation_term_snapshot"] = torch.where(
+        check_now, cum_wp.clone(), snapshot
     )
-
-    stagnated = (progress < 25.0) & check_now & past_grace & is_go
-
-    # Reset snapshot for envs that were checked
-    env.extras["stagnation_term_snapshot"] = torch.where(check_now, cum_wp, snapshot)
     env.extras["stagnation_term_timer"] = torch.where(
         check_now, torch.zeros_like(timer), timer
     )
 
-    # Also reset on episode reset (TerminationManager runs before RewardManager zeroes cum_wp on step 1)
+    # Also reset on episode reset
     if hasattr(env, "episode_length_buf"):
         just_reset = env.episode_length_buf <= 1
         env.extras["stagnation_term_snapshot"] = torch.where(
@@ -242,7 +251,9 @@ def stagnation_termination(
             env.extras["stagnation_term_snapshot"],
         )
         env.extras["stagnation_term_timer"] = torch.where(
-            just_reset, torch.zeros_like(timer), env.extras["stagnation_term_timer"]
+            just_reset,
+            torch.zeros_like(timer),
+            env.extras["stagnation_term_timer"],
         )
 
     return stagnated
@@ -255,12 +266,8 @@ def fov_visibility_termination(
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
 ) -> torch.Tensor:
     """Terminates if the track centerline heading error exceeds half the camera FOV (driving blind)."""
-    import math
-
     head_err = env.extras.get("head_err", torch.zeros(env.num_envs, device=env.device))
-    # FOV = 2 * atan( h_aperture / (2 * f_length) )
     fov_rad = 2.0 * math.atan(horizontal_aperture / (2.0 * focal_length))
-    # If heading error is greater than half the FOV, the track is out of sight
     return torch.abs(head_err) > (fov_rad / 2.0)
 
 
@@ -270,13 +277,16 @@ def ground_contact_termination(
     """Terminates if the robot (any part) physically touches the ground plane."""
     contact_sensor = env.scene[sensor_cfg.name]
     net_contact_forces = contact_sensor.data.net_forces_w_history
-    # Shape: (num_envs, history_length, num_bodies, 3)
-    # Compute max force across the XYZ dimension
     force_magnitudes = torch.norm(net_contact_forces, dim=-1)
-    # Max across bodies
     max_body_force = torch.max(force_magnitudes, dim=-1)[0]
-    # Max across history
     max_force = torch.max(max_body_force, dim=-1)[0]
 
     is_spawn = env.episode_length_buf < 20
     return (~is_spawn) & (max_force > threshold)
+
+
+import sys as _sys  # noqa: E402
+
+_sys.modules.setdefault("mdp.terminations", _sys.modules[__name__])
+_sys.modules.setdefault("arcproLab.mdp.terminations", _sys.modules[__name__])
+

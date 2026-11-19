@@ -14,5 +14,10 @@ def Xform "Track"
         prepend references = @./no_graph_sim_clean_1x.usda@
     )
     {
+        over "GlobalLight" (
+            active = false
+        )
+        {
+        }
     }
 }

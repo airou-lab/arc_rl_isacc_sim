@@ -1,30 +1,102 @@
+from __future__ import annotations
+
 import gc
 
 import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from skrl.envs.wrappers.torch import Wrapper
-from torchvision.models import ResNet18_Weights, resnet18
+
+try:
+    from mdp.track_topology import (
+        TELEMETRY_DIM,
+        TELEMETRY_MIRROR_SIGNS,
+        ACTION_MIRROR_SIGNS,
+        ACTOR_MASKED_TELEMETRY_INDICES,
+    )
+except ImportError:
+    try:
+        from arcproLab.mdp.track_topology import (
+            TELEMETRY_DIM,
+            TELEMETRY_MIRROR_SIGNS,
+            ACTION_MIRROR_SIGNS,
+            ACTOR_MASKED_TELEMETRY_INDICES,
+        )
+    except ImportError:
+        TELEMETRY_DIM = 12
+        TELEMETRY_MIRROR_SIGNS = (
+            -1.0,
+            1.0,
+            1.0,
+            1.0,
+            -1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            1.0,
+        )
+        ACTION_MIRROR_SIGNS = (-1.0, 1.0)
+        ACTOR_MASKED_TELEMETRY_INDICES = (5, 6, 8, 9, 11)
+
+try:
+    from agents.skrl_models import (
+        BT601_YUV_MATRIX,
+        IMAGENET_MEAN,
+        IMAGENET_STD,
+        YUV_MEAN,
+        YUV_STD,
+        load_resnet18_backbone,
+        preprocess_camera_tensor,
+    )
+except ImportError:
+    from arcproLab.agents.skrl_models import (
+        BT601_YUV_MATRIX,
+        IMAGENET_MEAN,
+        IMAGENET_STD,
+        YUV_MEAN,
+        YUV_STD,
+        load_resnet18_backbone,
+        preprocess_camera_tensor,
+    )
 
 
 class SKRLFlattenWrapper(Wrapper):
-    def __init__(self, env):
+    def __init__(
+        self,
+        env,
+        vision_mode: str = "rgb",
+        training: bool = True,
+        equivariant: bool = True,
+        augment: bool | None = None,
+    ):
         super().__init__(env)
         self._step_counter = 0
+        self.vision_mode = vision_mode.lower()
+        self.training = training if augment is None else (bool(training) and bool(augment))
+        self.augment = self.training
+        self.equivariant = equivariant
+
+        raw_dev = getattr(
+            self._env,
+            "device",
+            getattr(
+                self._env.unwrapped,
+                "device",
+                "cuda:0" if torch.cuda.is_available() else "cpu",
+            ),
+        )
+        self._device = torch.device(raw_dev)
+
         if self._env.cfg.enable_cameras:
-            # 1. Fused YUV Linear Preprocessing Layer (ITU-R BT.601)
-            # Isolates luminance (white road boundaries) on Y, and chrominance (yellow median) on U, V
-            self.yuv_conv = nn.Conv2d(3, 3, kernel_size=1, bias=False).to("cuda:0")
+            # 1. Legacy YUV Linear Preprocessing Layer (ITU-R BT.601 compatibility)
+            self.yuv_conv = nn.Conv2d(3, 3, kernel_size=1, bias=False).to(self._device)
             yuv_weights = (
-                torch.tensor(
-                    [
-                        [0.299, 0.587, 0.114],
-                        [-0.14713, -0.28886, 0.436],
-                        [0.615, -0.51499, -0.10001],
-                    ],
-                    dtype=torch.float32,
-                )
+                torch.tensor(BT601_YUV_MATRIX, dtype=torch.float32)
                 .unsqueeze(-1)
                 .unsqueeze(-1)
             )
@@ -32,30 +104,98 @@ class SKRLFlattenWrapper(Wrapper):
             self.yuv_conv.weight.requires_grad = False
             self.yuv_conv.eval()
 
-            # YUV normalization: Y in [0, 1] centered at 0.5, U/V in [-0.5, 0.5] centered at 0.0
-            self.yuv_mean = torch.tensor([0.5, 0.0, 0.0]).view(1, 3, 1, 1).to("cuda:0")
-            self.yuv_std = torch.tensor([0.5, 0.5, 0.5]).view(1, 3, 1, 1).to("cuda:0")
+            self.yuv_mean = (
+                torch.tensor(YUV_MEAN, dtype=torch.float32, device=self._device).view(
+                    1, 3, 1, 1
+                )
+            )
+            self.yuv_std = (
+                torch.tensor(YUV_STD, dtype=torch.float32, device=self._device).view(
+                    1, 3, 1, 1
+                )
+            )
+            self.rgb_mean = (
+                torch.tensor(
+                    IMAGENET_MEAN, dtype=torch.float32, device=self._device
+                ).view(1, 3, 1, 1)
+            )
+            self.rgb_std = (
+                torch.tensor(
+                    IMAGENET_STD, dtype=torch.float32, device=self._device
+                ).view(1, 3, 1, 1)
+            )
 
-            base = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1).to("cuda:0")
-            for param in base.parameters():
-                param.requires_grad = False
-            self.resnet_conv = nn.Sequential(
-                base.conv1,
-                base.bn1,
-                base.relu,
-                base.maxpool,
-                base.layer1,
-                base.layer2,
-                base.layer3,
-                base.layer4,
-            ).to("cuda:0")
-            self.resnet_conv.eval()
+            self.resnet_conv = load_resnet18_backbone(
+                device=self._device, pretrained=True
+            )
 
     @property
     def observation_space(self):
         # 12 telemetry + 25088 (512x7x7 2D spatial feature map) if camera is enabled
-        shape_dim = 25100 if self._env.cfg.enable_cameras else 12
+        shape_dim = 25088 + TELEMETRY_DIM if self._env.cfg.enable_cameras else TELEMETRY_DIM
         return gym.spaces.Box(low=-np.inf, high=np.inf, shape=(shape_dim,))
+
+    def _apply_visual_domain_randomization(self, img: torch.Tensor) -> torch.Tensor:
+        """Apply photometric domain randomization in [0, 1] RGB without horizontal flipping."""
+        B = img.shape[0]
+        dev = img.device
+        dtype = img.dtype
+
+        brightness = (
+            torch.rand((B, 1, 1, 1), device=dev, dtype=dtype) * 2.0 - 1.0
+        ) * 0.12
+        contrast = 0.85 + torch.rand((B, 1, 1, 1), device=dev, dtype=dtype) * 0.30
+        gamma = 0.90 + torch.rand((B, 1, 1, 1), device=dev, dtype=dtype) * 0.20
+
+        img = torch.clamp(img, 1e-6, 1.0).pow(gamma)
+        mean_lum = img.mean(dim=(-3, -2, -1), keepdim=True)
+        img = (img - mean_lum) * contrast + mean_lum + brightness
+        img = img + torch.randn_like(img) * 0.02
+        return torch.clamp(img, 0.0, 1.0)
+
+    def _preprocess_and_encode(self, cam_tensor: torch.Tensor) -> torch.Tensor:
+        if cam_tensor.dtype == torch.uint8:
+            img = cam_tensor.to(device=self._device, dtype=torch.float32) * (
+                1.0 / 255.0
+            )
+        else:
+            img = cam_tensor.to(device=self._device, dtype=torch.float32)
+            max_per_sample = img.amax(dim=(-3, -2, -1), keepdim=True)
+            scale = torch.where(
+                max_per_sample > 1.5,
+                torch.tensor(1.0 / 255.0, device=img.device, dtype=img.dtype),
+                torch.tensor(1.0, device=img.device, dtype=img.dtype),
+            )
+            img = img * scale
+
+        if img.dim() == 4 and img.shape[1] != 3 and img.shape[-1] == 3:
+            img = img.permute(0, 3, 1, 2).contiguous()
+
+        if img.shape[-2] != 224 or img.shape[-1] != 224:
+            img = F.interpolate(
+                img, size=(224, 224), mode="bilinear", align_corners=False
+            )
+
+        if self.training and self.vision_mode == "rgb":
+            img = self._apply_visual_domain_randomization(img)
+
+        if self.vision_mode == "rgb":
+            norm_img = (img - self.rgb_mean) / self.rgb_std
+        elif self.vision_mode == "yuv":
+            yuv = self.yuv_conv(img)
+            norm_img = (yuv - self.yuv_mean) / self.yuv_std
+        else:
+            norm_img = preprocess_camera_tensor(img, vision_mode=self.vision_mode)
+
+        if self.equivariant:
+            img_pair = torch.cat([norm_img, torch.flip(norm_img, dims=[-1])], dim=0)
+            feat_pair = self.resnet_conv(img_pair)
+            feat_pos, feat_neg = feat_pair.chunk(2, dim=0)
+            feat_map = 0.5 * (feat_pos + torch.flip(feat_neg, dims=[-1]))
+        else:
+            feat_map = self.resnet_conv(norm_img)
+
+        return feat_map.flatten(start_dim=1)
 
     def step(self, actions):
         obs, reward, terminated, truncated, info = self._env.step(actions)
@@ -91,7 +231,8 @@ class SKRLFlattenWrapper(Wrapper):
         self._step_counter += 1
         if self._step_counter % 50 == 0:
             gc.collect()
-            torch.cuda.empty_cache()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
         return flat_obs, reward, terminated, truncated, info
 
@@ -140,17 +281,7 @@ class SKRLFlattenWrapper(Wrapper):
                 else:
                     return vec
 
-                img = cam_tensor.float()
-                # Permute from NHWC to NCHW
-                if img.dim() == 4 and img.shape[-1] == 3:
-                    img = img.permute(0, 3, 1, 2)
-                if img.max() > 1.0:
-                    img = img / 255.0
-                # Convert RGB to YUV and normalize
-                yuv = self.yuv_conv(img)
-                norm_img = (yuv - self.yuv_mean) / self.yuv_std
-                feat_map = self.resnet_conv(norm_img)  # (B, 512, 7, 7)
-                visual_flat = feat_map.flatten(start_dim=1)  # (B, 25088)
+                visual_flat = self._preprocess_and_encode(cam_tensor)
 
                 num_envs = vec.shape[0]
                 total_dim = 25088 + vec.shape[1]
@@ -158,6 +289,7 @@ class SKRLFlattenWrapper(Wrapper):
                     not hasattr(self, "_flat_obs_buffers")
                     or self._flat_obs_buffers is None
                     or self._flat_obs_buffers[0].shape != (num_envs, total_dim)
+                    or self._flat_obs_buffers[0].device != vec.device
                 ):
                     self._flat_obs_buffers = [
                         torch.zeros(
@@ -175,10 +307,10 @@ class SKRLFlattenWrapper(Wrapper):
 
                 self._buf_idx = (self._buf_idx + 1) % 2
                 buf = self._flat_obs_buffers[self._buf_idx]
-                buf[:, :25088].copy_(visual_flat)
+                buf[:, :25088].copy_(visual_flat.to(device=vec.device))
                 buf[:, 25088:].copy_(vec)
                 self._flat_obs_buffer = buf
-                del img, yuv, norm_img, feat_map, visual_flat
+                del visual_flat
                 return buf
 
         return vec
@@ -202,14 +334,16 @@ class SKRLFlattenWrapper(Wrapper):
 
 
 class WarmupActionWrapper(gym.Wrapper):
-    def __init__(self, env, warmup_steps=10):
+    """Pass-through wrapper preserving API compatibility without off-policy action substitution.
+
+    Previously, overwriting actions inside step() after agent.act() poisoned RandomMemory with
+    (s_t, a_policy, log_prob(a_policy), r_warmup, s_{t+1}_warmup) off-policy transitions.
+    env.step() now executes the exact action tensor recorded in memory.
+    """
+
+    def __init__(self, env, warmup_steps: int = 0):
         super().__init__(env)
         self.warmup_steps = warmup_steps
 
     def step(self, action):
-        if hasattr(self.env.unwrapped, "episode_length_buf"):
-            mask = self.env.unwrapped.episode_length_buf < self.warmup_steps
-            action = action.clone()
-            action[mask, 0] = 0.0  # Steer: 0.0 is center
-            action[mask, 1] = -1.0  # Throttle: action * (-20) - 20 = 0.0 (Stop)
         return self.env.step(action)
