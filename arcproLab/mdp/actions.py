@@ -1,9 +1,12 @@
+import sys
 from dataclasses import dataclass, field
 
 import gymnasium as gym
 import torch
 
 try:
+    if "omni" not in sys.modules:
+        raise ImportError
     import isaaclab.envs.mdp.actions.actions_cfg as actions_cfg
     from isaaclab.assets import Articulation
     from isaaclab.envs import ManagerBasedEnv

@@ -3,9 +3,12 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import sys
 import torch
 
 try:
+    if "omni" not in sys.modules:
+        raise ImportError
     from isaaclab.envs import ManagerBasedRLEnv
     from isaaclab.managers import SceneEntityCfg
 except ImportError:
@@ -22,8 +25,10 @@ try:
         FLARED_LANE_WIDTH_THRESH,
         compute_step_road_state,
         in_any_corner,
+        in_branch_permeable_gate,
         in_c2_turn,
         in_intersection_expert_zone,
+        in_multi_branch_intersection,
         in_stop_bar,
         in_wrong_lane_intersection,
     )
@@ -34,8 +39,10 @@ except ImportError:
         FLARED_LANE_WIDTH_THRESH,
         compute_step_road_state,
         in_any_corner,
+        in_branch_permeable_gate,
         in_c2_turn,
         in_intersection_expert_zone,
+        in_multi_branch_intersection,
         in_stop_bar,
         in_wrong_lane_intersection,
     )
@@ -75,7 +82,7 @@ def waypoint_progress_reward(
     env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
 ) -> torch.Tensor:
     """
-    Rewards the agent ONLY for advancing along the track's centerline waypoints.
+    Rewards the agent ONLY for advancing along the track's active centerline waypoints.
 
     Stores per-step reward delta in env.extras["reward_wp_delta_step"] to allow
     accurate reward signal logging.
@@ -95,6 +102,17 @@ def waypoint_progress_reward(
 
     current_idx = tm.last_indices.clone()
     num_wps = tm.waypoints.shape[0]
+    current_branch = env.extras.get("active_branch_ids", None)
+    if (
+        not isinstance(current_branch, torch.Tensor)
+        or current_branch.shape != current_idx.shape
+    ):
+        current_branch = (
+            tm.last_branch_ids.clone()
+            if isinstance(getattr(tm, "last_branch_ids", None), torch.Tensor)
+            and tm.last_branch_ids.shape == current_idx.shape
+            else torch.zeros_like(current_idx)
+        )
 
     # Initialize tracking state on first call
     if (
@@ -102,6 +120,7 @@ def waypoint_progress_reward(
         or env.extras["prev_wp_idx_reward"].shape != current_idx.shape
     ):
         env.extras["prev_wp_idx_reward"] = current_idx.clone()
+        env.extras["prev_branch_id_reward"] = current_branch.clone()
         env.extras["cumulative_wp_index"] = torch.zeros(
             env.num_envs, dtype=torch.float32, device=env.device
         )
@@ -114,6 +133,23 @@ def waypoint_progress_reward(
         return torch.zeros(env.num_envs, device=env.device)
 
     prev_idx = env.extras["prev_wp_idx_reward"]
+    prev_branch = env.extras.get("prev_branch_id_reward", None)
+
+    # Re-anchor prev_idx whenever an environment switched active branches since the last reward step
+    branch_switched = env.extras.get("branch_switched_mask", None)
+    switched = torch.zeros_like(current_idx, dtype=torch.bool)
+    if (
+        isinstance(branch_switched, torch.Tensor)
+        and branch_switched.shape == current_idx.shape
+    ):
+        switched = switched | branch_switched
+    if (
+        isinstance(prev_branch, torch.Tensor)
+        and prev_branch.shape == current_branch.shape
+    ):
+        switched = switched | (current_branch != prev_branch)
+    if switched.any():
+        prev_idx = torch.where(switched, current_idx, prev_idx)
 
     # Compute true step delta (handles wrap-around)
     delta = (current_idx - prev_idx) % num_wps
@@ -138,6 +174,7 @@ def waypoint_progress_reward(
     # Update high-water mark
     env.extras["max_cumulative_wp_index"] = torch.maximum(max_cum, cum_wp)
     env.extras["prev_wp_idx_reward"] = current_idx.clone()
+    env.extras["prev_branch_id_reward"] = current_branch.clone()
 
     # Zero out everything for envs that just reset
     just_reset = torch.zeros_like(reward_delta, dtype=torch.bool)
@@ -158,6 +195,9 @@ def waypoint_progress_reward(
         just_reset, torch.zeros_like(max_cum), env.extras["max_cumulative_wp_index"]
     )
     env.extras["prev_wp_idx_reward"] = torch.where(just_reset, current_idx, current_idx)
+    env.extras["prev_branch_id_reward"] = torch.where(
+        just_reset, current_branch, current_branch
+    )
 
     env.extras["reward_wp_delta_step"] = reward_delta
     return reward_delta
@@ -183,13 +223,14 @@ def lateral_error_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
 
     slack = torch.zeros_like(abs_lat)
     if "kappa" in env.extras and env.extras["kappa"] is not None:
-        kappa = torch.abs(
+        signed_kappa = (
             env.extras["kappa"]
             .to(device=env.device, dtype=torch.float32)
             .view_as(abs_lat)
         )
-        # In CCW circuit, lat_err > 0 is inward toward yellow apex; lat_err < 0 is outward toward white line.
-        is_inward = lat_err > 0.0
+        kappa = torch.abs(signed_kappa)
+        # In left turns (kappa >= 0), lat_err > 0 is inward apex; in right turns (kappa < 0), lat_err < 0 is inward apex.
+        is_inward = torch.where(signed_kappa < -1e-4, lat_err < 0.0, lat_err > 0.0)
         inward_slack = torch.clamp(kappa * 0.05, min=0.0, max=0.03)
         slack = torch.where(is_inward, inward_slack, torch.zeros_like(inward_slack))
 
@@ -265,7 +306,7 @@ def boundary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     using `BOUNDARY_WARN_MARGIN = 0.170` (zero centerline violations across all 5,000 WPs).
 
     The yellow median line is NEVER masked anywhere on the circuit.
-    Only the transverse painted white stop bar (`in_stop_bar`) has white boundary penalty masked.
+    The transverse painted white stop bar and active multi-branch white exits have white penalty masked.
     """
     _ensure_road_state_if_empty(env)
     dist_y = env.extras.get(
@@ -283,9 +324,15 @@ def boundary_penalty(env: ManagerBasedRLEnv) -> torch.Tensor:
     too_close_y = torch.clamp(BOUNDARY_WARN_MARGIN - dist_y, min=0.0)
     too_close_w = torch.clamp(BOUNDARY_WARN_MARGIN - dist_w, min=0.0)
 
-    stop_bar_mask = in_stop_bar(x, y, dist_g)
+    branch_token = env.extras.get(
+        "branch_token", env.extras.get("turn_token", None)
+    )
+    multi_branch_active = bool(env.extras.get("multi_branch_active", False))
+    permeable_white_mask = in_branch_permeable_gate(
+        x, y, dist_g, turn_token=branch_token, multi_branch_active=multi_branch_active
+    )
     masked_too_close_w = torch.where(
-        stop_bar_mask, torch.zeros_like(too_close_w), too_close_w
+        permeable_white_mask, torch.zeros_like(too_close_w), too_close_w
     )
 
     penalty = -(too_close_y * 160.0 + masked_too_close_w * 160.0)
@@ -466,7 +513,16 @@ def lane_centering_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     centerline_diff = 2.0 * torch.abs(lat_err)
     boundary_diff = torch.abs(dist_y - dist_w)
 
-    non_flared = ((dist_y + dist_w) <= FLARED_LANE_WIDTH_THRESH) & (~in_c2_turn(x, y))
+    branch_token = env.extras.get(
+        "branch_token", env.extras.get("turn_token", None)
+    )
+    multi_branch_active = bool(env.extras.get("multi_branch_active", False))
+    in_inter_zone = in_c2_turn(x, y) | (
+        in_multi_branch_intersection(x, y)
+        if multi_branch_active
+        else torch.zeros_like(lat_err, dtype=torch.bool)
+    )
+    non_flared = ((dist_y + dist_w) <= FLARED_LANE_WIDTH_THRESH) & (~in_inter_zone)
     lane_diff = torch.where(
         non_flared,
         torch.minimum(boundary_diff, centerline_diff),
@@ -477,7 +533,9 @@ def lane_centering_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
         0.6 * torch.exp(-15.0 * lane_diff) + 0.4 * torch.exp(-4.0 * lane_diff)
     ).to(device=env.device)
 
-    in_wrong_lane = in_wrong_lane_intersection(x, y)
+    in_wrong_lane = in_wrong_lane_intersection(
+        x, y, turn_token=branch_token, multi_branch_active=multi_branch_active
+    )
     r_centering = torch.where(
         in_wrong_lane, torch.tensor(-1.0, device=env.device), r_centering
     )
@@ -527,7 +585,16 @@ def intersection_expert_reward(env: ManagerBasedRLEnv) -> torch.Tensor:
     guidance = steer_match * speed_match
 
     x, y = _get_local_xy(env)
-    in_zone = in_any_corner(x, y) | in_intersection_expert_zone(x, y)
+    multi_branch_active = bool(env.extras.get("multi_branch_active", False))
+    in_zone = (
+        in_any_corner(x, y)
+        | in_intersection_expert_zone(x, y)
+        | (
+            in_multi_branch_intersection(x, y)
+            if multi_branch_active
+            else torch.zeros_like(speed, dtype=torch.bool)
+        )
+    )
 
     straight_guidance = torch.exp(-25.0 * torch.square(current_steer - target_steer))
     # At a red stop bar outside or inside the intersection, reward stopping + steering alignment

@@ -1,8 +1,8 @@
 # ARCPro RL Development Roadmap
 
 **ClearSet Project Roadmap**  
-**Last Updated:** 2026-11-13  
-**Active Baseline:** `rollback/clean-baseline`
+**Last Updated:** 2026-11-20  
+**Active Baseline:** `rollback/clean-baseline` (canonical state tracked in `RESUME HERE.md` and `.cs/cs_turns.db`)
 
 > **Strategic Rule:** Gate each major capability behind hard exit metrics so single-robot vision control, scene rendering (3DGS), generative weather augmentation (Cosmos), and multi-agent coordination (MARL) never compound debugging complexity simultaneously.
 
@@ -10,27 +10,26 @@
 
 | Phase | Milestone | Focus & Scope | Target Hardware / Stack | Exit Gate |
 | :--- | :--- | :--- | :--- | :--- |
-| **Phase 0** | `M005` | Single-robot RGB lap mastery on USD | RTX 3060 (12 GB) / Isaac Sim 5.1 | Full 50.72m lap (`>1,840 steps`, zero resets) |
+| **Phase 0** | `M005` | Single-robot RGB lap mastery on USD *(baking in background tmux `training` toward 500k–600k)* | RTX 3060 (12 GB) / Isaac Sim 5.1 | Full 50.72m lap (`>1,840 steps`, zero resets) |
 | **Phase 1** | `M005.5` | Visual/collision proxy split, light/exposure DR, 1-env Cosmos/HDF5 recorder | RTX 3060 (12 GB) / Isaac Sim 5.1 | Default 48-env PPO unchanged; valid multimodal export |
-| **Phase 2** | `M006`–`M007` | Stop-bar FSM (`GoSignalManager`), `RoadManager(N)` & opponent traffic TTC | RTX 3060 → Multi-GPU/Workstation | Compliant stop-bar dwell + collision-free traffic |
+| **Phase 2** | `M006`–`M007` | Multi-branch intersection gates *(Phase 01 Gates 1–3 DONE)*, stop-bar FSM (`GoSignalManager`), `RoadManager(N)` & opponent traffic TTC *(ACTIVE)* | RTX 3060 → Multi-GPU/Workstation | Multi-branch turn-token routing + compliant stop-bar dwell + collision-free traffic |
 | **Phase 3** | `M008` | Camera-only Asymmetric MARL (`DirectMARLEnv` + `skrl` MAPPO) | RTX 3060 (small fleet) / >=48 GB GPU | Camera-only multi-car overtaking/yielding |
 | **Phase 4** | `M009` | Real-world NuRec 3DGS `.usdz` track digital twin + RL fine-tuning | >24–48 GB GPU (e.g. RTX PRO 6000) + Isaac Sim 5.1 GA+/6.x | Full single & MARL laps in 3DGS scene |
 | **Phase 5** | `M010` | Offline Cosmos Transfer weather/lighting augmentation + F1Tenth fleet sim-to-real | >=48–96 GB GPU / Cloud NIM | Zero-shot robustness across lighting/glare & real track |
 
 ---
 
-## Milestone M005: 48-Env Fleet Training & Full-Circuit Lap Mastery *(Phase 0 — CURRENT)*
-**Objective:** Achieve consistent, collision-free single-robot autonomous laps around the 50.72m simulated track using pure vision (RGB RealSense front-bumper mount, ResNet-18 + Spatial Softmax 2D keypoints).
+## Milestone M005: 48-Env Fleet Training & Full-Circuit Lap Mastery *(Phase 0 — BACKGROUND BAKE)*
+**Objective:** Achieve consistent, collision-free single-robot autonomous laps around the 50.72m simulated track using pure vision (RGB RealSense front-bumper mount, Equivariant ResNet-18 + Spatial Softmax 2D keypoints).
 
 - [x] **Phase 1: RealSense Kinematic Alignment & Physical Steering Unlock**
   - Raised revolute joint limits to $\pm 55.0^\circ$ and max steering angle to $0.68\text{ rad}$.
   - Grounded camera to physical front bumper mount `pos=(0.22, 0.0, 0.18)` at $15^\circ$ downward pitch.
-- [x] **Phase 2: Vision Architecture Modernization (Levine et al. 2016 Spatial Softmax)**
-  - Fused YUV linear preprocessing layer (`ITU-R BT.601`) for luminance (white lines) and chrominance (yellow median) separation.
-  - Implemented `SpatialSoftmax2d` to extract 32 continuous $(x, y)$ keypoint coordinates, dropping actor parameters by 95% (453k $\to$ 21k).
-  - Verified with deterministic gate test suite (`tests/test_vision_architecture_upgrade.py`).
-- [/] **Phase 3: Autonomous Fleet Supervision & Sector 4 Intersection Convergence** *(IN PROGRESS)*
-  - **Task 3.1:** 48-camera fleet training running under `autonomous_sentinel.py` (paused at `3,940,806` steps; `agent_3900000_debiased.pt` cleared C1 apex dead-center `LatErr -0.3cm`, trimmed `in_c1_turn` / `in_c1` to `-14.95` to fix C1 exit).
+- [x] **Phase 2: Vision Architecture Modernization (Levine et al. 2016 Spatial Softmax + Equivariance)**
+  - Implemented `SpatialSoftmax2d` + equivariant frontend $G(I)$ with parity policy head and $L_{\text{sym}}$, decoupled Actor/Critic optimizers, `asinh` odometer compression, and 2-slot ping-pong non-aliased wrapper buffers.
+  - Verified with deterministic CPU invariant & architecture suites (`pytest -m cpu`).
+- [/] **Phase 3: Autonomous Fleet Supervision & Baseline Baking to 500k–600k** *(IN PROGRESS)*
+  - **Task 3.1:** 48-camera fleet training running in tmux `training` (resumed from `agent_450000.pt` after solving 48-env track overlap / `DistantLight` mismatch and six root-cause bug loops; see `RESUME HERE.md`).
   - **Task 3.2:** Dual-audit benchmarking against Golden Oracle (`compare_intersection_oracle.py`) and 5-sector regression suite (`checkpoint_auditor.py`).
   - **Target Exit Gate:** Full circuit traversal (>1,840 steps / 50.72m lap) at $\bar{v} \ge 0.50\text{ m/s}$ with zero boundary resets.
 
@@ -48,17 +47,21 @@
 
 ---
 
-## Milestone M006: Smart Intersection Signals & Dynamic Traffic Coordination *(NEXT)*
-**Objective:** Integrate active traffic light states, stop-bar compliance, and dynamic priority arbitration into the environment and policy.
+## Milestone M006: Smart Intersection Signals, Multi-Branch Topology & Dynamic Traffic Coordination *(ACTIVE)*
+**Objective:** Enable command-conditioned multi-branch navigation (`turn_token in {-1.0, 0.0, +1.0}`) across the 3-loop USD track (`junction_55`, `junction_18`, C2) and integrate active traffic light states, stop-bar compliance, and dynamic priority arbitration.
 
-- [ ] **Phase 1: Stop-Bar FSM & Visual Stop-Line Activation**
+- [x] **Phase 01: Multi-Branch Intersection Gates (Gates 1, 2 & 3 — Spec: `.planning/phases/M006-01-SPEC.md`)**
+  - **Gate 1 (`track_manager.py`):** Pre-materialized 3-branch `(3, 5000, 3)` waypoint & curvature tensor bank (`Left/-1.0`, `Straight/0.0`, `Right/+1.0`) with bit-exact M005 single-loop default (`randomize_turn_tokens=False`).
+  - **Gate 2 (`track_topology.py`, `terminations.py`):** Token-gated spatial permeability (`in_branch_permeable_gate`, token-aware `in_off_cliff_east` & `in_wrong_lane_intersection`) without modifying `track_boundaries_1x.npz`.
+  - **Gate 3 (`road_manager.py`, `rewards.py`, `events.py`):** Vectorized `RoadManager` mission-token FSM ordered before `TrackManager.compute_errors()`, curvature-sign-symmetric `lateral_error_reward`, and branch-switch re-anchoring in `waypoint_progress_reward`. Verified (`44/44` in `tests/test_multi_branch_gates.py`).
+- [/] **Phase 01b: Stage 1/2/3 Curriculum Turn-Token Activation** *(QUEUED ON M005 500k–600k BAKE)*
+  - Commit Gates 1–3 upon approval, then activate `ARCPRO_RANDOMIZE_TURN_TOKENS=1` / `rm.set_randomization(True)` warm-started from the 500k+ M005 baseline.
+- [ ] **Phase 02: Stop-Bar FSM & Visual Stop-Line Activation**
   - Connect `arcproLab/mdp/go_signal_manager.py` (3-state `APPROACH` $\to$ `STOP` $\to$ `DEPART` FSM) with `VisualStopLineDetector`.
   - Expose `go_signal` (0.0 / 1.0) into telemetry observation vector slot 1 and action throttle gating.
   - Enforce zero-velocity dwell at transverse stop bars until green go signal is issued.
-- [ ] **Phase 2: Networked Intersection Node Server & Traffic Topology**
+- [ ] **Phase 03: Networked Intersection Node Server & Closed-Loop Compliance Gates**
   - Integrate `arcproLab/policy_stack/agent/intersection_node_server.py` and `intersection_topology.json`.
-  - Simulate multi-approach conflict arbitration (yield priority, round-robin green phases, pedestrian clearance intervals).
-- [ ] **Phase 3: Closed-Loop Compliance Verification Gates**
   - Headless verification: Validate full stop at stop-bar line ($v = 0.0\text{ m/s}$), dwell for 3.0s, and smooth departure upon green go signal.
 
 ---

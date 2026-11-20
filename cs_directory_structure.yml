@@ -1,33 +1,21 @@
 # ClearSet Codebase Directory Structure & Architectural Layout
 clearset_version: '1.0'
-last_updated: '2026-11-18T20:46:19.815346+00:00Z'
+last_updated: '2026-11-20T06:40:14.877784+00:00Z'
 root: '.'
 
 directories:
-  arcpro-rl-course:
-    layer: 'general'
-    tags: []
-    primary_files: ["arcpro-rl-course/build.sh", "arcpro-rl-course/index.html", "arcpro-rl-course/main.js", "arcpro-rl-course/_base.html", "arcpro-rl-course/styles.css"]
-  arcpro-rl-course/modules:
-    layer: 'config'
-    tags: ["config"]
-    primary_files: ["arcpro-rl-course/modules/09-aac-code.html", "arcpro-rl-course/modules/07-freeze-code.html", "arcpro-rl-course/modules/02-env-cfg.html", "arcpro-rl-course/modules/14-bicycle-theory.html", "arcpro-rl-course/modules/11-geometry-theory.html"]
   arcproLab:
     layer: 'testing'
     tags: ["testing", "robotics", "config"]
-    primary_files: ["arcproLab/test_rewards.py", "arcproLab/verify.py", "arcproLab/arcpro_robot_cfg.py", "arcproLab/README.md", "arcproLab/generate_track.py"]
+    primary_files: ["arcproLab/test_rewards.py", "arcproLab/verify.py", "arcproLab/arcpro_robot_cfg.py", "arcproLab/arcpro_env_cfg.py", "arcproLab/README.md"]
   arcproLab/agents:
     layer: 'database'
     tags: ["database"]
-    primary_files: ["arcproLab/agents/README.md", "arcproLab/agents/skrl_models.py", "arcproLab/agents/telemetry_ppo.py", "arcproLab/agents/skrl_wrappers.py"]
+    primary_files: ["arcproLab/agents/skrl_models.py", "arcproLab/agents/telemetry_ppo.py", "arcproLab/agents/skrl_wrappers.py", "arcproLab/agents/README.md"]
   arcproLab/mdp:
     layer: 'config'
     tags: ["config"]
-    primary_files: ["arcproLab/mdp/track_boundaries_1x.npz.bak", "arcproLab/mdp/spawner.py", "arcproLab/mdp/track_usd_extractor.py", "arcproLab/mdp/track_visualizer.py", "arcproLab/mdp/visual_analytics.py"]
-  arcproLab/models:
-    layer: 'database'
-    tags: ["database"]
-    primary_files: ["arcproLab/models/road_following_model.pth"]
+    primary_files: ["arcproLab/mdp/spawner.py", "arcproLab/mdp/curriculum_config.py", "arcproLab/mdp/track_usd_extractor.py", "arcproLab/mdp/track_visualizer.py", "arcproLab/mdp/curriculum_sectors.json"]
   arcproLab/policy_stack:
     layer: 'testing'
     tags: ["testing"]
@@ -68,30 +56,6 @@ directories:
     layer: 'testing'
     tags: ["testing", "robotics", "config", "database"]
     primary_files: ["arcproLab/scripts/verify_markers.py", "arcproLab/scripts/deep_verify.py", "arcproLab/scripts/debug_kinematics.py", "arcproLab/scripts/test_terminations.py", "arcproLab/scripts/audit_assets.py"]
-  runs/26-10-05_16-05-53-872359_PPO:
-    layer: 'general'
-    tags: []
-    primary_files: ["runs/26-10-05_16-05-53-872359_PPO/events.out.tfevents.1791234354.airou-alienware.2745187.0"]
-  runs/26-10-05_16-06-01-111093_PPO:
-    layer: 'general'
-    tags: []
-    primary_files: ["runs/26-10-05_16-06-01-111093_PPO/events.out.tfevents.1791234361.airou-alienware.2747357.0"]
-  runs/26-10-05_17-13-09-680932_PPO:
-    layer: 'general'
-    tags: []
-    primary_files: ["runs/26-10-05_17-13-09-680932_PPO/events.out.tfevents.1791238390.airou-alienware.3896280.0"]
-  runs/26-10-05_17-13-16-947431_PPO:
-    layer: 'general'
-    tags: []
-    primary_files: ["runs/26-10-05_17-13-16-947431_PPO/events.out.tfevents.1791238397.airou-alienware.3898451.0"]
-  runs/26-10-05_17-13-23-303981_PPO:
-    layer: 'general'
-    tags: []
-    primary_files: ["runs/26-10-05_17-13-23-303981_PPO/events.out.tfevents.1791238403.airou-alienware.3900478.0"]
-  runs/26-10-05_17-13-46-520960_PPO:
-    layer: 'general'
-    tags: []
-    primary_files: ["runs/26-10-05_17-13-46-520960_PPO/events.out.tfevents.1791238427.airou-alienware.3907464.0"]
   tensorboard_view_docker:
     layer: 'general'
     tags: []
@@ -99,4 +63,4 @@ directories:
   tests:
     layer: 'testing'
     tags: ["testing", "api"]
-    primary_files: ["tests/test_manual_left_turn.py", "tests/verify_imports.py", "tests/compare_intersection_oracle.py", "tests/audit_track_geometry.py", "tests/build_perfect_circuit.py"]
+    primary_files: ["tests/test_track_dir.py", "tests/verify_rerouted_track.py", "tests/test_manual_left_turn.py", "tests/verify_imports.py", "tests/test_cornering_remediation.py"]

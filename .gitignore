@@ -24,6 +24,8 @@ archive/old_logs_pre_reroute/
 archive/corrupted_runs/
 archive/corrupted_void_spawns_20261013-14/
 archive/pre_braking_overspeed_runs/
+archive/runs_*/
+archive/*.jsonl
 runs/
 *.bak
 model_*_telemetry.md
@@ -37,3 +39,4 @@ debug_frames/
 *.db
 .aider*
 .cta/
+.cs/

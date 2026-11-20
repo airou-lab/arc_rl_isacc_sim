@@ -1,11 +1,11 @@
 # ClearSet Codebase Map & RAG Query Guide
 clearset_version: '1.0'
 database: '.cs/cs_codebase.db'
-last_updated: '2026-11-18T20:46:19.815124+00:00Z'
-git_commit: '9c01e4563b3b98d38eed085f7990ddd7d8d9a688'
+last_updated: '2026-11-20T06:40:14.877424+00:00Z'
+git_commit: '2a58fd5558aa6a546b7847d2984f98240e94fd3a'
 stats:
-  total_indexed_files: 202
-  total_symbols: 948
+  total_indexed_files: 174
+  total_symbols: 967
 
 domain_tags:
   api:
@@ -14,20 +14,20 @@ domain_tags:
     sample_targets: ["tests/verify_rerouted_track.py"]
   config:
     category: 'config'
-    matching_entities: 12
-    sample_targets: ["arcproLab/policy_stack/agent/agent_env_wrapper.py", "arcproLab/policy_stack/agent/config.py", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/envs/registry.py", "arcproLab/policy_stack/envs/__init__.py"]
+    matching_entities: 11
+    sample_targets: ["arcproLab/arcpro_env_cfg.py", "arcproLab/mdp/curriculum_config.py", "arcproLab/policy_stack/agent/agent_env_wrapper.py", "arcproLab/policy_stack/agent/config.py", "arcproLab/policy_stack/tests/mock_env_utils.py"]
   database:
     category: 'layer'
-    matching_entities: 4
-    sample_targets: ["arcproLab/policy_stack/baselines/dave2/model.py", "arcproLab/scripts/init_gsd_db.py", "arcproLab/models/road_following_model.pth", "arcproLab/agents/skrl_models.py"]
+    matching_entities: 3
+    sample_targets: ["arcproLab/agents/skrl_models.py", "arcproLab/policy_stack/baselines/dave2/model.py", "arcproLab/scripts/init_gsd_db.py"]
   robotics:
     category: 'domain'
     matching_entities: 3
     sample_targets: ["arcproLab/arcpro_robot_cfg.py", "arcproLab/scripts/test_intersection_crossing.py", "arcproLab/scripts/list_robot_joints.py"]
   testing:
     category: 'layer'
-    matching_entities: 50
-    sample_targets: ["arcproLab/test_rewards.py", "arcproLab/policy_stack/pytest.ini", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/tests/test_intersection_worker.py", "arcproLab/policy_stack/tests/test_intersection_node_server.py"]
+    matching_entities: 52
+    sample_targets: ["pytest.ini", "arcproLab/test_rewards.py", "arcproLab/policy_stack/pytest.ini", "arcproLab/policy_stack/tests/mock_env_utils.py", "arcproLab/policy_stack/tests/test_intersection_worker.py"]
 
 query_templates:
   find_symbol: "SELECT file_path, name, kind, signature, line_start FROM symbols WHERE name LIKE '%{SYMBOL}%';"

@@ -4,9 +4,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import math
+import sys
 import torch
 
 try:
+    if "omni" not in sys.modules:
+        raise ImportError
     from isaaclab.envs import ManagerBasedRLEnv
     from isaaclab.managers import SceneEntityCfg
 except ImportError:
@@ -30,10 +33,12 @@ try:
         compute_step_road_state,
         in_any_corner,
         in_bend_turn,
+        in_branch_permeable_gate,
         in_c1_turn,
         in_c2_turn,
         in_c4_turn,
         in_intersection_expert_zone,
+        in_multi_branch_intersection,
         in_off_cliff_east,
         in_stop_bar,
         in_wrong_lane_intersection,
@@ -52,10 +57,12 @@ except ImportError:
         compute_step_road_state,
         in_any_corner,
         in_bend_turn,
+        in_branch_permeable_gate,
         in_c1_turn,
         in_c2_turn,
         in_c4_turn,
         in_intersection_expert_zone,
+        in_multi_branch_intersection,
         in_off_cliff_east,
         in_stop_bar,
         in_wrong_lane_intersection,
@@ -71,7 +78,7 @@ def white_line_contact(
     Terminates if the robot hits a white or yellow line boundary, drives into the
     oncoming lane, or departs the drivable road envelope.
     Uses the canonical per-step road state cache (`compute_step_road_state`) so
-    all spatial telemetry (including `go_signal`) is fresh before RewardManager runs.
+    all spatial telemetry (including `go_signal` and `turn_token`) is fresh before RewardManager runs.
     """
     state = compute_step_road_state(env, asset_name=asset_cfg.name)
 
@@ -85,7 +92,9 @@ def white_line_contact(
     dist_g = state["dist_g"]
     lookahead_kappa = state["lookahead_kappa"]
     turn_token = state["turn_token"]
+    branch_token = state.get("branch_token", turn_token)
     go_signal = state["go_signal"]
+    multi_branch_active = bool(env.extras.get("multi_branch_active", False))
 
     # Ensure all precomputed signals are published in env.extras
     env.extras["lat_err"] = lat_err
@@ -96,6 +105,7 @@ def white_line_contact(
     env.extras["dist_g"] = dist_g
     env.extras["lookahead_kappa"] = lookahead_kappa
     env.extras["turn_token"] = turn_token
+    env.extras["branch_token"] = branch_token
     env.extras["go_signal"] = go_signal
 
     # 1. Curvature-Adaptive Physical Contact Thresholds:
@@ -124,22 +134,30 @@ def white_line_contact(
 
     # 2. Gate & Intersection permeability check:
     # Yellow median line is NEVER permeable anywhere on the circuit!
-    # Permeability is granted ONLY to the transverse painted white stop bar at intersection entry.
-    stop_bar_mask = in_stop_bar(x, y, dist_g)
-    hit_white = (~stop_bar_mask) & (dist_w < dyn_threshold_w)
+    # Permeability is granted to the transverse painted white stop bar and active multi-branch white exits.
+    permeable_white_mask = in_branch_permeable_gate(
+        x, y, dist_g, turn_token=branch_token, multi_branch_active=multi_branch_active
+    )
+    hit_white = (~permeable_white_mask) & (dist_w < dyn_threshold_w)
     hit_yellow = dist_y < dyn_threshold_y
 
-    off_cliff_east = in_off_cliff_east(x, y)
+    off_cliff_east = in_off_cliff_east(
+        x, y, turn_token=branch_token, multi_branch_active=multi_branch_active
+    )
     off_road_shoulder = (
         (~is_corner)
-        & (~stop_bar_mask)
+        & (~permeable_white_mask)
         & (lat_err < OFF_ROAD_SHOULDER_LAT_ERR)
         & (dist_y > OFF_ROAD_SHOULDER_DIST_Y)
     )
 
     # Open intersection envelope: allow up to 0.70m lateral drift where road widens,
     # while strictly enforcing physical boundary contacts (hit_white | hit_yellow).
-    inter_box = in_c2_turn(x, y) | in_intersection_expert_zone(x, y)
+    inter_box = (
+        in_c2_turn(x, y)
+        | in_intersection_expert_zone(x, y)
+        | (in_multi_branch_intersection(x, y) if multi_branch_active else torch.zeros_like(is_corner))
+    )
     max_lat_err = torch.where(
         inter_box,
         torch.tensor(MAX_LAT_ERR_INTERSECTION, device=env.device),
@@ -147,7 +165,9 @@ def white_line_contact(
     )
 
     # Wrong-way / Oncoming lane termination across intersection exit and North road
-    wrong_lane = in_wrong_lane_intersection(x, y)
+    wrong_lane = in_wrong_lane_intersection(
+        x, y, turn_token=branch_token, multi_branch_active=multi_branch_active
+    )
 
     boundary_hit = (
         hit_white

@@ -5,10 +5,13 @@
 
 import math
 import os
+import sys
 
 import torch
 
 try:
+    if "omni" not in sys.modules:
+        raise ImportError
     from isaaclab.envs import ManagerBasedRLEnv
     from isaaclab.managers import SceneEntityCfg
 except ImportError:
@@ -176,7 +179,24 @@ def reset_robot_curriculum_spawn(
     if "stagnation_term_timer" in env.extras:
         env.extras["stagnation_term_timer"][env_ids] = 0
 
-    # Re-index TrackManager and recompute track_dir for env_ids
+    # 1. Reset RoadManager per-episode intersection FSM & mission tokens BEFORE TrackManager re-indexing
+    reset_branch_ids = None
+    try:
+        try:
+            from mdp.road_manager import get_road_manager
+        except ImportError:
+            from arcproLab.mdp.road_manager import get_road_manager
+
+        rm = get_road_manager(
+            num_envs=env.num_envs, num_agents=1, device=env.device
+        )
+        rm.reset(env_ids)
+        if rm.is_multi_branch_active():
+            reset_branch_ids = rm.get_active_branch_ids()[env_ids].clone()
+    except Exception:
+        reset_branch_ids = None
+
+    # 2. Re-index TrackManager on the active mission branch and recompute track_dir for env_ids
     try:
         try:
             from mdp.track_manager import get_track_manager
@@ -185,14 +205,28 @@ def reset_robot_curriculum_spawn(
 
         tm = get_track_manager(device=env.device)
         spawn_xy = torch.stack([spawn_x, spawn_y], dim=-1)
-        tm.reset_indices(env_ids=env_ids, new_pos=spawn_xy)
+        tm.reset_indices(
+            env_ids=env_ids, new_pos=spawn_xy, branch_ids=reset_branch_ids
+        )
         if tm.last_indices is not None and tm.waypoints is not None and len(tm.waypoints) > 0:
             new_wp_idx = tm.last_indices[env_ids]
             if "prev_wp_idx_reward" in env.extras:
                 env.extras["prev_wp_idx_reward"][env_ids] = new_wp_idx
+            if "prev_branch_id_reward" in env.extras:
+                env.extras["prev_branch_id_reward"][env_ids] = (
+                    reset_branch_ids
+                    if reset_branch_ids is not None
+                    else torch.zeros_like(new_wp_idx)
+                )
             obs_yaw = spawn_yaw + math.pi
             obs_yaw = torch.atan2(torch.sin(obs_yaw), torch.cos(obs_yaw))
-            wp_yaw = tm.waypoints[new_wp_idx, 2]
+            if (
+                reset_branch_ids is not None
+                and getattr(tm, "branch_waypoints", None) is not None
+            ):
+                wp_yaw = tm.branch_waypoints[reset_branch_ids, new_wp_idx, 2]
+            else:
+                wp_yaw = tm.waypoints[new_wp_idx, 2]
             raw_head_err = obs_yaw - wp_yaw
             raw_head_err = torch.atan2(torch.sin(raw_head_err), torch.cos(raw_head_err))
             new_track_dir = torch.where(
@@ -211,7 +245,7 @@ def reset_robot_curriculum_spawn(
         if "track_dir" in env.extras:
             env.extras["track_dir"][env_ids] = 1.0
 
-    # Reset GoSignalManager
+    # 3. Reset GoSignalManager
     try:
         try:
             from mdp.go_signal_manager import get_go_signal_manager

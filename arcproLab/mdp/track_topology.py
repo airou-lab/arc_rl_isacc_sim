@@ -23,7 +23,7 @@ import torch
 # Ensure seamless dual-import aliasing (`mdp.track_topology` <-> `arcproLab.mdp.track_topology`)
 _MDP_DIR = os.path.dirname(os.path.abspath(__file__))
 _ARCPRO_DIR = os.path.dirname(_MDP_DIR)
-if importlib.util.find_spec("isaaclab") is None and "arcproLab" not in sys.modules:
+if ("omni" not in sys.modules or importlib.util.find_spec("isaaclab") is None) and "arcproLab" not in sys.modules:
     _pkg = types.ModuleType("arcproLab")
     _pkg.__path__ = [_ARCPRO_DIR]
     sys.modules["arcproLab"] = _pkg
@@ -211,6 +211,89 @@ def in_stop_bar(x: Any, y: Any, dist_g: Any) -> torch.Tensor:
     return (tg < 0.60) & (tx >= -6.50) & (tx <= -4.50) & (ty >= -7.50) & (ty <= -6.50)
 
 
+def in_junction_55_box(x: Any, y: Any) -> torch.Tensor:
+    """South-West 4-way intersection envelope (junction_55 at (-15.9710, -6.8750), Corner 1)."""
+    tx, ty = _prepare_xy(x, y)
+    return (tx >= -17.50) & (tx <= -14.80) & (ty >= -8.50) & (ty <= -5.50)
+
+
+def in_junction_18_box(x: Any, y: Any) -> torch.Tensor:
+    """North-West 4-way intersection envelope (junction_18 at (-15.9694, +6.8750), Corner 4)."""
+    tx, ty = _prepare_xy(x, y)
+    return (tx >= -17.50) & (tx <= -14.80) & (ty >= 5.50) & (ty <= 8.50)
+
+
+def in_multi_branch_intersection(x: Any, y: Any) -> torch.Tensor:
+    """Union of all multi-branch intersection envelopes (junction_55, junction_18, C2 including R=0.50m right-turn arc)."""
+    tx, ty = _prepare_xy(x, y)
+    c2_multi_box = (tx >= -6.50) & (tx <= -1.80) & (ty >= -7.80) & (ty <= -2.50)
+    return (
+        in_junction_55_box(tx, ty)
+        | in_junction_18_box(tx, ty)
+        | in_c2_turn(tx, ty)
+        | in_intersection_expert_zone(tx, ty)
+        | c2_multi_box
+    )
+
+
+def _prepare_token_mask(
+    tx: torch.Tensor,
+    turn_token: Any = None,
+    multi_branch_active: Any = None,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Return (is_non_left_branch, is_straight_branch) boolean masks matching tx shape."""
+    if turn_token is None:
+        false_mask = torch.zeros_like(tx, dtype=torch.bool)
+        return false_mask, false_mask
+    if isinstance(turn_token, torch.Tensor):
+        tt = turn_token.to(device=tx.device, dtype=torch.float32)
+        if tt.ndim != tx.ndim and tt.numel() == tx.numel():
+            tt = tt.view_as(tx)
+        elif tt.numel() == 1 and tx.numel() > 1:
+            tt = tt.view(1).expand_as(tx)
+    else:
+        tt = torch.full_like(tx, float(turn_token))
+
+    if multi_branch_active is None:
+        mb = torch.ones_like(tx, dtype=torch.bool)
+    elif isinstance(multi_branch_active, torch.Tensor):
+        mb = multi_branch_active.to(device=tx.device, dtype=torch.bool)
+        if mb.ndim != tx.ndim and mb.numel() == tx.numel():
+            mb = mb.view_as(tx)
+        elif mb.numel() == 1 and tx.numel() > 1:
+            mb = mb.view(1).expand_as(tx)
+    else:
+        mb = torch.full_like(tx, bool(multi_branch_active), dtype=torch.bool)
+
+    is_non_left = mb & (tt > -0.5)
+    is_straight = mb & (torch.abs(tt) <= 0.5)
+    return is_non_left, is_straight
+
+
+def in_branch_permeable_gate(
+    x: Any,
+    y: Any,
+    dist_g: Any,
+    turn_token: Any = None,
+    multi_branch_active: Any = None,
+) -> torch.Tensor:
+    """White-line permeability mask across stop bars and active multi-branch intersection exits.
+
+    Yellow median lines remain strictly non-permeable everywhere.
+    In default single-loop mode (multi_branch_active=False or turn_token=-1.0), reduces
+    identically to `in_stop_bar(x, y, dist_g)`.
+    """
+    tx, ty, tg = _prepare_xyg(x, y, dist_g)
+    base_stop_bar = in_stop_bar(tx, ty, tg)
+    if turn_token is None and not multi_branch_active:
+        return base_stop_bar
+    is_non_left, _ = _prepare_token_mask(
+        tx, turn_token=turn_token, multi_branch_active=multi_branch_active
+    )
+    branch_crossing = is_non_left & in_multi_branch_intersection(tx, ty)
+    return base_stop_bar | branch_crossing
+
+
 def in_wrong_lane_north(x: Any, y: Any) -> torch.Tensor:
     """Oncoming Southbound (West) lane along the North road (median at X = -2.56)."""
     tx, ty = _prepare_xy(x, y)
@@ -228,16 +311,45 @@ def in_wrong_lane_apex(x: Any, y: Any) -> torch.Tensor:
     )
 
 
-def in_wrong_lane_intersection(x: Any, y: Any) -> torch.Tensor:
+def in_wrong_lane_intersection(
+    x: Any,
+    y: Any,
+    turn_token: Any = None,
+    multi_branch_active: Any = None,
+) -> torch.Tensor:
     """Union of oncoming wrong-lane zones across intersection exit and North road."""
     tx, ty = _prepare_xy(x, y)
-    return in_wrong_lane_north(tx, ty) | in_wrong_lane_apex(tx, ty)
+    base_wrong = in_wrong_lane_north(tx, ty) | in_wrong_lane_apex(tx, ty)
+    if turn_token is None and not multi_branch_active:
+        return base_wrong
+    is_non_left, _ = _prepare_token_mask(
+        tx, turn_token=turn_token, multi_branch_active=multi_branch_active
+    )
+    # Exempt active Straight/Right corridors at Y <= -6.50 from the left-turn North apex check
+    exempt_corridor = is_non_left & (ty <= -6.50)
+    return base_wrong & (~exempt_corridor)
 
 
-def in_off_cliff_east(x: Any, y: Any) -> torch.Tensor:
-    """East void cliff beyond the intersection outer boundary."""
+def in_off_cliff_east(
+    x: Any,
+    y: Any,
+    turn_token: Any = None,
+    multi_branch_active: Any = None,
+) -> torch.Tensor:
+    """East void cliff beyond the intersection outer boundary.
+
+    When multi-branch mode commands Straight (turn_token = 0.0) along the South-East
+    corridor (Y in [-7.50, -6.50]), the straight exit lane is exempted from the left-turn cliff box.
+    """
     tx, ty = _prepare_xy(x, y)
-    return (tx > -2.08) & (ty >= -7.50) & (ty <= -3.60)
+    base_cliff = (tx > -2.08) & (ty >= -7.50) & (ty <= -3.60)
+    if turn_token is None and not multi_branch_active:
+        return base_cliff
+    _, is_straight = _prepare_token_mask(
+        tx, turn_token=turn_token, multi_branch_active=multi_branch_active
+    )
+    straight_east_corridor = is_straight & (ty >= -7.50) & (ty <= -6.50)
+    return base_cliff & (~straight_east_corridor)
 
 
 def in_intersection_expert_zone(x: Any, y: Any) -> torch.Tensor:
@@ -276,7 +388,8 @@ def compute_step_road_state(
 
     Eliminates 3x redundant 396.5k-point `torch.cdist` calls per RL step across
     TerminationManager, RewardManager, and ObservationManager (policy + critic),
-    and updates `go_signal` deterministically BEFORE terminations and rewards run.
+    and updates `RoadManager` (`turn_token` / branch routing) and `go_signal`
+    deterministically BEFORE terminations and rewards run.
     """
     if not hasattr(env, "extras") or env.extras is None:
         env.extras = {}
@@ -346,6 +459,12 @@ def compute_step_road_state(
             "turn_token": env.extras.get(
                 "turn_token", torch.zeros(num_envs, device=device, dtype=torch.float32)
             ),
+            "branch_token": env.extras.get(
+                "branch_token",
+                env.extras.get(
+                    "turn_token", torch.zeros(num_envs, device=device, dtype=torch.float32)
+                ),
+            ),
             "go_signal": env.extras.get(
                 "go_signal", torch.ones(num_envs, device=device, dtype=torch.float32)
             ),
@@ -384,8 +503,50 @@ def compute_step_road_state(
         from arcproLab.mdp.curriculum_config import get_lookahead_distance
         from arcproLab.mdp.track_manager import get_track_manager
 
+    # 1. RoadManager turn_token & multi-branch routing update (runs BEFORE TrackManager geometry)
+    active_branch_ids = None
+    multi_branch_active = False
+    exit_correct = torch.zeros(num_envs, device=device, dtype=torch.float32)
+    just_exited = torch.zeros(num_envs, device=device, dtype=torch.bool)
+    try:
+        try:
+            from mdp.road_manager import get_road_manager
+        except ImportError:
+            from arcproLab.mdp.road_manager import get_road_manager
+
+        rm = get_road_manager(num_envs=num_envs, num_agents=1, device=device)
+        rm.update(env)
+        turn_tokens, _ = rm.get_nav_commands()
+        turn_token = turn_tokens.squeeze(1)
+        if hasattr(rm, "is_multi_branch_active") and rm.is_multi_branch_active():
+            multi_branch_active = True
+            active_branch_ids = rm.get_active_branch_ids()
+        if hasattr(rm, "exit_correct") and isinstance(rm.exit_correct, torch.Tensor):
+            exit_correct = rm.exit_correct.clone()
+        if hasattr(rm, "just_exited") and isinstance(rm.just_exited, torch.Tensor):
+            just_exited = rm.just_exited.clone()
+    except Exception:
+        turn_token = torch.where(
+            in_any_corner(local_pos[:, 0], local_pos[:, 1]),
+            torch.full((num_envs,), -1.0, device=device, dtype=torch.float32),
+            torch.zeros(num_envs, device=device, dtype=torch.float32),
+        )
+
+    # 2. TrackManager geometry & marker distances (bound to active_branch_ids when multi-branch is active)
     tm = get_track_manager(device=device)
-    lat_err, raw_head_err, kappa = tm.compute_errors(local_pos, yaw)
+    if multi_branch_active and active_branch_ids is not None:
+        lat_err, raw_head_err, kappa = tm.compute_errors(
+            local_pos, yaw, branch_ids=active_branch_ids
+        )
+    else:
+        lat_err, raw_head_err, kappa = tm.compute_errors(local_pos, yaw)
+
+    branch_switched_mask = (
+        tm.branch_switched_mask.clone()
+        if isinstance(getattr(tm, "branch_switched_mask", None), torch.Tensor)
+        and tm.branch_switched_mask.shape[0] == num_envs
+        else torch.zeros(num_envs, device=device, dtype=torch.bool)
+    )
 
     computed_dir = torch.where(
         torch.abs(raw_head_err) > 1.5708, -1.0, 1.0
@@ -400,10 +561,15 @@ def compute_step_road_state(
     else:
         reset_mask = env.extras.get("_track_dir_reset_mask", None)
         if isinstance(reset_mask, torch.Tensor) and reset_mask.shape == computed_dir.shape:
+            reset_or_switch = reset_mask | branch_switched_mask
             env.extras["track_dir"] = torch.where(
-                reset_mask, computed_dir, env.extras["track_dir"]
+                reset_or_switch, computed_dir, env.extras["track_dir"]
             )
             env.extras["_track_dir_reset_mask"] = None
+        elif branch_switched_mask.any():
+            env.extras["track_dir"] = torch.where(
+                branch_switched_mask, computed_dir, env.extras["track_dir"]
+            )
 
     is_reverse = env.extras["track_dir"] < 0
     head_err = torch.where(
@@ -415,32 +581,21 @@ def compute_step_road_state(
 
     dist_y, dist_w, dist_g = tm.compute_marker_distances(local_pos)
 
-    lookahead_kappa = tm.get_lookahead_curvature(
-        lookahead_distance=get_lookahead_distance(),
-        track_dir=env.extras["track_dir"],
-    ).to(device=device, dtype=torch.float32)
-
-    # RoadManager turn_token & goal_dist update
-    try:
-        try:
-            from mdp.road_manager import get_road_manager
-        except ImportError:
-            from arcproLab.mdp.road_manager import get_road_manager
-
-        rm = get_road_manager(num_envs=num_envs, num_agents=1, device=device)
-        rm.update(env)
-        turn_tokens, _ = rm.get_nav_commands()
-        turn_token = turn_tokens.squeeze(1)
-    except Exception:
-        turn_token = torch.where(
-            in_any_corner(local_pos[:, 0], local_pos[:, 1]),
-            torch.full((num_envs,), -1.0, device=device, dtype=torch.float32),
-            torch.zeros(num_envs, device=device, dtype=torch.float32),
-        )
+    if multi_branch_active and active_branch_ids is not None:
+        lookahead_kappa = tm.get_lookahead_curvature(
+            lookahead_distance=get_lookahead_distance(),
+            track_dir=env.extras["track_dir"],
+            branch_ids=active_branch_ids,
+        ).to(device=device, dtype=torch.float32)
+    else:
+        lookahead_kappa = tm.get_lookahead_curvature(
+            lookahead_distance=get_lookahead_distance(),
+            track_dir=env.extras["track_dir"],
+        ).to(device=device, dtype=torch.float32)
 
     goal_dist = torch.zeros(num_envs, device=device, dtype=torch.float32)
 
-    # GoSignalManager update (runs deterministically BEFORE terminations & rewards,
+    # 3. GoSignalManager update (runs deterministically BEFORE terminations & rewards,
     # and at most once per physics step counter so post-reset cache refreshes do not double-step dwell)
     try:
         try:
@@ -482,6 +637,17 @@ def compute_step_road_state(
             "go_signal", torch.ones(num_envs, device=device, dtype=torch.float32)
         )
 
+    resolved_branch_ids = (
+        active_branch_ids
+        if active_branch_ids is not None
+        else torch.zeros(num_envs, device=device, dtype=torch.long)
+    )
+    branch_token = (
+        (resolved_branch_ids.to(dtype=torch.float32) - 1.0)
+        if multi_branch_active
+        else turn_token
+    )
+
     # Publish all canonical keys to env.extras
     env.extras["local_pos"] = local_pos
     env.extras["yaw"] = yaw
@@ -494,8 +660,14 @@ def compute_step_road_state(
     env.extras["dist_g"] = dist_g
     env.extras["lookahead_kappa"] = lookahead_kappa
     env.extras["turn_token"] = turn_token
+    env.extras["branch_token"] = branch_token
     env.extras["go_signal"] = go_signal
     env.extras["goal_dist"] = goal_dist
+    env.extras["multi_branch_active"] = multi_branch_active
+    env.extras["active_branch_ids"] = resolved_branch_ids
+    env.extras["branch_switched_mask"] = branch_switched_mask
+    env.extras["exit_correct"] = exit_correct
+    env.extras["just_exited"] = just_exited
 
     state_dict: Dict[str, torch.Tensor] = {
         "local_pos": local_pos,
@@ -512,9 +684,14 @@ def compute_step_road_state(
         "dist_g": dist_g,
         "lookahead_kappa": lookahead_kappa,
         "turn_token": turn_token,
+        "branch_token": branch_token,
         "go_signal": go_signal,
         "goal_dist": goal_dist,
         "track_dir": env.extras["track_dir"],
+        "active_branch_ids": resolved_branch_ids,
+        "branch_switched_mask": branch_switched_mask,
+        "exit_correct": exit_correct,
+        "just_exited": just_exited,
     }
 
     env.extras["_road_state_pos"] = local_pos.clone()
@@ -556,6 +733,10 @@ __all__ = [
     "in_c4_turn",
     "in_any_corner",
     "in_stop_bar",
+    "in_junction_55_box",
+    "in_junction_18_box",
+    "in_multi_branch_intersection",
+    "in_branch_permeable_gate",
     "in_wrong_lane_north",
     "in_wrong_lane_apex",
     "in_wrong_lane_intersection",

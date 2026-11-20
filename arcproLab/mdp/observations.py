@@ -3,9 +3,12 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import sys
 import torch
 
 try:
+    if "omni" not in sys.modules:
+        raise ImportError
     from isaaclab.envs import ManagerBasedRLEnv
     from isaaclab.managers import SceneEntityCfg
 except ImportError:

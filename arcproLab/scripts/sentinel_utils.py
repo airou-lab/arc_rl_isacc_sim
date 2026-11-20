@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import re
-import sqlite3
 import subprocess
 import sys
 import time
@@ -17,9 +16,9 @@ from typing import Any, Dict, List, Optional
 WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 LOG_FILE = os.environ.get("ARCPRO_LOG_FILE", f"{WORKSPACE_ROOT}/logs/skrl_phase1.log")
 SENTINEL_LOG = f"{WORKSPACE_ROOT}/logs/sentinel.log"
+SENTINEL_EVENTS_LOG = f"{WORKSPACE_ROOT}/logs/sentinel_events.jsonl"
 DIAGNOSIS_FILE = f"{WORKSPACE_ROOT}/logs/SENTINEL_DIAGNOSIS.md"
 STATE_FILE = f"{WORKSPACE_ROOT}/logs/sentinel_state.json"
-CTA_DB_PATH = f"{WORKSPACE_ROOT}/.cta/cta_turns.db"
 CURRICULUM_CFG_PATH = f"{WORKSPACE_ROOT}/arcproLab/mdp/curriculum_sectors.json"
 START_SCRIPT = f"{WORKSPACE_ROOT}/start_tmux_training.sh"
 DEFAULT_COOLDOWN_SEC = 300.0
@@ -268,45 +267,38 @@ def parse_recent_metrics(
     return batches
 
 
-def log_to_cta_db(
+def log_sentinel_event(
     action_type: str,
     description: str,
     status: str = "SUCCESS",
     files_touched: str = "",
     output_summary: str = "",
-    milestone: str = "M004",
+    milestone: str = "M006",
     phase: str = "01",
     task: str = "Autonomous Sentinel Self-Healing",
 ) -> None:
-    """Log an intervention or audit event directly into CTA turns SQLite DB."""
-    if not os.path.exists(CTA_DB_PATH):
-        return
+    """Append sentinel intervention/audit event to SENTINEL_EVENTS_LOG (never ClearSet DB)."""
     try:
-        conn = sqlite3.connect(CTA_DB_PATH, timeout=10.0)
-        now_utc = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        sql = (
-            "INSERT INTO turn_actions (session_id, timestamp, milestone, phase, task, "
-            "action_type, description, status, files_touched, output_summary) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        )
-        sid = f"sentinel_{int(time.time())}"
-        row = (
-            sid,
-            now_utc,
-            milestone,
-            phase,
-            task,
-            action_type,
-            description,
-            status,
-            files_touched,
-            output_summary,
-        )
-        conn.execute(sql, row)
-        conn.commit()
-        conn.close()
+        os.makedirs(os.path.dirname(SENTINEL_EVENTS_LOG), exist_ok=True)
+        record = {
+            "session_id": f"sentinel_{int(time.time())}",
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "milestone": milestone,
+            "phase": phase,
+            "task": task,
+            "action_type": action_type,
+            "description": description,
+            "status": status,
+            "files_touched": files_touched,
+            "output_summary": output_summary,
+        }
+        with open(SENTINEL_EVENTS_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
     except Exception as e:
-        print(f"[Sentinel] Failed to log to CTA database: {e}", file=sys.stderr)
+        print(f"[Sentinel] Failed to log sentinel event: {e}", file=sys.stderr)
+
+
+log_to_cta_db = log_sentinel_event  # Backwards-compatible alias for sentinel/auditor callers
 
 
 def write_diagnosis_file(

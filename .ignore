@@ -1,0 +1,42 @@
+# Ripgrep / fast CLI search exclusions for ARCPro RL workspace
+# Keeps default `rg` focused on active Python source, tests, configs, and active docs.
+
+# Virtual environments & Python caches
+venv/
+.venv/
+__pycache__/
+.pytest_cache/
+
+# Archived history, logs, runs, and static assets
+archive/
+logs/
+runs/
+openStreetUSD/
+arcpro-rl-course/
+debug_frames/
+
+# Local SQLite / state directories
+.cs/
+.cta/
+.gsd/
+
+# Binary / large data & backup files
+*.npz
+*.npz.bak
+*.bak
+*.pt
+*.pth
+*.npy
+*.usd
+*.usda
+*.usdc
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.tfevents*
+*.0
+*.png
+*.jpg
+*.jpeg
+*.mp4
